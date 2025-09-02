@@ -4,11 +4,11 @@ import Layout from './components/Layout';
 import { useTheme } from './hooks/useTheme';
 import DashboardPage from './pages/DashboardPage';
 import LeadsPage from './pages/LeadsPage';
-import AgendaPage from './pages/AgendaPage';
-import ProposalsPage from './pages/ProposalsPage';
-import CommissionsPage from './pages/CommissionsPage';
-import ProfilePage from './pages/ProfilePage';
-import NotificationsPage from './pages/NotificationsPage';
+// import AgendaPage from './pages/AgendaPage';
+// import ProposalsPage from './pages/ProposalsPage';
+// import CommissionsPage from './pages/CommissionsPage';
+// import ProfilePage from './pages/ProfilePage';
+// import NotificationsPage from './pages/NotificationsPage';
 import HelpPage from './pages/HelpPage';
 import LoginPage from './pages/LoginPage';
 import TrainingPage from './pages/TrainingPage';
@@ -52,12 +52,12 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="leads" element={<LeadsPage />} />
-            <Route path="agenda" element={<AgendaPage />} />
-            <Route path="proposals" element={<ProposalsPage />} />
-            <Route path="commissions" element={<CommissionsPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+            {/* <Route path="agenda" element={<AgendaPage />} /> */}
+            {/* <Route path="proposals" element={<ProposalsPage />} /> */}
+            {/* <Route path="commissions" element={<CommissionsPage />} /> */}
+            {/* <Route path="profile" element={<ProfilePage />} /> */}
             <Route path="training" element={<TrainingPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
+            {/* <Route path="notifications" element={<NotificationsPage />} /> */}
             <Route path="help" element={<HelpPage />} />
           </Route>
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
