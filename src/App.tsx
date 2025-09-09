@@ -60,15 +60,15 @@ export default function App() {
             <Route path="training" element={<TrainingPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="help" element={<HelpPage />} />
+            <Route
+              path="negociacoes"
+              element={
+                <Suspense fallback={null}>
+                  <Negociacoes />
+                </Suspense>
+              }
+            />
           </Route>
-          <Route
-            path="/negociacoes"
-            element={
-              <Suspense fallback={null}>
-                <Negociacoes />
-              </Suspense>
-            }
-          />
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </>
