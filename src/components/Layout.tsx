@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link} from 'react-router-dom';
 import {
   Home,
-  UserCheck,
   Calendar,
   FileText,
-  DollarSign,
   User,
   Bell,
   HelpCircle,
@@ -13,15 +11,15 @@ import {
   Menu,
   X,
   GraduationCap,
+  Handshake,
 } from 'lucide-react';
 import { mockUser } from '../data/mockData';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
-  { to: '/leads', label: 'Leads', icon: UserCheck },
+  { to: '/negociacoes', label: 'Negociações', icon: Handshake },
   { to: '/agenda', label: 'Agenda', icon: Calendar },
   { to: '/proposals', label: 'Propostas', icon: FileText },
-  { to: '/commissions', label: 'Comissões', icon: DollarSign },
   { to: '/profile', label: 'Perfil', icon: User },
   { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
   { to: '/notifications', label: 'Notificações', icon: Bell },
