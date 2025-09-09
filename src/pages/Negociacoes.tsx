@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Search, Filter, Users, TrendingUp, Trophy } from "lucide-react";
+import { ProgressoDeMetas } from "./ProgressoMetas";
 
 export default function Negociacoes() {
   const [tab, setTab] = useState<"leads" | "comissoes" | "metas">("leads");
@@ -42,7 +43,7 @@ export default function Negociacoes() {
         <div className="p-4 md:p-6">
           {tab === "leads" && <LeadsSection />}
           {tab === "comissoes" && <ComissoesSection />}
-          {tab === "metas" && <MetasSection />}
+          {tab === "metas" && <ProgressoDeMetas fechamentosAtuais={36} />}
         </div>
       </div>
     </div>
@@ -205,32 +206,6 @@ function ComissoesSection() {
         </table>
       </div>
     </div>
-  );
-}
-
-function MetasSection() {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl bg-gradient-to-r from-[#ff6b35] to-[#f0462e] p-5 text-white shadow-md">
-        <p className="text-sm/5 opacity-90">Suas metas de premiação</p>
-      </div>
-
-      <ul className="grid gap-4">
-        <MetaItem top="🇦🇷 8 Fechamentos" bottom="✈️ Viagem Argentina" />
-        <MetaItem top="🎉 15 Fechamentos" bottom="🍻 Camarote Brahma Carnaval 2026" />
-        <MetaItem top="🚢📱💰 30 Fechamentos" bottom="Cruzeiro + iPhone + 10 mil" />
-        <MetaItem top="🚗⚡ 100 Fechamentos" bottom="Mini Dolphin / Toyota Corolla" />
-      </ul>
-    </div>
-  );
-}
-
-function MetaItem({ top, bottom }: { top: string; bottom: string }) {
-  return (
-    <li className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-lg font-bold text-gray-900">{top}</p>
-      <p className="mt-1 text-sm text-gray-600">{bottom}</p>
-    </li>
   );
 }
 
