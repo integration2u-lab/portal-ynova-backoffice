@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, Link} from 'react-router-dom';
 import {
   Home,
   UserCheck,
-  // Calendar,
-  // FileText,
-  // DollarSign,
-  // User,
+  Calendar,
+  FileText,
+  DollarSign,
+  User,
   Bell,
   HelpCircle,
   LogOut,
@@ -19,12 +19,12 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/leads', label: 'Leads', icon: UserCheck },
-  // { to: '/agenda', label: 'Agenda', icon: Calendar },
-  // { to: '/proposals', label: 'Propostas', icon: FileText },
-  // { to: '/commissions', label: 'Comissões', icon: DollarSign },
-  // { to: '/profile', label: 'Perfil', icon: User },
+  { to: '/agenda', label: 'Agenda', icon: Calendar },
+  { to: '/proposals', label: 'Propostas', icon: FileText },
+  { to: '/commissions', label: 'Comissões', icon: DollarSign },
+  { to: '/profile', label: 'Perfil', icon: User },
   { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
-  // { to: '/notifications', label: 'Notificações', icon: Bell },
+  { to: '/notifications', label: 'Notificações', icon: Bell },
   { to: '/help', label: 'Ajuda', icon: HelpCircle },
 ];
 
@@ -64,8 +64,8 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
         className="sticky top-0 z-50 h-16 bg-[#FE5200] text-white shadow-sm px-4 md:px-6"
       >
         <div className="flex items-center justify-between h-full">
-          <a
-            href="/dashboard"
+         <Link
+            to="/dashboard"
             aria-label="Ir para a página inicial"
             className="flex items-center gap-2"
           >
@@ -80,7 +80,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                 onError={() => setLogoError(true)}
               />
             )}
-          </a>
+          </Link>
           <div className="flex items-center gap-4">
             <div className="relative" ref={notifRef}>
               <button

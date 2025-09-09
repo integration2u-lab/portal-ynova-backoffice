@@ -47,6 +47,9 @@ export default function DashboardPage() {
         <button onClick={() => navigate('/commissions')} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full sm:w-auto">
           Ver Comissões
         </button>
+        <button onClick={() => navigate('/leads')} className="bg-[#9333EA] hover:bg-[#9333EA]/90 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full md:w-auto">
+          Enviar Fatura
+        </button>
       </div>
     </div>
   );
