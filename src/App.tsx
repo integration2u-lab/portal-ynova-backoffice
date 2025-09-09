@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import { useTheme } from './hooks/useTheme';
@@ -12,6 +12,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import HelpPage from './pages/HelpPage';
 import LoginPage from './pages/LoginPage';
 import TrainingPage from './pages/TrainingPage';
+const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -60,6 +61,14 @@ export default function App() {
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="help" element={<HelpPage />} />
           </Route>
+          <Route
+            path="/negociacoes"
+            element={
+              <Suspense fallback={null}>
+                <Negociacoes />
+              </Suspense>
+            }
+          />
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </>
