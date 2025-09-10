@@ -13,6 +13,7 @@ import {
   GraduationCap,
   Handshake,
 } from 'lucide-react';
+import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
 
 const navigation = [
@@ -21,6 +22,7 @@ const navigation = [
   { to: '/agenda', label: 'Agenda', icon: Calendar },
   { to: '/proposals', label: 'Propostas', icon: FileText },
   { to: '/profile', label: 'Perfil', icon: User },
+  { to: '/ranking', label: 'Ranking', icon: CrownIcon },
   { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
   { to: '/notifications', label: 'Notificações', icon: Bell },
   { to: '/help', label: 'Ajuda', icon: HelpCircle },
