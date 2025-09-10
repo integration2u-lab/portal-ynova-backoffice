@@ -8,6 +8,7 @@ import AgendaPage from './pages/AgendaPage';
 import ProposalsPage from './pages/ProposalsPage';
 import CommissionsPage from './pages/CommissionsPage';
 import ProfilePage from './pages/ProfilePage';
+import RankingPage from './pages/Ranking';
 import NotificationsPage from './pages/NotificationsPage';
 import HelpPage from './pages/HelpPage';
 import LoginPage from './pages/LoginPage';
@@ -54,9 +55,10 @@ export default function App() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="leads" element={<LeadsPage />} />
             <Route path="agenda" element={<AgendaPage />} /> 
-            <Route path="proposals" element={<ProposalsPage />} /> 
-            <Route path="commissions" element={<CommissionsPage />} /> 
+            <Route path="proposals" element={<ProposalsPage />} />
+            <Route path="commissions" element={<CommissionsPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="ranking" element={<RankingPage />} />
             <Route path="training" element={<TrainingPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="help" element={<HelpPage />} />
