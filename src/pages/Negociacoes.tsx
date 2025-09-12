@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Search, Filter, Users, TrendingUp, Trophy } from "lucide-react";
 import { ProgressoDeMetas } from "./ProgressoMetas";
+import LeadsKanban from "./negociacoes/LeadsKanban";
 
 export default function Negociacoes() {
   const [tab, setTab] = useState<"leads" | "comissoes" | "metas">("leads");
@@ -41,7 +42,7 @@ export default function Negociacoes() {
         </div>
 
         <div className="p-4 md:p-6">
-          {tab === "leads" && <LeadsSection />}
+          {tab === "leads" && <LeadsKanban />}
           {tab === "comissoes" && <ComissoesSection />}
           {tab === "metas" && <ProgressoDeMetas fechamentosAtuais={36} />}
         </div>
@@ -73,71 +74,6 @@ function TabBtn({
       <Icon size={18} />
       <span className="whitespace-nowrap">{label}</span>
     </button>
-  );
-}
-
-function LeadsSection() {
-  return (
-    <div className="space-y-4">
-      {/* Busca + filtro */}
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="relative flex-1 min-w-[260px] max-w-[480px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar leads..."
-            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2.5 text-sm outline-none placeholder:text-gray-400 focus:border-[#ff6b35] focus:ring-2 focus:ring-[#ff6b35]/20"
-          />
-        </label>
-
-        <button className="rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50">
-          <Filter className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* CTA Enviar Fatura */}
-      <button className="w-full rounded-lg bg-gradient-to-r from-[#ff6b35] to-[#f7931e] py-3 text-center text-white shadow-md transition hover:shadow-lg">
-        Enviar Fatura
-      </button>
-
-      {/* Tabela */}
-      <div className="overflow-x-auto rounded-lg border border-gray-100">
-        <table className="min-w-[900px] w-full bg-white text-sm">
-          <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-            <tr>
-              <Th>Empresa</Th>
-              <Th>CNPJ</Th>
-              <Th>Segmento</Th>
-              <Th>Status Funil</Th>
-              <Th>Migração</Th>
-              <Th>Ações</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            <tr>
-              <Td>
-                <div className="font-semibold text-gray-900">Empresa Alpha Ltda</div>
-                <div className="text-xs text-gray-500">João Silva</div>
-              </Td>
-              <Td>12.345.678/0001-90</Td>
-              <Td>Industrial</Td>
-              <Td>
-                <Badge color="green">Qualificado</Badge>
-              </Td>
-              <Td>
-                <Badge color="blue">Aprovado</Badge>
-              </Td>
-              <Td>
-                <div className="flex gap-2">
-                  <BtnLink color="brand">Abrir</BtnLink>
-                  <BtnLink color="blue">Solicitar fatura</BtnLink>
-                </div>
-              </Td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
