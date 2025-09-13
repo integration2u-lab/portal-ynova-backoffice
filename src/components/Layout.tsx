@@ -13,16 +13,16 @@ import {
   X,
   GraduationCap,
   Handshake,
+  Upload,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
+  { to: '/leads', label: 'Leads', icon: FileText },
   { to: '/negociacoes', label: 'Negociações', icon: Handshake },
   { to: '/agenda', label: 'Agenda', icon: Calendar },
-  { to: '/proposals', label: 'Propostas', icon: FileText },
-  { to: '/simulation', label: 'Simulação', icon: PieChart },
   { to: '/profile', label: 'Perfil', icon: User },
   { to: '/ranking', label: 'Ranking', icon: CrownIcon },
   { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
@@ -63,7 +63,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-[#111418] dark:text-gray-100">
       <header
         role="banner"
-        className="sticky top-0 z-50 h-16 bg-[#FE5200] text-white shadow-sm px-4 md:px-6"
+        className="sticky top-0 z-50 h-16 bg-yn-orange text-white shadow-sm px-4 md:px-6"
       >
         <div className="flex items-center justify-between h-full">
          <Link
@@ -77,13 +77,27 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               <img
                 src="https://i.imgur.com/eFBlDDM.png"
                 alt="YNOVA"
-                className="h-40 md:h-40 w-auto"
+                className="h-8 md:h-8 w-auto"
                 loading="eager"
                 onError={() => setLogoError(true)}
               />
             )}
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Link
+              to="/leads?upload=1"
+              className="hidden sm:inline-flex items-center gap-2 bg-white text-yn-orange font-medium px-3 py-2 rounded-md shadow-sm hover:bg-white/90"
+            >
+              <Upload size={16} />
+              Enviar Fatura
+            </Link>
+            <Link
+              to="/leads?upload=1"
+              aria-label="Enviar Fatura"
+              className="sm:hidden inline-flex items-center justify-center bg-white text-yn-orange w-9 h-9 rounded-md shadow-sm hover:bg-white/90"
+            >
+              <Upload size={18} />
+            </Link>
             <div className="relative" ref={notifRef}>
               <button
                 className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
@@ -148,7 +162,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                     className={({ isActive }) =>
                       `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                         isActive
-                          ? 'bg-[#FE5200]/10 text-[#FE5200] border border-[#FE5200]/40 dark:bg-[#FE5200]/20 dark:text-[#FE5200] dark:border-[#FE5200]/40'
+                          ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
                       }`
                     }
@@ -175,7 +189,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
           <div className="md:hidden fixed inset-0 z-50 bg-black/50" role="dialog" aria-modal="true">
             <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-[#1a1f24]">
               <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-[#2b3238]">
-                <div className="text-xl font-bold text-[#FE5200]">YNOVA</div>
+                <div className="text-xl font-bold text-yn-orange">YNOVA</div>
                 <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Fechar menu">
                   <X size={24} />
                 </button>
@@ -188,14 +202,14 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                       key={item.to}
                       to={item.to}
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className={({ isActive }) =>
+                    className={({ isActive }) =>
                         `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                           isActive
-                            ? 'bg-[#FE5200]/10 text-[#FE5200] border border-[#FE5200]/40 dark:bg-[#FE5200]/20 dark:text-[#FE5200] dark:border-[#FE5200]/40'
+                            ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
                             : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
                         }`
-                      }
-                    >
+                    }
+                  >
                       <Icon size={20} className="mr-3" />
                       {item.label}
                     </NavLink>

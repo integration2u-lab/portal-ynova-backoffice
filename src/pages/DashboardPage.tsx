@@ -38,7 +38,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <button onClick={() => navigate('/leads')} className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full sm:w-auto">
+        <button onClick={() => navigate('/leads')} className="bg-yn-orange hover:bg-yn-orange/90 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full sm:w-auto">
           Ver Leads
         </button>
         <button onClick={() => navigate('/agenda')} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full sm:w-auto">

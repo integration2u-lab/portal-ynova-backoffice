@@ -9,7 +9,7 @@ export default function AgendaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente</label>
-            <select className="w-full px-3 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-[#FE5200] bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100">
+            <select className="w-full px-3 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-yn-orange bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100">
               <option>Selecionar cliente...</option>
               <option>Empresa Alpha Ltda</option>
               <option>Beta Comércio SA</option>
@@ -17,7 +17,7 @@ export default function AgendaPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Duração</label>
-            <select className="w-full px-3 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-[#FE5200] bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100">
+            <select className="w-full px-3 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-yn-orange bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100">
               <option>30 minutos</option>
               <option>45 minutos</option>
               <option>60 minutos</option>
@@ -28,13 +28,13 @@ export default function AgendaPage() {
         <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Horários Sugeridos</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {['Hoje 14:00','Amanhã 09:00','Amanhã 15:00','19/01 10:00','19/01 16:00','20/01 09:30','20/01 14:00','21/01 11:00'].map((horario, i) => (
-            <button key={i} className="p-3 border border-gray-300 dark:border-[#1E1E1E] rounded-lg text-sm hover:border-[#FE5200] hover:bg-[#FE5200]/10 transition-colors">
+            <button key={i} className="p-3 border border-gray-300 dark:border-[#1E1E1E] rounded-lg text-sm hover:border-yn-orange hover:bg-yn-orange/10 transition-colors">
               {horario}
             </button>
           ))}
         </div>
 
-        <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto">
+        <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto">
           Confirmar Agendamento
         </button>
       </div>
@@ -47,7 +47,7 @@ export default function AgendaPage() {
               <p className="font-medium">Apresentação - Empresa Alpha</p>
               <p className="text-sm text-gray-600 dark:text-gray-300">18/01/2025 às 14:00</p>
             </div>
-            <button className="text-[#FE5200] hover:text-[#FE5200]/80 text-sm">Reagendar</button>
+            <button className="text-yn-orange hover:text-yn-orange/80 text-sm">Reagendar</button>
           </div>
         </div>
       </div>

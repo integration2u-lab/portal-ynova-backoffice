@@ -46,7 +46,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="seu@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
         />
       </div>
@@ -56,7 +56,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="••••••••"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
         />
       </div>
@@ -64,7 +64,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
       <button
         type="submit"
         disabled={isLoading}
-        className="w-full bg-[#FE5200] hover:bg-[#FE5200]/90 text-white font-medium py-2 rounded-md flex items-center justify-center"
+        className="w-full bg-yn-orange hover:bg-yn-orange/90 text-white font-medium py-2 rounded-md flex items-center justify-center"
       >
         {isLoading ? (
           <RefreshCw className="animate-spin" size={20} />
@@ -83,7 +83,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="seu@email.com"
           value={regEmail}
           onChange={(e) => setRegEmail(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
         />
       </div>
@@ -93,7 +93,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="Senha"
           value={regPassword}
           onChange={(e) => setRegPassword(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
         />
       </div>
@@ -103,7 +103,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="Confirme sua senha"
           value={regConfirm}
           onChange={(e) => setRegConfirm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
         />
       </div>
@@ -113,13 +113,13 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           placeholder="CNPJ (opcional)"
           value={regCnpj}
           onChange={(e) => setRegCnpj(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FE5200] dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
         />
       </div>
       {regError && <p className="text-red-600 text-sm">{regError}</p>}
       <button
         type="submit"
-        className="w-full bg-[#FE5200] hover:bg-[#FE5200]/90 text-white font-medium py-2 rounded-md"
+        className="w-full bg-yn-orange hover:bg-yn-orange/90 text-white font-medium py-2 rounded-md"
       >
         Cadastrar
       </button>
@@ -149,7 +149,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-400 p-4">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-[#FE5200] text-center">YNOVA</h1>
+        <h1 className="text-2xl font-bold text-yn-orange text-center">YNOVA</h1>
         <p className="text-gray-500 text-center mb-6">Portal dos Consultores</p>
 
         {tab !== 'confirm' && (
@@ -157,7 +157,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
             <button
               className={`flex-1 py-2 border-b-2 ${
                 tab === 'login'
-                  ? 'border-[#FE5200] text-[#FE5200]'
+                  ? 'border-yn-orange text-yn-orange'
                   : 'border-transparent text-gray-500'
               }`}
               onClick={() => setTab('login')}
@@ -167,7 +167,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
             <button
               className={`flex-1 py-2 border-b-2 ${
                 tab === 'register'
-                  ? 'border-[#FE5200] text-[#FE5200]'
+                  ? 'border-yn-orange text-yn-orange'
                   : 'border-transparent text-gray-500'
               }`}
               onClick={() => setTab('register')}
@@ -183,7 +183,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
 
         {tab === 'login' && (
           <div className="mt-4 text-center">
-            <a href="#" className="text-sm text-[#FE5200] hover:text-[#FE5200]/80">
+            <a href="#" className="text-sm text-yn-orange hover:text-yn-orange/80">
               Esqueci minha senha
             </a>
           </div>

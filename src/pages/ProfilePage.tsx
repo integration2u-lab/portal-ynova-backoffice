@@ -10,7 +10,7 @@ export default function ProfilePage() {
       <div className="bg-white dark:bg-[#3E3E3E] rounded-lg p-6 shadow-sm border border-gray-200 dark:border-[#1E1E1E]">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Dados Pessoais</h3>
-          <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 w-full sm:w-auto">
+          <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 w-full sm:w-auto">
             <Edit size={16} />
             Editar
           </button>

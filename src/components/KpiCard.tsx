@@ -9,8 +9,8 @@ interface KpiCardProps {
 
 export default function KpiCard({ title, value, icon: Icon, color = 'blue' }: KpiCardProps) {
   const colorClasses = {
-    blue: 'bg-blue-50 text-blue-600',
-    orange: 'bg-[#FE5200]/10 text-[#FE5200]',
+    blue: 'bg-yn-blue/10 text-yn-blue',
+    orange: 'bg-yn-orange/10 text-yn-orange',
     green: 'bg-green-50 text-green-600',
     purple: 'bg-purple-50 text-purple-600',
   } as const;

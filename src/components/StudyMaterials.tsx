@@ -12,7 +12,7 @@ export default function StudyMaterials() {
       <ul className="space-y-2">
         {materials.map((m) => (
           <li key={m.name}>
-            <a href={m.href} className="flex items-center text-[#FE5200] hover:underline">
+            <a href={m.href} className="flex items-center text-yn-orange hover:underline">
               <span className="mr-2">📄</span>
               {m.name}
             </a>

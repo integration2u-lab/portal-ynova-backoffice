@@ -145,7 +145,7 @@ export default function LeadsKanban() {
         </div>
         <button
           onClick={() => {}}
-          className="whitespace-nowrap rounded-lg bg-[#FE5200] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#FE5200]/90"
+          className="whitespace-nowrap rounded-lg bg-yn-orange px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-yn-orange/90"
         >
           Enviar Fatura
         </button>

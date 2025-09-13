@@ -11,7 +11,7 @@ export default function HelpPage() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-6">Central de Ajuda</h3>
           <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-6">Encontre respostas para suas dúvidas ou entre em contato conosco</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto">Abrir Ticket de Suporte</button>
+            <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto">Abrir Ticket de Suporte</button>
             <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium">Acessar FAQ</button>
           </div>
         </div>

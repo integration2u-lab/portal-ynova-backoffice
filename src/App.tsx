@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import { useTheme } from './hooks/useTheme';
 import DashboardPage from './pages/DashboardPage';
 import LeadsPage from './pages/LeadsPage';
+import LeadsSection from './pages/LeadsSection';
 import AgendaPage from './pages/AgendaPage';
 import ProposalsPage from './pages/ProposalsPage';
 import CommissionsPage from './pages/CommissionsPage';
@@ -55,12 +56,16 @@ export default function App() {
           <Route path="/" element={<Layout onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />}> 
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="leads" element={<LeadsPage />} />
+            <Route path="leads" element={<LeadsSection />}>
+              <Route index element={<LeadsPage />} />
+              <Route path="proposals" element={<ProposalsPage />} />
+              <Route path="simulation" element={<SimulationClientsPage />} />
+              <Route path="simulation/:clientId" element={<SimulationClientPage />} />
+            </Route>
             <Route path="agenda" element={<AgendaPage />} />
-            <Route path="proposals" element={<ProposalsPage />} />
+            
             <Route path="commissions" element={<CommissionsPage />} />
-            <Route path="simulation" element={<SimulationClientsPage />} />
-            <Route path="simulation/:clientId" element={<SimulationClientPage />} />
+            
             <Route path="profile" element={<ProfilePage />} />
             <Route path="ranking" element={<RankingPage />} />
             <Route path="training" element={<TrainingPage />} />

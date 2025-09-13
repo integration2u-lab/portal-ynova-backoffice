@@ -5,6 +5,7 @@ import {
   generateSimulationPdf,
   generateSimulationPpt,
 } from '../utils/exportSimulation';
+import ListRow from '../components/ListRow';
 
 export default function ProposalsPage() {
   return (
@@ -22,55 +23,25 @@ export default function ProposalsPage() {
       </header>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Lista de Propostas</h3>
       <div className="bg-white dark:bg-[#1a1f24] rounded-lg shadow-sm border border-gray-200 dark:border-[#2b3238]">
-        <div className="space-y-3 sm:hidden p-4">
-          {mockPropostas.map((p) => {
-            const lead = mockLeads.find((l) => l.id === p.leadId);
-            return (
-              <article key={p.id} className="rounded-lg border p-4 bg-white dark:bg-[#1a1f24]">
-                <div className="font-semibold truncate">{lead?.nome}</div>
-                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <dt className="text-gray-500">Data</dt>
-                    <dd>{new Date(p.data).toLocaleDateString('pt-BR')}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-gray-500">Valor</dt>
-                    <dd className="text-right">R$ {p.valorSimulado.toLocaleString('pt-BR')}</dd>
-                  </div>
-                  <div className="col-span-2">
-                    <dt className="text-gray-500">Status</dt>
-                    <dd>
-                      {p.status === 'aceita'
-                        ? 'Aceita'
-                        : p.status === 'rejeitada'
-                        ? 'Rejeitada'
-                        : 'Em negociação'}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="mt-3 flex flex-col gap-2">
-                  <button
-                    className="w-full inline-flex items-center justify-center gap-1"
-                    onClick={() => generateSimulationPpt(p)}
-                  >
-                    <Download size={14} />
-                    PPT
-                  </button>
-                  <button
-                    className="w-full inline-flex items-center justify-center gap-1"
-                    onClick={() => generateSimulationPdf(p)}
-                  >
-                    <FileText size={14} />
-                    PDF
-                  </button>
-                  <button className="w-full inline-flex items-center justify-center gap-1">
-                    <Eye size={14} />
-                    Ver
-                  </button>
-                </div>
-              </article>
-            );
-          })}
+        <div className="sm:hidden">
+          <ul className="divide-y divide-gray-200 dark:divide-[#2b3238]">
+            {mockPropostas.map((p) => {
+              const lead = mockLeads.find((l) => l.id === p.leadId);
+              const statusLabel = p.status === 'aceita' ? 'Aceita' : p.status === 'rejeitada' ? 'Rejeitada' : 'Em negociação';
+              const statusColor = p.status === 'aceita' ? 'green' : p.status === 'rejeitada' ? 'red' : 'orange';
+              return (
+                <ListRow
+                  key={p.id}
+                  title={lead?.nome ?? `Proposta #${p.id}`}
+                  badgeLabel={`Data: ${new Date(p.data).toLocaleDateString('pt-BR')}`}
+                  detail={`Valor: R$ ${p.valorSimulado.toLocaleString('pt-BR')}`}
+                  rightPill={{ label: statusLabel, color: statusColor as any }}
+                  trailingArrow={false}
+                />
+              );
+            })}
+          </ul>
+          <div className="p-4 text-xs text-gray-500">Toque em um item para ver ações no desktop.</div>
         </div>
         <div className="hidden sm:block">
           <div className="overflow-x-auto">
@@ -131,7 +102,7 @@ export default function ProposalsPage() {
                             <FileText size={14} />
                             PDF
                           </button>
-                          <button className="text-[#FE5200] dark:text-orange-400 hover:text-[#FE5200]/80 dark:hover:text-orange-300 inline-flex items-center gap-1">
+                          <button className="text-yn-orange dark:text-orange-400 hover:text-yn-orange/80 dark:hover:text-orange-300 inline-flex items-center gap-1">
                             <Eye size={14} />
                             Ver
                           </button>

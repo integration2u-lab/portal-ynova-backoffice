@@ -97,7 +97,7 @@ export default function TrainingPage() {
               <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">Progresso: {progress}%</div>
               <div className="w-full bg-gray-200 dark:bg-[#1E1E1E] rounded-full h-2">
                 <div
-                  className="h-2 rounded-full bg-[#FE5200]"
+                  className="h-2 rounded-full bg-yn-orange"
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
@@ -116,7 +116,7 @@ export default function TrainingPage() {
           <button
             onClick={handleNext}
             disabled={isLastLesson}
-            className={`bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg w-full md:w-auto ${isLastLesson ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg w-full md:w-auto ${isLastLesson ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Próximo
           </button>

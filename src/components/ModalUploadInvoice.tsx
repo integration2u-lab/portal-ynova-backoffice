@@ -43,7 +43,7 @@ export default function ModalUploadInvoice({ isOpen, onClose }: ModalUploadInvoi
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-lg p-6 text-center ${
             isDragging
-              ? 'border-[#FE5200] bg-[#FE5200]/10 dark:bg-[#FE5200]/20'
+              ? 'border-yn-orange bg-yn-orange/10 dark:bg-yn-orange/20'
               : 'border-gray-300 dark:border-[#1E1E1E]'
           }`}
         >
@@ -59,7 +59,7 @@ export default function ModalUploadInvoice({ isOpen, onClose }: ModalUploadInvoi
           />
           <label
             htmlFor="invoice-upload"
-            className="inline-block px-4 py-2 bg-[#FE5200] hover:bg-[#FE5200]/90 text-white rounded-lg cursor-pointer"
+            className="inline-block px-4 py-2 bg-yn-orange hover:bg-yn-orange/90 text-white rounded-lg cursor-pointer"
           >
             Selecionar arquivo
           </label>

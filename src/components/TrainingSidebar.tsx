@@ -54,7 +54,7 @@ export default function TrainingSidebar({
                     onClick={() => onSelectLesson(mIndex, lIndex)}
                     className={`w-full flex items-center text-left px-2 py-1 rounded-md text-sm ${
                       isActive
-                        ? 'bg-[#FE5200]/10 text-[#FE5200] dark:bg-[#FE5200]/20 dark:text-[#FE5200]'
+                        ? 'bg-yn-orange/10 text-yn-orange dark:bg-yn-orange/20 dark:text-yn-orange'
                         : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1E1E1E]'
                     }`}
                   >

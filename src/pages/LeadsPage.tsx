@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Search,
   Filter,
@@ -18,12 +18,15 @@ import {
 } from 'lucide-react';
 import ModalUploadInvoice from '../components/ModalUploadInvoice';
 import StatusBadge from '../components/StatusBadge';
+import ListRow from '../components/ListRow';
 import EmptyState from '../components/EmptyState';
 import { mockLeads, mockPropostas } from '../data/mockData';
 import { toast } from 'sonner';
 import { Lead } from '../types';
+import { useSearchParams } from 'react-router-dom';
 
 export default function LeadsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [activeTab, setActiveTab] = useState('resumo');
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,6 +35,16 @@ export default function LeadsPage() {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  // Abrir modal ao vir do header com ?upload=1
+  useEffect(() => {
+    const shouldOpen = searchParams.get('upload') === '1';
+    if (shouldOpen) {
+      setIsUploadOpen(true);
+      searchParams.delete('upload');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filteredLeads = leads.filter(
     (lead) =>
@@ -52,7 +65,6 @@ export default function LeadsPage() {
     return (
       <>
         <div className="space-y-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Leads</h1>
           <header className="flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row gap-3 min-w-0 w-full">
               <div className="relative flex-1 min-w-0">
@@ -62,7 +74,7 @@ export default function LeadsPage() {
                   placeholder="Buscar leads..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-[#FE5200] focus:border-transparent bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-300"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-yn-orange focus:border-transparent bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-300"
                 />
               </div>
               <button
@@ -75,7 +87,7 @@ export default function LeadsPage() {
             <div className="flex flex-col gap-2 w-full">
               <button
                 onClick={() => setIsUploadOpen(true)}
-                className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg w-full"
+                className="bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg w-full"
               >
                 Enviar Fatura
               </button>
@@ -87,43 +99,30 @@ export default function LeadsPage() {
               <EmptyState
                 message="Você ainda não possui leads. Importe um arquivo ou cadastre manualmente."
                 action={
-                  <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg font-medium">
+                  <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg font-medium">
                     Importar Leads
                   </button>
                 }
               />
             ) : (
               <>
-                <div className="space-y-3 sm:hidden">
-                  {filteredLeads.map((lead) => (
-                    <article
-                      key={lead.id}
-                      className="rounded-lg border p-4 bg-white dark:bg-[#3E3E3E]"
-                    >
-                      <div className="font-semibold truncate">{lead.nome}</div>
-                      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <dt className="text-gray-500">CNPJ</dt>
-                          <dd className="truncate">{lead.cnpj}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-gray-500">Status</dt>
-                          <dd>
-                            <StatusBadge status={lead.statusFunil} type="funil" />
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="mt-3 flex flex-col gap-2">
-                        <button
-                          className="w-full"
+                <div className="sm:hidden">
+                  <ul className="divide-y divide-gray-200 dark:divide-[#1E1E1E] rounded-xl border border-gray-200 dark:border-[#1E1E1E] bg-white dark:bg-[#3E3E3E]">
+                    {filteredLeads.map((lead) => {
+                      const statusLabel = lead.statusFunil === 'verde' ? 'Qualificado' : lead.statusFunil === 'amarelo' ? 'Em análise' : lead.statusFunil === 'vermelho' ? 'Frio' : lead.statusFunil;
+                      const statusColor = lead.statusFunil === 'verde' ? 'green' : lead.statusFunil === 'vermelho' ? 'red' : 'orange';
+                      return (
+                        <ListRow
+                          key={lead.id}
                           onClick={() => setSelectedLead(lead)}
-                        >
-                          Abrir
-                        </button>
-                        <button className="w-full">Solicitar fatura</button>
-                      </div>
-                    </article>
-                  ))}
+                          title={lead.nome}
+                          badgeLabel={`CNPJ: ${lead.cnpj}`}
+                          detail={`Segmento: ${lead.segmento}`}
+                          rightPill={{ label: statusLabel, color: statusColor as any }}
+                        />
+                      );
+                    })}
+                  </ul>
                 </div>
 
                 <div className="hidden sm:block">
@@ -174,7 +173,7 @@ export default function LeadsPage() {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => setSelectedLead(lead)}
-                                  className="text-[#FE5200] hover:text-[#FE5200]/80"
+                          className="text-yn-orange hover:text-yn-orange/80"
                                 >
                                   Abrir
                                 </button>
@@ -252,11 +251,11 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center gap-3 min-w-0">
         <button onClick={() => setSelectedLead(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-[#1E1E1E] rounded-lg" aria-label="Voltar">
           ←
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{selectedLead.nome}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{selectedLead.nome}</h1>
       </div>
 
       <div className="bg-white dark:bg-[#3E3E3E] rounded-lg p-6 shadow-sm border border-gray-200 dark:border-[#1E1E1E]">
@@ -284,7 +283,7 @@ export default function LeadsPage() {
         </div>
 
         <div className="border-b border-gray-200 dark:border-[#1E1E1E] mb-6">
-          <nav className="-mb-px flex space-x-8" role="tablist">
+          <nav className="-mb-px flex gap-4 sm:gap-8 overflow-x-auto" role="tablist">
             {[
               { id: 'resumo', label: 'Resumo' },
               { id: 'cadastro', label: 'Cadastro' },
@@ -298,9 +297,9 @@ export default function LeadsPage() {
                 onClick={() => setActiveTab(tab.id)}
                 role="tab"
                 aria-selected={activeTab === tab.id}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`shrink-0 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
-                    ? 'border-[#FE5200] text-[#FE5200] dark:text-[#FE5200]'
+                    ? 'border-yn-orange text-yn-orange dark:text-yn-orange'
                     : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-[#1E1E1E]'
                 }`}
               >
@@ -324,9 +323,9 @@ export default function LeadsPage() {
                 <h4 className="font-medium text-green-900 dark:text-green-200 mb-2">Status Atual</h4>
                 <p className="text-sm text-green-700 dark:text-green-300">Lead qualificado - documentação em análise</p>
               </div>
-              <div className="bg-[#FE5200]/10 dark:bg-[#FE5200]/20 p-4 rounded-lg">
-                <h4 className="font-medium text-[#FE5200] dark:text-[#FE5200] mb-2">Última Interação</h4>
-                <p className="text-sm text-[#FE5200] dark:text-[#FE5200]">{new Date(selectedLead.ultimaInteracao).toLocaleDateString('pt-BR')}</p>
+              <div className="bg-yn-orange/10 dark:bg-yn-orange/20 p-4 rounded-lg">
+                <h4 className="font-medium text-yn-orange dark:text-yn-orange mb-2">Última Interação</h4>
+                <p className="text-sm text-yn-orange dark:text-yn-orange">{new Date(selectedLead.ultimaInteracao).toLocaleDateString('pt-BR')}</p>
               </div>
             </div>
 
@@ -349,7 +348,7 @@ export default function LeadsPage() {
         {activeTab === 'cadastro' && (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+              <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
                 <Edit size={16} />
                 Editar
               </button>
@@ -389,7 +388,7 @@ export default function LeadsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <h4 className="font-medium text-gray-900 dark:text-gray-100">Faturas Enviadas</h4>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 w-full sm:w-auto">
+                <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 w-full sm:w-auto">
                   <Upload size={16} />
                   Enviar Fatura
                 </button>
@@ -421,7 +420,7 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button className="text-blue-600 hover:text-blue-900 mr-4">Revisar dados</button>
-                      <button className="text-[#FE5200] hover:text-[#FE5200]/80">Reprocessar</button>
+                      <button className="text-yn-orange hover:text-yn-orange/80">Reprocessar</button>
                     </td>
                   </tr>
                 </tbody>
@@ -450,7 +449,7 @@ export default function LeadsPage() {
               </div>
               <div className="mt-4 flex flex-col sm:flex-row gap-2">
                 <button className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm w-full sm:w-auto">Aceitar</button>
-                <button className="bg-[#FE5200] hover:bg-[#FE5200]/90 text-white px-3 py-1 rounded text-sm w-full sm:w-auto">Editar</button>
+                <button className="bg-yn-orange hover:bg-yn-orange/90 text-white px-3 py-1 rounded text-sm w-full sm:w-auto">Editar</button>
                 <button className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm w-full sm:w-auto">Rejeitar</button>
               </div>
             </div>
@@ -528,9 +527,9 @@ export default function LeadsPage() {
                 <h5 className="font-medium text-green-900">Preço Médio</h5>
                 <p className="text-2xl font-bold text-green-900">R$ 285/MWh</p>
               </div>
-              <div className="bg-[#FE5200]/10 p-4 rounded-lg">
-                <h5 className="font-medium text-[#FE5200]">Contratos Ativos</h5>
-                <p className="text-2xl font-bold text-[#FE5200]">3</p>
+              <div className="bg-yn-orange/10 p-4 rounded-lg">
+                <h5 className="font-medium text-yn-orange">Contratos Ativos</h5>
+                <p className="text-2xl font-bold text-yn-orange">3</p>
               </div>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
@@ -548,7 +547,7 @@ export default function LeadsPage() {
                 <span className="text-sm text-gray-600">75%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
-                <div className="bg-[#FE5200] h-2 rounded-full w-3/4"></div>
+                <div className="bg-yn-orange h-2 rounded-full w-3/4"></div>
               </div>
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
@@ -562,7 +561,7 @@ export default function LeadsPage() {
                   <span className="text-xs text-gray-500 ml-auto">12/01/2025</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <AlertCircle className="h-5 w-5 text-[#FE5200]" />
+                  <AlertCircle className="h-5 w-5 text-yn-orange" />
                   <span className="text-sm text-gray-700">Protocolado na CCEE</span>
                   <span className="text-xs text-gray-500 ml-auto">Em andamento</span>
                 </div>
