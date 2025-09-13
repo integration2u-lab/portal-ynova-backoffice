@@ -29,3 +29,13 @@ export type DealComissao = {
   statusPagamento: 'pago' | 'pendente' | 'processando';
   data: string;
 };
+
+export type Cliente = {
+  id: number;
+  nome: string;
+  bandeira: string;
+  imposto: string;
+  consumo: number; // kWh consumidos
+  geracao: number; // kWh gerados
+  balanco: number; // saldo energético (geracao - consumo)
+};
