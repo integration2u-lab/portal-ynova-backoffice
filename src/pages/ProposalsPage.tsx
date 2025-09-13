@@ -1,6 +1,10 @@
 import React from 'react';
-import { Download, Eye } from 'lucide-react';
+import { Download, Eye, FileText } from 'lucide-react';
 import { mockPropostas, mockLeads } from '../data/mockData';
+import {
+  generateSimulationPdf,
+  generateSimulationPpt,
+} from '../utils/exportSimulation';
 
 export default function ProposalsPage() {
   return (
@@ -45,9 +49,19 @@ export default function ProposalsPage() {
                   </div>
                 </dl>
                 <div className="mt-3 flex flex-col gap-2">
-                  <button className="w-full inline-flex items-center justify-center gap-1">
+                  <button
+                    className="w-full inline-flex items-center justify-center gap-1"
+                    onClick={() => generateSimulationPpt(p)}
+                  >
                     <Download size={14} />
                     PPT
+                  </button>
+                  <button
+                    className="w-full inline-flex items-center justify-center gap-1"
+                    onClick={() => generateSimulationPdf(p)}
+                  >
+                    <FileText size={14} />
+                    PDF
                   </button>
                   <button className="w-full inline-flex items-center justify-center gap-1">
                     <Eye size={14} />
@@ -103,9 +117,19 @@ export default function ProposalsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
-                          <button className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 inline-flex items-center gap-1">
+                          <button
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 inline-flex items-center gap-1"
+                            onClick={() => generateSimulationPpt(p)}
+                          >
                             <Download size={14} />
                             PPT
+                          </button>
+                          <button
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 inline-flex items-center gap-1"
+                            onClick={() => generateSimulationPdf(p)}
+                          >
+                            <FileText size={14} />
+                            PDF
                           </button>
                           <button className="text-[#FE5200] dark:text-orange-400 hover:text-[#FE5200]/80 dark:hover:text-orange-300 inline-flex items-center gap-1">
                             <Eye size={14} />
