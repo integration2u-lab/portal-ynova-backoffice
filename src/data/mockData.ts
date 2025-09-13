@@ -1,4 +1,4 @@
-import { Lead, Proposta, DealComissao } from '../types';
+import { Lead, Proposta, DealComissao, Cliente } from '../types';
 
 export const mockLeads: Lead[] = [
   {
@@ -62,3 +62,24 @@ export const mockUser = {
   name: 'João Consultor',
   email: 'joao@ynova.com',
 };
+
+export const mockClientes: Cliente[] = [
+  {
+    id: 1,
+    nome: 'Cliente Energia A',
+    bandeira: 'Verde',
+    imposto: '12%',
+    consumo: 1000,
+    geracao: 1200,
+    balanco: 200,
+  },
+  {
+    id: 2,
+    nome: 'Cliente Energia B',
+    bandeira: 'Amarela',
+    imposto: '15%',
+    consumo: 800,
+    geracao: 600,
+    balanco: -200,
+  },
+];
