@@ -1,3 +1,4 @@
+﻿import { AuthAPI } from '../services/api';
 import React, { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 
@@ -23,15 +24,15 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     e.preventDefault();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(regEmail)) {
-      setRegError('E-mail inválido');
+      setRegError('E-mail invÃ¡lido');
       return;
     }
     if (regPassword.length < 8 || !/\d/.test(regPassword)) {
-      setRegError('Senha deve ter ao menos 8 caracteres e números');
+      setRegError('Senha deve ter ao menos 8 caracteres e nÃºmeros');
       return;
     }
     if (regPassword !== regConfirm) {
-      setRegError('As senhas não são iguais');
+      setRegError('As senhas nÃ£o sÃ£o iguais');
       return;
     }
     setRegError('');
@@ -53,7 +54,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
       <div>
         <input
           type="password"
-          placeholder="••••••••"
+          placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
@@ -150,7 +151,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-400 p-4">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <h1 className="text-2xl font-bold text-yn-orange text-center">YNOVA</h1>
-        <p className="text-gray-500 text-center mb-6">Portal dos Consultores</p>
+        <p className="text-gray-500 text-center mb-6">Portal de Gestão</p>
 
         {tab !== 'confirm' && (
           <div className="flex mb-6">
@@ -183,12 +184,15 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
 
         {tab === 'login' && (
           <div className="mt-4 text-center">
-            <a href="#" className="text-sm text-yn-orange hover:text-yn-orange/80">
-              Esqueci minha senha
-            </a>
+            <button type="button" onClick={async ()=>{ if(!email){ alert("Informe seu e-mail"); return;} try{ await AuthAPI.forgotPassword(email); alert("Se o e-mail existir, enviaremos instruções de reset."); } catch(e){ alert("Erro ao solicitar redefinição."); } }} className="text-sm text-yn-orange hover:text-yn-orange/80">Esqueci minha senha</button>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+
+// Lightweight forgot-password handler using AuthAPI
+// This triggers the server to send a reset email (mock in dev)
+

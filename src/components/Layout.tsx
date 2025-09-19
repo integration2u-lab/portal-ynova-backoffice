@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link} from 'react-router-dom';
 import {
   Home,
@@ -20,6 +20,7 @@ import { mockUser } from '../data/mockData';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
+  { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/leads', label: 'Leads', icon: FileText },
   { to: '/negociacoes', label: 'Negociações', icon: Handshake },
   { to: '/agenda', label: 'Agenda', icon: Calendar },
@@ -68,7 +69,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
         <div className="flex items-center justify-between h-full">
          <Link
             to="/dashboard"
-            aria-label="Ir para a página inicial"
+            aria-label="Ir para a pÃ¡gina inicial"
             className="flex items-center gap-2"
           >
             {logoError ? (
@@ -101,7 +102,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
             <div className="relative" ref={notifRef}>
               <button
                 className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                aria-label="Notificações"
+                aria-label="NotificaÃ§Ãµes"
                 onClick={() => setShowNotifications((p) => !p)}
               >
                 <Bell size={20} />
@@ -110,8 +111,8 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1f24] border border-gray-200 dark:border-[#2b3238] rounded-lg shadow-lg p-4 text-sm text-gray-700 dark:text-gray-200">
                   <ul className="space-y-2">
                     <li>Verifique seu e-mail</li>
-                    <li>Nova mensagem da gestão</li>
-                    <li>Duas reuniões perdidas</li>
+                    <li>Nova mensagem da gestÃ£o</li>
+                    <li>Duas reuniÃµes perdidas</li>
                   </ul>
                 </div>
               )}
@@ -238,3 +239,5 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
     </div>
   );
 }
+
+

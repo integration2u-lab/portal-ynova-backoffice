@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+﻿import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import { useTheme } from './hooks/useTheme';
@@ -11,51 +11,51 @@ import CommissionsPage from './pages/CommissionsPage';
 import ProfilePage from './pages/ProfilePage';
 import RankingPage from './pages/Ranking';
 import NotificationsPage from './pages/NotificationsPage';
+import InteligenciaPage from './pages/InteligenciaPage';
 import HelpPage from './pages/HelpPage';
 import LoginPage from './pages/LoginPage';
 import TrainingPage from './pages/TrainingPage';
 import SimulationClientsPage from './pages/SimulationClientsPage';
 import SimulationClientPage from './pages/SimulationClientPage';
+import OportunidadesPage from './pages/OportunidadesPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ContratosPage from './pages/contratos';
+import DetalheContratoPage from './pages/contratos/DetalheContrato';
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+function AppRoutes() {
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const { user, login, logout, loading, error } = useAuth();
 
-  const handleLogin = (
-    e: React.FormEvent,
-    email: string,
-    password: string
-  ) => {
+  const handleLogin = async (e: React.FormEvent, email: string, password: string) => {
     e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-    setTimeout(() => {
-      if (email === 'admin@admin' && password === 'admin') {
-        setIsAuthenticated(true);
-        navigate('/dashboard');
-      } else {
-        setError('Credenciais inválidas');
-      }
-      setIsLoading(false);
-    }, 800);
+    await login(email, password);
+    navigate('/dashboard');
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
+  if (loading) return null;
+
   return (
     <Routes>
-      {isAuthenticated ? (
+      {user ? (
         <>
           <Route path="/" element={<Layout onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} />}> 
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="oportunidades" element={<OportunidadesPage />} />
+            <Route path="inteligencia" element={<InteligenciaPage />} />
+
+            {/* Gestão: Contratos */}
+            <Route path="contratos" element={<ContratosPage />} />
+            <Route path="contratos/:id" element={<DetalheContratoPage />} />
+
+            {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
             <Route path="leads" element={<LeadsSection />}>
               <Route index element={<LeadsPage />} />
               <Route path="proposals" element={<ProposalsPage />} />
@@ -63,9 +63,7 @@ export default function App() {
               <Route path="simulation/:clientId" element={<SimulationClientPage />} />
             </Route>
             <Route path="agenda" element={<AgendaPage />} />
-            
             <Route path="commissions" element={<CommissionsPage />} />
-            
             <Route path="profile" element={<ProfilePage />} />
             <Route path="ranking" element={<RankingPage />} />
             <Route path="training" element={<TrainingPage />} />
@@ -90,7 +88,7 @@ export default function App() {
             element={
               <LoginPage
                 onLogin={handleLogin}
-                isLoading={isLoading}
+                isLoading={loading}
                 error={error}
               />
             }
@@ -101,3 +99,15 @@ export default function App() {
     </Routes>
   );
 }
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  );
+}
+
+
+
+

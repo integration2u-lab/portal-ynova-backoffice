@@ -1,0 +1,60 @@
+﻿openapi: 3.0.3
+info:
+  title: Ynova Gestão - Contracts API
+  version: 1.0.0
+paths:
+  /contracts:
+    get:
+      summary: List contracts with filters
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: cnpj
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [ativo, pendente, inativo] }
+        - in: query
+          name: startDate
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+        - in: query
+          name: endDate
+          schema: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$' }
+      responses:
+        '200':
+          description: Paged list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ContractSummary' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+components:
+  schemas:
+    ContractSummary:
+      type: object
+      properties:
+        id: { type: string }
+        cliente: { type: string }
+        cnpj: { type: string }
+        uc: { type: string }
+        status: { type: string, enum: [ativo, inativo, pendente] }
+        ciclo: { type: string, description: 'YYYY-MM' }
+        energiaContratadaMWh: { type: number }
+        energiaUtilizadaMWh: { type: number }
+        flexibilidadePct: { type: number }
+        excedenteMWh: { type: number }
+        custoExtra: { type: number }
