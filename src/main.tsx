@@ -10,12 +10,18 @@ const client = new QueryClient({
   defaultOptions: { queries: { retry: 0, refetchOnWindowFocus: false } }
 })
 
+const ALLOW_ANY_LOGIN = (() => {
+  const flag = import.meta.env.VITE_ALLOW_ANY_LOGIN
+  if (typeof flag === 'string') return flag === 'true'
+  return import.meta.env.PROD
+})()
+
 async function bootstrap() {
   // Enable MSW only during local dev or when VITE_API_MOCK=true
-  const enableMSW = import.meta.env.DEV || import.meta.env.VITE_API_MOCK === 'true';
+  const enableMSW = import.meta.env.DEV || import.meta.env.VITE_API_MOCK === 'true' || ALLOW_ANY_LOGIN
   if (enableMSW) {
-    const { worker } = await import('./mocks/browser');
-    await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } });
+    const { worker } = await import('./mocks/browser')
+    await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
