@@ -1,6 +1,6 @@
-﻿import { AuthAPI } from '../services/api';
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { AuthAPI } from '../services/api';
 
 type LoginPageProps = {
   onLogin: (e: React.FormEvent, email: string, password: string) => void;
@@ -11,7 +11,6 @@ type LoginPageProps = {
 export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [tab, setTab] = useState<'login' | 'register' | 'confirm'>('login');
 
   const [regEmail, setRegEmail] = useState('');
@@ -24,26 +23,41 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     e.preventDefault();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(regEmail)) {
-      setRegError('E-mail invÃ¡lido');
+      setRegError('E-mail invalido');
       return;
     }
     if (regPassword.length < 8 || !/\d/.test(regPassword)) {
-      setRegError('Senha deve ter ao menos 8 caracteres e nÃºmeros');
+      setRegError('Senha deve ter ao menos 8 caracteres e numeros');
       return;
     }
     if (regPassword !== regConfirm) {
-      setRegError('As senhas nÃ£o sÃ£o iguais');
+      setRegError('As senhas nao sao iguais');
       return;
     }
     setRegError('');
     setTab('confirm');
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      alert('Informe seu e-mail primeiro.');
+      return;
+    }
+    try {
+      await AuthAPI.forgotPassword(email);
+      alert('Se o e-mail existir, enviaremos instrucoes para redefinicao.');
+    } catch (err) {
+      alert('Nao foi possivel solicitar a redefinicao agora.');
+    }
+  };
+
   const renderLogin = () => (
-    <form onSubmit={(e) => onLogin(e, email, password)} className="space-y-4">
+    <form onSubmit={(e) => onLogin(e, email, password)} className="space-y-4" noValidate>
       <div>
         <input
-          type="email"
+          type="text"
+          inputMode="email"
+          autoComplete="username"
           placeholder="seu@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -54,8 +68,9 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
       <div>
         <input
           type="password"
-          placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+          placeholder="********"
           value={password}
+          autoComplete="current-password"
           onChange={(e) => setPassword(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
@@ -67,17 +82,13 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
         disabled={isLoading}
         className="w-full bg-yn-orange hover:bg-yn-orange/90 text-white font-medium py-2 rounded-md flex items-center justify-center"
       >
-        {isLoading ? (
-          <RefreshCw className="animate-spin" size={20} />
-        ) : (
-          'Entrar'
-        )}
+        {isLoading ? <RefreshCw className="animate-spin" size={20} /> : 'Entrar'}
       </button>
     </form>
   );
 
   const renderRegister = () => (
-    <form onSubmit={handleRegister} className="space-y-4">
+    <form onSubmit={handleRegister} className="space-y-4" noValidate>
       <div>
         <input
           type="email"
@@ -151,7 +162,7 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-400 p-4">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <h1 className="text-2xl font-bold text-yn-orange text-center">YNOVA</h1>
-        <p className="text-gray-500 text-center mb-6">Portal de Gestão</p>
+        <p className="text-gray-500 text-center mb-6">Portal de Gestao</p>
 
         {tab !== 'confirm' && (
           <div className="flex mb-6">
@@ -184,15 +195,16 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
 
         {tab === 'login' && (
           <div className="mt-4 text-center">
-            <button type="button" onClick={async ()=>{ if(!email){ alert("Informe seu e-mail"); return;} try{ await AuthAPI.forgotPassword(email); alert("Se o e-mail existir, enviaremos instruções de reset."); } catch(e){ alert("Erro ao solicitar redefinição."); } }} className="text-sm text-yn-orange hover:text-yn-orange/80">Esqueci minha senha</button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="text-sm text-yn-orange hover:text-yn-orange/80"
+            >
+              Esqueci minha senha
+            </button>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-
-// Lightweight forgot-password handler using AuthAPI
-// This triggers the server to send a reset email (mock in dev)
-
