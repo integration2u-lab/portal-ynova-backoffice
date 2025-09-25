@@ -1,14 +1,50 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import ModalEnergyDetails from '../components/ModalEnergyDetails';
 import { Link, useParams } from 'react-router-dom';
-import { mockClientes } from '../data/mockData';
+import { useSimulationClientes } from '../hooks/useSimulationClientes';
 
 export default function SimulationClientPage() {
   const { clientId } = useParams();
-  const cliente = mockClientes.find((c) => c.id.toString() === clientId);
+  const { clientes, loading, error, isUsingFallback } = useSimulationClientes();
+
+  const cliente = useMemo(
+    () => clientes.find((c) => c.id.toString() === (clientId ?? '')),
+    [clientes, clientId]
+  );
+
+  const backLinkClass =
+    'inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#2b3238] rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-[#232932] transition-colors';
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/leads/simulation"
+          className={backLinkClass}
+        >
+          ← Voltar
+        </Link>
+        <div className="rounded-lg border border-gray-200 dark:border-[#2b3238] bg-white dark:bg-[#1a1f24] p-6 text-sm text-gray-600 dark:text-gray-300">
+          Carregando dados do cliente...
+        </div>
+      </div>
+    );
+  }
 
   if (!cliente) {
-    return <div>Cliente não encontrado</div>;
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/leads/simulation"
+          className={backLinkClass}
+        >
+          ← Voltar
+        </Link>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Cliente não encontrado.
+        </div>
+      </div>
+    );
   }
 
   // Helpers e simulação de custos (placeholders visuais)
@@ -83,11 +119,18 @@ export default function SimulationClientPage() {
 
   return (
     <div className="space-y-6">
+      {isUsingFallback && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+          Não foi possível conectar ao BFF mock. Exibindo dados de demonstração.
+          {error ? ` (${error})` : ''}
+        </div>
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <Link
             to="/leads/simulation"
-            className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-[#2b3238] rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-[#232932] transition-colors"
+            className={backLinkClass}
           >
             ← Voltar
           </Link>
