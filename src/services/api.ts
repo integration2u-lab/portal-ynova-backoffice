@@ -1,8 +1,32 @@
 ﻿/* Simple API client with CSRF support and cookie credentials */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 const USE_MOCK = (import.meta.env.VITE_API_MOCK || 'false') === 'true';
+
+function normalizeBaseUrl(url: string): string {
+  if (!url) return '';
+  return url.replace(/\s+/g, '').replace(/\/+$/, '');
+}
+
+const BASE_URL = normalizeBaseUrl(RAW_BASE_URL);
+
+function isAbsoluteUrl(url: string) {
+  try {
+    return Boolean(new URL(url));
+  } catch {
+    return false;
+  }
+}
+
+function buildRequestUrl(path: string): string {
+  if (!path) return BASE_URL || '/';
+  if (isAbsoluteUrl(path)) return path;
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!BASE_URL) return normalizedPath;
+  return `${BASE_URL}${normalizedPath}`;
+}
 
 function getCsrfToken() {
   // Expect a cookie named `csrf_token` set by backend on GET /auth/csrf
@@ -21,14 +45,29 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
   const csrf = getCsrfToken();
   if (csrf) headers.set('X-CSRF-Token', csrf);
 
-  const resp = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
+  const targetUrl = buildRequestUrl(path);
+  const absoluteUrl = new URL(targetUrl, window.location.origin);
+  const sameOrigin = absoluteUrl.origin === window.location.origin;
+
+  let resp: Response;
+  try {
+    resp = await fetch(absoluteUrl.toString(), {
+      ...options,
+      headers,
+      credentials: options.credentials ?? (sameOrigin ? 'include' : 'omit'),
+      mode: options.mode ?? (sameOrigin ? 'same-origin' : 'cors'),
+    });
+  } catch (error) {
+    const method = (options.method || 'GET').toUpperCase();
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${method} ${absoluteUrl.toString()} failed: ${reason}`);
+  }
 
   if (resp.status === 204) return undefined as unknown as T;
   const text = await resp.text();
