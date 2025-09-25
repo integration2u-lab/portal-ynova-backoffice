@@ -11,7 +11,7 @@ export type LeadSimulationResponse = {
   error?: string;
 };
 
-const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook-test/mockScde';
+const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook/mockScde';
 
 let lastResult: LeadSimulationResponse | null = null;
 let lastRemoteClientes: Cliente[] | null = null;
@@ -45,19 +45,23 @@ function normalizeCliente(raw: any, index: number): Cliente {
     parseNumber(raw?.consumo) ||
     parseNumber(raw?.consumo_kwh) ||
     parseNumber(raw?.consumoKwh) ||
+    parseNumber(raw?.consumoKWh) ||
     parseNumber(raw?.kwh_consumo) ||
     parseNumber(raw?.energiaAtual);
   const geracao =
     parseNumber(raw?.geracao) ||
     parseNumber(raw?.geracao_kwh) ||
     parseNumber(raw?.geracaoKwh) ||
+    parseNumber(raw?.geracaoKWh) ||
     parseNumber(raw?.kwh_geracao) ||
     parseNumber(raw?.energiaGerada);
   const balancoRaw =
     parseNumber(raw?.balanco) ||
     parseNumber(raw?.saldoEnergetico) ||
     parseNumber(raw?.saldo) ||
-    parseNumber(raw?.balancoEnergetico);
+    parseNumber(raw?.balancoEnergetico) ||
+    parseNumber(raw?.economiaMigracao?.saldoEnergetico) ||
+    parseNumber(raw?.economiaMigracao?.saldoEnergeticoKWh);
 
   const idValue = raw?.id ?? raw?.clienteId ?? raw?.leadId ?? raw?.codigo ?? index + 1;
   const id = Number.parseInt(String(idValue), 10);
@@ -85,6 +89,7 @@ function normalizeCliente(raw: any, index: number): Cliente {
     raw?.taxa ??
     raw?.percentualImposto ??
     raw?.impostoExtra ??
+    raw?.impostos?.aliquotaExtra ??
     '0%';
 
   const imposto = ensurePercent(impostoValue);
@@ -120,6 +125,7 @@ function isClienteLike(value: any): boolean {
       'energiagerada',
       'saldo',
       'saldoenergetico',
+      'saldoenergeticokwh',
       'balanco',
       'balancoenergetico',
     ].includes(key)
@@ -181,6 +187,10 @@ function extractClientes(payload: any): any[] {
     if (typeof value === 'object') {
       if (visited.has(value)) return [];
       visited.add(value);
+
+      if (isClienteLike(value)) {
+        return [value];
+      }
 
       const objectValues = Object.values(value);
       const directClientes = objectValues.filter(isClienteLike);
