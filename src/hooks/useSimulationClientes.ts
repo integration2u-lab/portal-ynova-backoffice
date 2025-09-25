@@ -1,26 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Cliente } from '../types';
-import { fetchLeadSimulationClientes } from '../services/leadSimulationApi';
+import {
+  fetchLeadSimulationClientes,
+  getCachedLeadSimulationClientes,
+} from '../services/leadSimulationApi';
 
 export function useSimulationClientes() {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const cached = useRef(getCachedLeadSimulationClientes());
+  const [clientes, setClientes] = useState<Cliente[]>(cached.current?.clientes ?? []);
+  const [loading, setLoading] = useState(!cached.current);
+  const [error, setError] = useState<string | null>(cached.current?.error ?? null);
+  const [isUsingFallback, setIsUsingFallback] = useState(cached.current?.fromCache ?? false);
 
   useEffect(() => {
-    const abortController = new AbortController();
     let mounted = true;
+    const abortController = new AbortController();
 
     async function load() {
-      setLoading(true);
-      const result = await fetchLeadSimulationClientes(abortController.signal);
-      if (!mounted) return;
+      if (!cached.current) {
+        setLoading(true);
+      }
 
-      setClientes(result.clientes);
-      setIsUsingFallback(result.fromCache);
-      setError(result.error ?? null);
-      setLoading(false);
+      try {
+        const result = await fetchLeadSimulationClientes({ signal: abortController.signal });
+        if (!mounted) return;
+
+        cached.current = result;
+        setClientes(result.clientes);
+        setIsUsingFallback(result.fromCache);
+        setError(result.error ?? null);
+      } catch (err) {
+        if (!mounted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        setIsUsingFallback(true);
+        setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     }
 
     load();
