@@ -7,10 +7,10 @@ export default function Negociacoes() {
   const [tab, setTab] = useState<"leads" | "comissoes" | "metas">("leads");
 
   return (
-    <div className="mx-auto w-full max-w-[1200px]">
+    <div className="space-y-6">
       {/* Título */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900 md:text-3xl">Negociações</h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 md:text-3xl">Negociações</h1>
         <p className="text-sm text-gray-500 md:text-base">
           Central de acompanhamento de leads, comissões e metas
         </p>
@@ -18,8 +18,8 @@ export default function Negociacoes() {
 
       {/* Tabs */}
       <div className="rounded-xl bg-white shadow">
-        <div className="overflow-x-auto border-b border-gray-200">
-          <nav className="flex gap-4 px-4">
+        <div className="border-b border-gray-200">
+          <nav className="flex flex-wrap gap-2 sm:gap-4 px-4 py-2" role="tablist">
             <TabBtn
               icon={Users}
               label="Leads"
@@ -65,14 +65,14 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`flex shrink-0 items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold ${
+      className={`flex min-w-0 flex-1 items-center gap-2 border-b-2 px-2 py-2 text-sm font-semibold leading-tight sm:flex-initial sm:py-3 ${
         active
           ? "border-[#ff6b35] text-[#ff6b35]"
           : "border-transparent text-gray-500 hover:text-gray-700"
       }`}
     >
       <Icon size={18} />
-      <span className="whitespace-nowrap">{label}</span>
+      <span className="whitespace-normal break-words text-left sm:text-center sm:whitespace-nowrap">{label}</span>
     </button>
   );
 }
