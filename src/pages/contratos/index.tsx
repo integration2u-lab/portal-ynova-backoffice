@@ -1,251 +1,257 @@
-﻿import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
+import React from 'react';
+import { ContractDetail, StatusBadge } from './ContractDetail';
+import { mockContracts, formatMesLabel } from '../../mocks/contracts';
 
-export type Contrato = {
-  id: string;
-  numero: string;
-  cliente: string;
-  cnpj?: string;
-  segmento?: string;
-  contato?: string;
-  status: 'ATIVO' | 'INATIVO';
-  ciclo_faturamento: string; // YYYY-MM
-  volume_contratado_mwh: number;
-  preco_r_mwh: number;
-  fonte: 'Convencional' | 'Incentivada';
-  flexibilidade_pct: number; // ex.: 0.05 = 5%
-  // Novos campos mockados para oportunidade de contrato
-  status_oportunidade_contrato?: 'COM' | 'SEM' | 'SOLICITAR';
-  observacao_oportunidade?: string;
-  resumo_conformidades?: {
-    nf_energia: 'Conforme' | 'Divergente' | 'Indefinido';
-    nf_icms: 'Conforme' | 'Divergente' | 'Indefinido';
-    fatura: 'Conforme' | 'Divergente' | 'Indefinido';
-  };
-};
+const pageSize = 5;
 
-type Paginacao = {
-  paginaAtual: number;
-  totalPaginas: number;
-  totalItens: number;
-};
-
-type ContratosResponse = {
-  contratos: Contrato[];
-  paginacao: Paginacao;
-};
-
-function ym(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
+function formatMonthLabel(periodo: string) {
+  return formatMesLabel(periodo).replace('.', '');
 }
 
+type SortOption = 'recentes' | 'cliente';
+
 export default function ContratosPage() {
-  const [searchParams] = useSearchParams();
-  const initialMes = searchParams.get('mes') || ym();
-  const [mes, setMes] = React.useState<string>(initialMes);
-  const [page, setPage] = React.useState<number>(1);
-  const [somenteComOportunidade, setSomenteComOportunidade] = React.useState<boolean>(false);
-  const pageSize = 10;
+  const periodosDisponiveis = React.useMemo(() => {
+    const unique = new Set<string>();
+    mockContracts.forEach((contrato) => contrato.periodos.forEach((mes) => unique.add(mes)));
+    return Array.from(unique).sort((a, b) => (a < b ? 1 : -1));
+  }, []);
+  const [periodoSelecionado, setPeriodoSelecionado] = React.useState<string>(
+    () => periodosDisponiveis[0] ?? ''
+  );
+  const [paginaAtual, setPaginaAtual] = React.useState(1);
+  const [sort, setSort] = React.useState<SortOption>('recentes');
+  const [contratoSelecionado, setContratoSelecionado] = React.useState<string | null>(null);
 
-  const { data, isFetching } = useQuery<ContratosResponse>({
-    queryKey: ['contratos', mes, page],
-    queryFn: async () => {
-      const params = new URLSearchParams({ mes, page: String(page), pageSize: String(pageSize) });
-      const res = await fetch(`/api/contratos?${params.toString()}`);
-      if (!res.ok) throw new Error('Erro ao carregar contratos');
-      return res.json();
-    },
-    keepPreviousData: true,
-  });
+  const contratosFiltrados = React.useMemo(() => {
+    const filtrados = mockContracts.filter((contrato) =>
+      periodoSelecionado ? contrato.periodos.includes(periodoSelecionado) : true
+    );
 
-  const contratos = data?.contratos || [];
-  const contratosFiltrados = somenteComOportunidade
-    ? contratos.filter((c) => c.status_oportunidade_contrato === 'COM')
-    : contratos;
-  const pag = data?.paginacao || { paginaAtual: page, totalPaginas: 1, totalItens: 0 };
+    const ordenados = [...filtrados];
+    if (sort === 'cliente') {
+      ordenados.sort((a, b) => a.cliente.localeCompare(b.cliente));
+    } else {
+      ordenados.sort((a, b) => (a.cicloFaturamento < b.cicloFaturamento ? 1 : -1));
+    }
 
-  const onChangeMes: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    setMes(e.target.value);
-    setPage(1);
-  };
+    return ordenados;
+  }, [periodoSelecionado, sort]);
 
-  const hasData = contratosFiltrados.length > 0;
+  React.useEffect(() => {
+    setPaginaAtual(1);
+  }, [periodoSelecionado, sort]);
+
+  const totalPaginas = Math.max(1, Math.ceil(contratosFiltrados.length / pageSize));
+  const inicio = (paginaAtual - 1) * pageSize;
+  const contratosPaginados = contratosFiltrados.slice(inicio, inicio + pageSize);
+
+  React.useEffect(() => {
+    if (!contratosFiltrados.length) {
+      setContratoSelecionado(null);
+      return;
+    }
+    if (!contratoSelecionado || !contratosFiltrados.some((c) => c.id === contratoSelecionado)) {
+      setContratoSelecionado(contratosFiltrados[0].id);
+    }
+  }, [contratoSelecionado, contratosFiltrados]);
+
+  const contratoDetalhado = contratosFiltrados.find((c) => c.id === contratoSelecionado) ?? null;
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Contratos</h1>
-        <div className="flex items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={somenteComOportunidade}
-              onChange={(e) => setSomenteComOportunidade(e.target.checked)}
-            />
-            Somente com oportunidade
-          </label>
-          <input
-            type="month"
-            value={mes}
-            onChange={onChangeMes}
-            className="border rounded px-2 py-1"
-            aria-label="Selecionar mês (YYYY-MM)"
-          />
-        </div>
-      </div>
-
-      {/* Legenda Conformidades */}
-      <div className="text-xs text-gray-600" aria-label="Legenda de cores das conformidades">
-        <span title="Conforme" className="inline-block px-2 py-0.5 rounded bg-green-100 text-green-700 mr-2">Conforme</span>
-        <span title="Divergente" className="inline-block px-2 py-0.5 rounded bg-red-100 text-red-700 mr-2">Divergente</span>
-        <span title="Indefinido" className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700">Indefinido</span>
-      </div>
-
-      {!hasData && !isFetching ? (
-        <div aria-live="polite" className="border rounded p-8 text-center text-gray-600">
-          Nenhum contrato encontrado para o período selecionado.
-        </div>
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="overflow-auto border rounded hidden sm:block">
-            <table className="w-full table-auto min-w-[960px] divide-y divide-gray-200">
-              <thead className="bg-gray-50 sticky top-0">
-                <tr>
-                  <th className="p-2 text-left">Empresa</th>
-                  <th className="p-2 text-left">CNPJ</th>
-                  <th className="p-2 text-left">Segmento</th>
-                  <th className="p-2 text-left">Status</th>
-                  <th className="p-2 text-left">Oportunidade de Contrato</th>
-                  <th className="p-2 text-left">Conformidades</th>
-                  <th className="p-2 text-left">Ciclo</th>
-                  <th className="p-2 text-right">Volume (MWh)</th>
-                  <th className="p-2 text-right">Preço (R$/MWh)</th>
-                  <th className="p-2 text-left">Fonte</th>
-                  <th className="p-2 text-right">Flexibilidade</th>
-                  <th className="p-2 text-left">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {contratosFiltrados.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="p-2">
-                      <div className="text-sm font-medium text-gray-900"><Link to={'/contratos/' + c.id} className="text-yn-orange hover:underline">{c.cliente}</Link></div>
-                      <div className="text-xs text-gray-500">Contrato {c.numero}{c.contato ? ` · ${c.contato}` : ''}</div>
-                    </td>
-                    <td className="p-2">{c.cnpj || '-'}</td>
-                    <td className="p-2">{c.segmento || '-'}</td>
-                    <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs ${c.status==='ATIVO'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-700'}`}>{c.status}</span>
-                    </td>
-                    <td className="p-2">
-                      {(() => {
-                        const st = c.status_oportunidade_contrato || 'SOLICITAR';
-                        const cls = st === 'COM'
-                          ? 'bg-red-100 text-red-700'
-                          : st === 'SEM'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700';
-                        const label = st === 'COM' ? 'Com Oportunidade' : st === 'SEM' ? 'Sem Oportunidade' : 'Solicitar Dado';
-                        return (
-                          <span className={`px-2 py-1 rounded text-xs`} title={c.observacao_oportunidade || ''}>
-                            <span className={`px-2 py-0.5 rounded ${cls}`}>{label}</span>
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="p-2">
-                      {(() => {
-                        const r = c.resumo_conformidades;
-                        const badge = (status?: string, label?: string, aria?: string) => {
-                          const st = status || 'Indefinido';
-                          const cls = st === 'Conforme' ? 'bg-green-100 text-green-700' : st === 'Divergente' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700';
-                          return <span aria-label={aria} className={`px-1.5 py-0.5 rounded text-[11px] mr-1 ${cls}`}>{label}</span>;
-                        };
-                        return (
-                          <div>
-                            {badge(r?.nf_energia, 'NF Energia', 'NF Energia')}
-                            {badge(r?.nf_icms, 'NF ICMS', 'NF ICMS')}
-                            {badge(r?.fatura, 'Fatura', 'Fatura')}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="p-2">{c.ciclo_faturamento}</td>
-                    <td className="p-2 text-right">{c.volume_contratado_mwh.toFixed(2)}</td>
-                    <td className="p-2 text-right">{c.preco_r_mwh.toFixed(2)}</td>
-                    <td className="p-2">{c.fonte}</td>
-                    <td className="p-2 text-right">{(c.flexibilidade_pct*100).toFixed(0)}%</td>
-                    <td className="p-2">
-                      <div className="flex items-center gap-2">
-                        <Link to={'/contratos/' + c.id} className="text-yn-orange hover:text-yn-orange/80">Abrir</Link>
-                        <button className="text-blue-600 hover:text-blue-900">Solicitar fatura</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {isFetching && (
-                  <tr>
-                    <td colSpan={12} className="p-4 text-center text-gray-500">Carregando...</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile simple list */}
-          <div className="sm:hidden">
-            <ul className="divide-y divide-gray-200 bg-white rounded-xl">
-              {contratosFiltrados.map((c) => (
-                <li key={c.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-gray-900">{c.cliente}</div>
-                      <div className="text-sm text-gray-600">CNPJ: {c.cnpj || '-'}</div>
-                      <div className="text-sm text-gray-600">{c.segmento || '-'}</div>
-                    </div>
-                    <span className={`px-2 py-1 rounded text-xs ${c.status==='ATIVO'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-700'}`}>{c.status}</span>
-                  </div>
-                  <div className="mt-2 text-sm">
-                    <span className="mr-2 px-2 py-0.5 rounded bg-gray-100 text-gray-700">{c.ciclo_faturamento}</span>
-                    <span className="mr-2 px-2 py-0.5 rounded bg-gray-100 text-gray-700">{c.fonte}</span>
-                  </div>
-                  <div className="mt-3 flex items-center gap-3">
-                    <Link to={'/contratos/' + c.id} className="text-yn-orange">Abrir</Link>
-                    <button className="text-blue-600">Solicitar fatura</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      <div className="flex items-center justify-between">
-        <div className="space-x-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="px-3 py-1 border rounded"
-            disabled={page <= 1}
-          >
-            Anterior
-          </button>
-          <button
-            onClick={() => setPage((p) => Math.min(pag.totalPaginas, p + 1))}
-            className="px-3 py-1 border rounded"
-            disabled={page >= pag.totalPaginas}
-          >
-            Próxima
-          </button>
-        </div>
+    <div className="space-y-6 p-4">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          Página {pag.paginaAtual} de {pag.totalPaginas}
+          <h1 className="text-2xl font-semibold text-gray-900">Contratos</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Visualize contratos ativos, acompanhe indicadores e status das análises.
+          </p>
         </div>
-        <div className="text-sm text-gray-500">Total: {pag.totalItens}</div>
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex flex-col text-xs font-medium text-gray-600">
+            Período de referência
+            <select
+              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+              value={periodoSelecionado}
+              onChange={(event) => setPeriodoSelecionado(event.target.value)}
+            >
+              {periodosDisponiveis.map((periodo) => (
+                <option key={periodo} value={periodo}>
+                  {formatMonthLabel(periodo)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-xs font-medium text-gray-600">
+            Ordenar por
+            <select
+              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+              value={sort}
+              onChange={(event) => setSort(event.target.value as SortOption)}
+            >
+              <option value="recentes">Ciclos mais recentes</option>
+              <option value="cliente">Nome do cliente</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
+              setSort('recentes');
+              setPaginaAtual(1);
+              setContratoSelecionado(null);
+            }}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 shadow-sm transition hover:border-yn-orange hover:text-yn-orange"
+          >
+            Resetar filtros
+          </button>
+        </div>
+      </header>
+
+      <section aria-labelledby="lista-contratos" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 id="lista-contratos" className="text-lg font-semibold text-gray-900">
+            Lista de Contratos
+          </h2>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <StatusBadge status="Conforme" />
+            <span>Conforme</span>
+            <StatusBadge status="Em análise" />
+            <span>Em análise</span>
+            <StatusBadge status="Divergente" />
+            <span>Divergente</span>
+          </div>
+        </div>
+
+        {contratosFiltrados.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+            Nenhum contrato encontrado para o período selecionado.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="hidden overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm lg:block">
+              <table className="min-w-full table-auto text-sm">
+                <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Contrato</th>
+                    <th className="px-4 py-3 text-left">Cliente</th>
+                    <th className="px-4 py-3 text-left">Segmento</th>
+                    <th className="px-4 py-3 text-left">Ciclo</th>
+                    <th className="px-4 py-3 text-left">Preço Médio</th>
+                    <th className="px-4 py-3 text-left">Fonte</th>
+                    <th className="px-4 py-3 text-left">Resumo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {contratosPaginados.map((contrato) => (
+                    <tr
+                      key={contrato.id}
+                      className={`cursor-pointer transition hover:bg-yn-orange/5 ${
+                        contratoSelecionado === contrato.id ? 'bg-yn-orange/10' : 'bg-white'
+                      }`}
+                      onClick={() => setContratoSelecionado(contrato.id)}
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-900">{contrato.codigo}</td>
+                      <td className="px-4 py-3">
+                        <div className="text-gray-900">{contrato.cliente}</div>
+                        <div className="text-xs text-gray-500">CNPJ {contrato.cnpj}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{contrato.segmento}</td>
+                      <td className="px-4 py-3 text-gray-600">{formatMonthLabel(contrato.cicloFaturamento)}</td>
+                      <td className="px-4 py-3 text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-gray-600">{contrato.fonte}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {Object.entries(contrato.resumoConformidades).map(([label, status]) => (
+                            <span key={label} className="inline-flex items-center gap-1">
+                              <StatusBadge status={status} />
+                              <span className="text-[11px] text-gray-500">{label}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="space-y-3 lg:hidden">
+              {contratosPaginados.map((contrato) => (
+                <button
+                  key={contrato.id}
+                  type="button"
+                  onClick={() => setContratoSelecionado(contrato.id)}
+                  className={`w-full rounded-xl border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:border-yn-orange hover:shadow ${
+                    contratoSelecionado === contrato.id ? 'border-yn-orange bg-yn-orange/10' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                    <span>{contrato.codigo}</span>
+                    <span className="text-xs text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-700">{contrato.cliente}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    {Object.entries(contrato.resumoConformidades).map(([label, status]) => (
+                      <span key={label} className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-1">
+                        <StatusBadge status={status} />
+                        <span className="text-[11px] text-gray-500">{label}</span>
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                Página {paginaAtual} de {totalPaginas}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual((page) => Math.max(1, page - 1))}
+                  disabled={paginaAtual === 1}
+                  className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaginaAtual((page) => Math.min(totalPaginas, page + 1))}
+                  disabled={paginaAtual === totalPaginas}
+                  className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {contratoDetalhado && (
+        <section aria-labelledby="detalhes-contrato" className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 id="detalhes-contrato" className="text-lg font-semibold text-gray-900">
+                Detalhe do Contrato · {contratoDetalhado.codigo}
+              </h2>
+              <p className="text-sm text-gray-500">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {Object.entries(contratoDetalhado.resumoConformidades).map(([label, status]) => (
+                <span key={label} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] shadow">
+                  <StatusBadge status={status} />
+                  <span className="text-gray-600">{label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <ContractDetail contrato={contratoDetalhado} />
+        </section>
+      )}
     </div>
   );
 }
