@@ -22,12 +22,12 @@ const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/leads', label: 'Leads', icon: FileText },
-  { to: '/negociacoes', label: 'Negociações', icon: Handshake },
-  { to: '/agenda', label: 'Agenda', icon: Calendar },
+  /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
+  /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
   { to: '/profile', label: 'Perfil', icon: User },
-  { to: '/ranking', label: 'Ranking', icon: CrownIcon },
-  { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
-  { to: '/notifications', label: 'Notificações', icon: Bell },
+ /*  { to: '/ranking', label: 'Ranking', icon: CrownIcon }, */
+  /* { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap }, */
+ /*  { to: '/notifications', label: 'Notificações', icon: Bell }, */
   { to: '/help', label: 'Ajuda', icon: HelpCircle },
 ];
 
@@ -67,7 +67,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
         className="sticky top-0 z-50 h-16 bg-yn-orange text-white shadow-sm px-4 md:px-6"
       >
         <div className="flex items-center justify-between h-full">
-         <Link
+        <Link
             to="/dashboard"
             aria-label="Ir para a pÃ¡gina inicial"
             className="flex items-center gap-2"
@@ -78,7 +78,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               <img
                 src="https://i.imgur.com/eFBlDDM.png"
                 alt="YNOVA"
-                className="h-8 md:h-8 w-auto"
+                className="h-40 md:h-40 w-auto"
                 loading="eager"
                 onError={() => setLogoError(true)}
               />
