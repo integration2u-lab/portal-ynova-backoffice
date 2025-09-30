@@ -283,7 +283,10 @@ export default function LeadsPage() {
         </div>
 
         <div className="border-b border-gray-200 dark:border-[#1E1E1E] mb-6">
-          <nav className="-mb-px flex gap-4 sm:gap-8 overflow-x-auto" role="tablist">
+          <nav
+            className="-mb-px flex flex-wrap gap-2 sm:gap-4 lg:gap-6"
+            role="tablist"
+          >
             {[
               { id: 'resumo', label: 'Resumo' },
               { id: 'cadastro', label: 'Cadastro' },
@@ -297,7 +300,7 @@ export default function LeadsPage() {
                 onClick={() => setActiveTab(tab.id)}
                 role="tab"
                 aria-selected={activeTab === tab.id}
-                className={`shrink-0 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`min-w-0 whitespace-normal text-center sm:text-left sm:whitespace-nowrap py-2 px-2 sm:px-3 border-b-2 font-medium text-sm leading-tight ${
                   activeTab === tab.id
                     ? 'border-yn-orange text-yn-orange dark:text-yn-orange'
                     : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-[#1E1E1E]'
