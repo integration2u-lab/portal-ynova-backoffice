@@ -49,7 +49,11 @@ type Props = {
 };
 
 export function StatusBadge({ status }: { status: StatusResumo }) {
-  return <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${statusStyles[status]}`}>{status}</span>;
+  return (
+    <span className={`inline-flex items-center max-w-full break-words whitespace-normal sm:whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full ${statusStyles[status]}`}>
+      {status}
+    </span>
+  );
 }
 
 export const ContractDetail: React.FC<Props> = ({ contrato }) => {

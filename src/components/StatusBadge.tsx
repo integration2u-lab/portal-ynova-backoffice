@@ -64,7 +64,9 @@ export default function StatusBadge({
   };
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getColor()}`}>
+    <span
+      className={`inline-flex items-center max-w-full break-words whitespace-normal sm:whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium border ${getColor()}`}
+    >
       {getLabel()}
     </span>
   );

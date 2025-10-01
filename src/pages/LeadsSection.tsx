@@ -2,12 +2,7 @@ import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 export default function LeadsSection() {
-  const tabs = [
-    { to: '/leads', label: 'Leads', end: true },
-    { to: '/leads/proposals', label: 'Propostas' },
-    { to: '/leads/simulation', label: 'Balanço Energético' },
-  ];
-
+  const tabs = [{ to: '/leads', label: 'Balanço Energético', end: true }];
   return (
     <div className="space-y-6">
       <div>

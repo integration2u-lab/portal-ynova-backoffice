@@ -58,23 +58,27 @@ export default function UploadXLSX() {
       setStatus('loading');
       setMessage('Enviando fatura...');
 
-      const response = await fetch('http://localhost:4000/upload', {
+      const response = await fetch('https://n8n.ynovamarketplace.com/webhook-test/8d7b84b3-f20d-4374-a812-76db38ebc77d', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           filename: selectedFile.name,
-          file: selectedFile.base64,
+          fileData: selectedFile.base64,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao enviar');
+        let serverMessage = '';
+        try {
+          serverMessage = await response.text();
+        } catch {}
+        throw new Error(serverMessage || 'Falha ao enviar');
       }
 
       setStatus('success');
-      setMessage('✅ Fatura enviada com sucesso');
+      setMessage(`✅  enviada com sucesso: ${selectedFile.name}`);
       setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -82,7 +86,8 @@ export default function UploadXLSX() {
     } catch (error) {
       console.error(error);
       setStatus('error');
-      setMessage('❌ Erro ao enviar fatura');
+      const friendly = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`❌ Erro ao enviar fatura${friendly ? `: ${friendly}` : ''}`);
     }
   };
 
@@ -110,10 +115,10 @@ export default function UploadXLSX() {
           type="button"
           onClick={handleUpload}
           disabled={isLoading}
-          className="hidden sm:inline-flex items-center gap-2 bg-white text-yn-orange font-medium px-3 py-2 rounded-md shadow-sm hover:bg-white/90 disabled:opacity-50"
+          className="hidden sm:inline-flex items-center justify-center gap-2 bg-white text-yn-orange font-medium px-3 py-2 rounded-md shadow-sm hover:bg-white/90 disabled:opacity-50 min-w-[140px]"
         >
           {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-          Enviar Fatura
+          Enviar planilha
         </button>
 
         <button
@@ -128,7 +133,7 @@ export default function UploadXLSX() {
       </div>
 
       {(selectedFile || status !== 'idle') && (
-        <div className="absolute right-0 mt-2 w-64 rounded-md border border-gray-200 bg-white p-3 text-sm shadow-lg dark:border-[#2b3238] dark:bg-[#1a1f24]">
+        <div className="absolute z-50 mt-2 w-[90vw] max-w-sm sm:w-64 right-0 sm:right-0 left-0 sm:left-auto rounded-md border border-gray-200 bg-white p-3 text-sm shadow-lg dark:border-[#2b3238] dark:bg-[#1a1f24]">
           {selectedFile ? (
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -156,7 +161,7 @@ export default function UploadXLSX() {
           )}
 
           {message && (
-            <p className={`mt-2 ${statusClassName}`} role="status" aria-live="polite">
+            <p className={`mt-2 ${statusClassName} break-words`} role="status" aria-live="polite">
               {message}
             </p>
           )}

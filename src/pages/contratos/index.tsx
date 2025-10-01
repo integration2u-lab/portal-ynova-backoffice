@@ -113,7 +113,7 @@ export default function ContratosPage() {
           <h2 id="lista-contratos" className="text-lg font-semibold text-gray-900">
             Lista de Contratos
           </h2>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap sm:flex-nowrap">
             <StatusBadge status="Conforme" />
             <span>Conforme</span>
             <StatusBadge status="Em análise" />
@@ -239,7 +239,7 @@ export default function ContratosPage() {
               </h2>
               <p className="text-sm text-gray-500">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs flex-wrap sm:flex-nowrap">
               {Object.entries(contratoDetalhado.resumoConformidades).map(([label, status]) => (
                 <span key={label} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] shadow">
                   <StatusBadge status={status} />

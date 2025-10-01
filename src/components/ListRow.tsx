@@ -38,7 +38,7 @@ export default function ListRow({
     <div className="group flex items-center justify-between gap-4 p-4 hover:bg-gray-50 dark:hover:bg-[#232932] transition-colors">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className="truncate font-medium text-gray-900 dark:text-gray-100">{title}</p>
+          <p className="font-medium text-gray-900 dark:text-gray-100 truncate sm:whitespace-nowrap">{title}</p>
           {badgeLabel && (
             <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-[#2b3238] px-2 py-0.5 text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-[#1e242b]">
               {badgeLabel}
@@ -46,12 +46,12 @@ export default function ListRow({
           )}
         </div>
         {detail && (
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 truncate">{detail}</p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 break-words whitespace-normal sm:truncate sm:whitespace-nowrap">{detail}</p>
         )}
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        {rightPill && <span className={pillClasses(rightPill.color)}>{rightPill.label}</span>}
+        {rightPill && <span className={`${pillClasses(rightPill.color)} max-w-[50vw] break-words whitespace-normal sm:whitespace-nowrap`}>{rightPill.label}</span>}
         {trailingArrow && (
           <span className="text-yn-orange group-hover:translate-x-0.5 transition-transform">›</span>
         )}
