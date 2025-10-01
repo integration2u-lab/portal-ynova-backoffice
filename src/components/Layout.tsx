@@ -13,10 +13,10 @@ import {
   X,
   GraduationCap,
   Handshake,
-  Upload,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
+import UploadXLSX from './UploadXLSX';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
@@ -85,20 +85,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
             )}
           </Link>
           <div className="flex items-center gap-3">
-            <Link
-              to="/leads?upload=1"
-              className="hidden sm:inline-flex items-center gap-2 bg-white text-yn-orange font-medium px-3 py-2 rounded-md shadow-sm hover:bg-white/90"
-            >
-              <Upload size={16} />
-              Enviar Fatura
-            </Link>
-            <Link
-              to="/leads?upload=1"
-              aria-label="Enviar Fatura"
-              className="sm:hidden inline-flex items-center justify-center bg-white text-yn-orange w-9 h-9 rounded-md shadow-sm hover:bg-white/90"
-            >
-              <Upload size={18} />
-            </Link>
+            <UploadXLSX />
             <div className="relative" ref={notifRef}>
               <button
                 className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
