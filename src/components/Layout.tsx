@@ -16,12 +16,11 @@ import {
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
-import UploadXLSX from './UploadXLSX';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
-  { to: '/leads', label: 'Leads', icon: FileText },
+  { to: '/leads/simulation', label: 'Balanço Energético', icon: FileText },
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
   { to: '/profile', label: 'Perfil', icon: User },
@@ -85,7 +84,6 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
             )}
           </Link>
           <div className="flex items-center gap-3">
-            <UploadXLSX />
             <div className="relative" ref={notifRef}>
               <button
                 className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
