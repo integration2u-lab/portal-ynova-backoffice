@@ -3,10 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import { useTheme } from './hooks/useTheme';
 import DashboardPage from './pages/DashboardPage';
-import LeadsPage from './pages/LeadsPage';
-import LeadsSection from './pages/LeadsSection';
 import AgendaPage from './pages/AgendaPage';
-import ProposalsPage from './pages/ProposalsPage';
 import CommissionsPage from './pages/CommissionsPage';
 import ProfilePage from './pages/ProfilePage';
 import RankingPage from './pages/Ranking';
@@ -56,12 +53,9 @@ function AppRoutes() {
             <Route path="contratos/:id" element={<DetalheContratoPage />} />
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
-            <Route path="leads" element={<LeadsSection />}>
-              <Route index element={<LeadsPage />} />
-              <Route path="proposals" element={<ProposalsPage />} />
-              <Route path="simulation" element={<SimulationClientsPage />} />
-              <Route path="simulation/:clientId" element={<SimulationClientPage />} />
-            </Route>
+            <Route path="leads" element={<Navigate to="/leads/simulation" replace />} />
+            <Route path="leads/simulation" element={<SimulationClientsPage />} />
+            <Route path="leads/simulation/:clientId" element={<SimulationClientPage />} />
             <Route path="agenda" element={<AgendaPage />} />
             <Route path="commissions" element={<CommissionsPage />} />
             <Route path="profile" element={<ProfilePage />} />
