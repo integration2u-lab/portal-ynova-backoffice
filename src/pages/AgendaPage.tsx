@@ -11,7 +11,7 @@ export default function AgendaPage() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente</label>
             <select className="w-full px-3 py-2 border border-gray-300 dark:border-[#1E1E1E] rounded-lg focus:ring-2 focus:ring-yn-orange bg-white dark:bg-[#3E3E3E] text-gray-900 dark:text-gray-100">
               <option>Selecionar cliente...</option>
-              <option>Empresa Alpha Ltda</option>
+              <option>Empresa Alpha Ltdaz</option>
               <option>Beta Comércio SA</option>
             </select>
           </div>
