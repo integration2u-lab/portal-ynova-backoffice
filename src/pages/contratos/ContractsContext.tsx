@@ -521,6 +521,7 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         mode: 'cors',
         credentials: 'omit',
