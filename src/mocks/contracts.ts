@@ -42,6 +42,17 @@ export type AnaliseArea = {
   }>;
 };
 
+export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise';
+
+export type ContractInvoice = {
+  id: string;
+  competencia: string; // YYYY-MM
+  vencimento: string; // YYYY-MM-DD
+  valor: number;
+  status: ContractInvoiceStatus;
+  arquivo?: string;
+};
+
 export type ContractMock = {
   id: string;
   codigo: string;
@@ -68,6 +79,7 @@ export type ContractMock = {
   historicoConsumo: ConsumoHistorico[];
   obrigacoes: ObrigacaoRow[];
   analises: AnaliseArea[];
+  faturas: ContractInvoice[];
 };
 
 const meses = ['2023-12', '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'];
@@ -242,6 +254,30 @@ export const mockContracts: ContractMock[] = [
         ],
       },
     ],
+    faturas: [
+      {
+        id: 'US-11-2024-04',
+        competencia: '2024-04',
+        vencimento: '2024-05-12',
+        valor: 892300.5,
+        status: 'Paga',
+        arquivo: '#',
+      },
+      {
+        id: 'US-11-2024-05',
+        competencia: '2024-05',
+        vencimento: '2024-06-12',
+        valor: 905120.75,
+        status: 'Em análise',
+      },
+      {
+        id: 'US-11-2024-06',
+        competencia: '2024-06',
+        vencimento: '2024-07-12',
+        valor: 918430.9,
+        status: 'Em aberto',
+      },
+    ],
   },
   {
     id: 'BR-04',
@@ -384,6 +420,29 @@ export const mockContracts: ContractMock[] = [
         ],
       },
     ],
+    faturas: [
+      {
+        id: 'BR-04-2024-03',
+        competencia: '2024-03',
+        vencimento: '2024-04-08',
+        valor: 642180.4,
+        status: 'Paga',
+      },
+      {
+        id: 'BR-04-2024-04',
+        competencia: '2024-04',
+        vencimento: '2024-05-08',
+        valor: 658912.32,
+        status: 'Paga',
+      },
+      {
+        id: 'BR-04-2024-05',
+        competencia: '2024-05',
+        vencimento: '2024-06-08',
+        valor: 671204.11,
+        status: 'Em análise',
+      },
+    ],
   },
   {
     id: 'MG-21',
@@ -524,6 +583,29 @@ export const mockContracts: ContractMock[] = [
           { nome: 'Cálculo', status: 'amarelo', observacao: 'Ajuste GFOM' },
           { nome: 'Análise', status: 'vermelho', observacao: 'Pendências MCP' },
         ],
+      },
+    ],
+    faturas: [
+      {
+        id: 'MG-21-2024-03',
+        competencia: '2024-03',
+        vencimento: '2024-04-15',
+        valor: 472890.5,
+        status: 'Paga',
+      },
+      {
+        id: 'MG-21-2024-04',
+        competencia: '2024-04',
+        vencimento: '2024-05-15',
+        valor: 489120.1,
+        status: 'Em aberto',
+      },
+      {
+        id: 'MG-21-2024-05',
+        competencia: '2024-05',
+        vencimento: '2024-06-15',
+        valor: 501432.44,
+        status: 'Em análise',
       },
     ],
   },
