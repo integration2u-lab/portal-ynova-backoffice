@@ -102,7 +102,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                 </div>
               )}
             </div>
-            <label className="relative inline-flex items-center cursor-pointer focus-within:ring-2 focus-within:ring-white/30 rounded-full">
+            <label className="hidden">
               <input
                 type="checkbox"
                 className="sr-only peer"

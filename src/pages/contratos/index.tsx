@@ -169,7 +169,7 @@ export default function ContratosPage() {
   return (
     <div className="space-y-6 p-4">
       <header className="space-y-6">
-        <div className="rounded-2xl border border-yn-orange/20 bg-gradient-to-r from-yn-orange/10 to-white p-6 shadow-sm">
+        <div>
           <h1 className="text-3xl font-semibold text-gray-900">Contratos</h1>
           <p className="mt-2 max-w-2xl text-sm text-gray-600">
             Visualize contratos ativos, acompanhe indicadores e status das análises com filtros inteligentes.
