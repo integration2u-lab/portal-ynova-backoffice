@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Search, Plus } from 'lucide-react';
 import { ContractDetail, StatusBadge } from './ContractDetail';
 import type { ContractMock, StatusResumo } from '../../mocks/contracts';
 import { formatMesLabel } from '../../mocks/contracts';
 import { useContracts } from './ContractsContext';
+import CreateContractModal from './CreateContractModal';
 
 const pageSize = 5;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
@@ -59,7 +61,7 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
 }
 
 export default function ContratosPage() {
-  const { contracts } = useContracts();
+  const { contracts, addContract } = useContracts();
 
   const periodosDisponiveis = React.useMemo(() => {
     const unique = new Set<string>();
@@ -70,6 +72,8 @@ export default function ContratosPage() {
   const [periodoSelecionado, setPeriodoSelecionado] = React.useState<string>(() => periodosDisponiveis[0] ?? '');
   const [paginaAtual, setPaginaAtual] = React.useState(1);
   const [sort, setSort] = React.useState<SortOption>('recentes');
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [contratoSelecionado, setContratoSelecionado] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -81,9 +85,25 @@ export default function ContratosPage() {
   }, [periodoSelecionado, periodosDisponiveis]);
 
   const contratosFiltrados = React.useMemo(() => {
-    const filtrados = contracts.filter((contrato) =>
-      periodoSelecionado ? contrato.periodos.includes(periodoSelecionado) : true
-    );
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const numericSearch = normalizedSearch.replace(/\D/g, '');
+
+    const filtrados = contracts.filter((contrato) => {
+      const matchesPeriodo = periodoSelecionado ? contrato.periodos.includes(periodoSelecionado) : true;
+      if (!matchesPeriodo) return false;
+
+      if (!normalizedSearch) return true;
+
+      const codigo = contrato.codigo.toLowerCase();
+      const cliente = contrato.cliente.toLowerCase();
+      const cnpjDigits = contrato.cnpj.replace(/\D/g, '');
+
+      return (
+        codigo.includes(normalizedSearch) ||
+        cliente.includes(normalizedSearch) ||
+        (!!numericSearch && cnpjDigits.includes(numericSearch))
+      );
+    });
 
     const ordenados = [...filtrados];
     if (sort === 'cliente') {
@@ -93,11 +113,11 @@ export default function ContratosPage() {
     }
 
     return ordenados;
-  }, [contracts, periodoSelecionado, sort]);
+  }, [contracts, periodoSelecionado, sort, searchTerm]);
 
   React.useEffect(() => {
     setPaginaAtual(1);
-  }, [periodoSelecionado, sort]);
+  }, [periodoSelecionado, sort, searchTerm]);
 
   const totalPaginas = Math.max(1, Math.ceil(contratosFiltrados.length / pageSize));
   const inicio = (paginaAtual - 1) * pageSize;
@@ -131,52 +151,91 @@ export default function ContratosPage() {
     return counts;
   }, [contratosFiltrados]);
 
+  const handleCreateContract = React.useCallback(
+    (contract: ContractMock) => {
+      addContract(contract);
+      setIsCreateOpen(false);
+      if (contract.cicloFaturamento) {
+        setPeriodoSelecionado(contract.cicloFaturamento);
+      }
+      setSort('recentes');
+      setSearchTerm('');
+      setContratoSelecionado(contract.id);
+      setPaginaAtual(1);
+    },
+    [addContract]
+  );
+
   return (
     <div className="space-y-6 p-4">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <header className="space-y-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">Gestão</span>
           <h1 className="text-2xl font-semibold text-gray-900">Contratos</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="text-sm text-gray-500">
             Visualize contratos ativos, acompanhe indicadores e status das análises.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex flex-col text-xs font-medium text-gray-600">
-            Período de referência
-            <select
-              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
-              value={periodoSelecionado}
-              onChange={(event) => setPeriodoSelecionado(event.target.value)}
-            >
-              {periodosDisponiveis.map((periodo) => (
-                <option key={periodo} value={periodo}>
-                  {formatMonthLabel(periodo)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col text-xs font-medium text-gray-600">
-            Ordenar por
-            <select
-              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
-              value={sort}
-              onChange={(event) => setSort(event.target.value as SortOption)}
-            >
-              <option value="recentes">Ciclos mais recentes</option>
-              <option value="cliente">Nome do cliente</option>
-            </select>
-          </label>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div className="relative w-full md:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar por código, cliente ou CNPJ"
+                aria-label="Buscar contratos"
+                className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex flex-col text-xs font-medium text-gray-600">
+                Período de referência
+                <select
+                  className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+                  value={periodoSelecionado}
+                  onChange={(event) => setPeriodoSelecionado(event.target.value)}
+                >
+                  {periodosDisponiveis.map((periodo) => (
+                    <option key={periodo} value={periodo}>
+                      {formatMonthLabel(periodo)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col text-xs font-medium text-gray-600">
+                Ordenar por
+                <select
+                  className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SortOption)}
+                >
+                  <option value="recentes">Ciclos mais recentes</option>
+                  <option value="cliente">Nome do cliente</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
+                  setSort('recentes');
+                  setPaginaAtual(1);
+                  setContratoSelecionado(null);
+                  setSearchTerm('');
+                }}
+                className="mt-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 shadow-sm transition hover:border-yn-orange hover:text-yn-orange"
+              >
+                Resetar filtros
+              </button>
+            </div>
+          </div>
           <button
             type="button"
-            onClick={() => {
-              setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
-              setSort('recentes');
-              setPaginaAtual(1);
-              setContratoSelecionado(null);
-            }}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 shadow-sm transition hover:border-yn-orange hover:text-yn-orange"
+            onClick={() => setIsCreateOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
           >
-            Resetar filtros
+            <Plus size={18} /> Criar contrato manualmente
           </button>
         </div>
       </header>
@@ -344,6 +403,7 @@ export default function ContratosPage() {
           <ContractDetail contrato={contratoDetalhado} />
         </section>
       )}
+      <CreateContractModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreate={handleCreateContract} />
     </div>
   );
 }
