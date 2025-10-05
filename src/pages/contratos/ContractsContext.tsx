@@ -2,7 +2,7 @@ import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
 import { mockContracts } from '../../mocks/contracts';
 
-const DEFAULT_API_URL = 'https://c3766f8faf05.ngrok-free.app/contratos';
+const DEFAULT_API_URL = 'https://657285488d18.ngrok-free.app';
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
