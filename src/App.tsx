@@ -18,6 +18,8 @@ import OportunidadesPage from './pages/OportunidadesPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ContratosPage from './pages/contratos';
 import DetalheContratoPage from './pages/contratos/DetalheContrato';
+import EditarContratoPage from './pages/contratos/EditContractPage';
+import ContractsLayout from './pages/contratos/ContractsLayout';
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
 function AppRoutes() {
@@ -49,8 +51,11 @@ function AppRoutes() {
             <Route path="inteligencia" element={<InteligenciaPage />} />
 
             {/* Gestão: Contratos */}
-            <Route path="contratos" element={<ContratosPage />} />
-            <Route path="contratos/:id" element={<DetalheContratoPage />} />
+            <Route path="contratos" element={<ContractsLayout />}>
+              <Route index element={<ContratosPage />} />
+              <Route path=":id" element={<DetalheContratoPage />} />
+              <Route path=":id/editar" element={<EditarContratoPage />} />
+            </Route>
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
             <Route path="leads" element={<SimulationClientsPage />} />

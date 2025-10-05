@@ -9,6 +9,29 @@ const ALLOW_ANY_LOGIN = (() => {
   return import.meta.env.PROD;
 })();
 
+const STORAGE_KEY = 'ynova.portal.auth.user';
+
+function loadStoredUser(): AuthUser | null {
+  if (!ALLOW_ANY_LOGIN || typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    window.localStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+}
+
+function persistUser(user: AuthUser | null) {
+  if (!ALLOW_ANY_LOGIN || typeof window === 'undefined') return;
+  if (user) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  } else {
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
 function buildFallbackUser(email: string): AuthUser {
   const baseEmail = email && email.includes('@') ? email : `${email || 'visitante'}@ynova.local`;
   const displayName = baseEmail.split('@')[0].replace(/[^a-zA-Z0-9]+/g, ' ').trim() || 'Visitante Ynova';
@@ -37,22 +60,35 @@ export type AuthContextType = AuthState & {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => loadStoredUser());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     (async () => {
       try {
         await AuthAPI.csrf();
         const me = await AuthAPI.me();
+        if (!active) return;
         setUser(me);
+        persistUser(me);
       } catch {
-        setUser(null);
+        if (!active) return;
+        const fallback = loadStoredUser();
+        if (fallback) {
+          setUser(fallback);
+        } else {
+          setUser(null);
+          persistUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -62,13 +98,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AuthAPI.csrf();
       const me = await AuthAPI.login(email, password);
       setUser(me);
+      persistUser(me);
     };
 
     if (ALLOW_ANY_LOGIN) {
       try {
         await tryRemoteAuth();
       } catch {
-        setUser(buildFallbackUser(email));
+        const fallback = buildFallbackUser(email);
+        setUser(fallback);
+        persistUser(fallback);
       }
       return;
     }
@@ -89,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         /* ignore network errors when fallback mode is enabled */
       } finally {
         setUser(null);
+        persistUser(null);
       }
       return;
     }
@@ -97,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AuthAPI.logout();
     } finally {
       setUser(null);
+      persistUser(null);
     }
   }, []);
 
