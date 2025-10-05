@@ -509,39 +509,73 @@ const buildEndpointCandidates = (rawUrl: string): string[] => {
   return Array.from(candidates);
 };
 
+type FetchAttemptConfig = {
+  method: 'GET' | 'POST';
+  body?: string;
+};
+
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
   const rawUrl = normalizeString(import.meta.env.VITE_CONTRACTS_API_URL);
   const endpoints = buildEndpointCandidates(rawUrl);
   let lastError: unknown;
 
   for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        signal,
-      });
+    const attempts: FetchAttemptConfig[] = [
+      { method: 'GET' },
+      { method: 'POST', body: '{}' },
+    ];
 
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar contratos (${response.status})`);
-      }
+    for (const attempt of attempts) {
+      try {
+        console.info(
+          `[ContractsContext] Buscando contratos da API em ${endpoint} usando ${attempt.method}.`
+        );
+        const response = await fetch(endpoint, {
+          method: attempt.method,
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+          mode: 'cors',
+          credentials: 'omit',
+          body: attempt.body ?? undefined,
+          signal,
+        });
 
-      const data = await response.json();
-      const contracts = normalizeContractsFromApi(data);
-      if (!contracts.length) {
-        console.warn('[ContractsContext] API retornou lista vazia de contratos.');
+        if (!response.ok) {
+          throw new Error(`Erro ao buscar contratos (${response.status})`);
+        }
+
+        const data = await response.json();
+        const contracts = normalizeContractsFromApi(data);
+        if (!contracts.length) {
+          console.warn('[ContractsContext] API retornou lista vazia de contratos.');
+        }
+        console.info(
+          `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos.`
+        );
+        return contracts;
+      } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        lastError = error;
+        console.error(
+          `[ContractsContext] Erro ao buscar contratos em ${endpoint} com método ${attempt.method}.`,
+          error instanceof Error ? error : new Error(String(error))
+        );
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+          console.error(
+            '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
+          );
+        }
+        if (attempt.method === 'POST') {
+          console.info('[ContractsContext] Tentando próximo endpoint disponível...');
+        } else {
+          console.info('[ContractsContext] Tentando novamente usando POST como fallback...');
+        }
       }
-      return contracts;
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
-      }
-      lastError = error;
-      console.warn(`[ContractsContext] Tentativa de buscar contratos falhou em ${endpoint}.`, error);
     }
   }
 
