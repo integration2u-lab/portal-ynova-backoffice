@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ContractDetail } from './ContractDetail';
-import { mockContracts } from '../../mocks/contracts';
+import { useContracts } from './ContractsContext';
 
 export default function DetalheContratoPage() {
   const { id } = useParams();
-  const contrato = React.useMemo(() => mockContracts.find((item) => item.id === id), [id]);
+  const { getContractById } = useContracts();
+  const contrato = React.useMemo(() => (id ? getContractById(id) : undefined), [getContractById, id]);
 
   if (!contrato) {
     return (

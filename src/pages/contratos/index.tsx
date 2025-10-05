@@ -1,8 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { ContractDetail, StatusBadge } from './ContractDetail';
-import { mockContracts, formatMesLabel } from '../../mocks/contracts';
+import type { ContractMock, StatusResumo } from '../../mocks/contracts';
+import { formatMesLabel } from '../../mocks/contracts';
+import { useContracts } from './ContractsContext';
 
 const pageSize = 5;
+const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 
 function formatMonthLabel(periodo: string) {
   return formatMesLabel(periodo).replace('.', '');
@@ -10,21 +14,74 @@ function formatMonthLabel(periodo: string) {
 
 type SortOption = 'recentes' | 'cliente';
 
+type StatusSummaryItem = { status: StatusResumo; total: number };
+
+function summarizeResumo(resumo: ContractMock['resumoConformidades']): StatusSummaryItem[] {
+  const counts: Record<StatusResumo, number> = {
+    Conforme: 0,
+    'Em análise': 0,
+    Divergente: 0,
+  };
+
+  Object.values(resumo).forEach((status) => {
+    counts[status] += 1;
+  });
+
+  return statusOrder
+    .map((status) => ({ status, total: counts[status] }))
+    .filter((item) => item.total > 0);
+}
+
+function summarizeCounts(counts: Record<StatusResumo, number>): StatusSummaryItem[] {
+  return statusOrder
+    .map((status) => ({ status, total: counts[status] }))
+    .filter((item) => item.total > 0);
+}
+
+function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
+  if (!summary.length) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+      {summary.map(({ status, total }) => (
+        <span
+          key={status}
+          className="inline-flex items-center gap-2 rounded-full bg-white px-2 py-1 shadow-sm"
+        >
+          <StatusBadge status={status} />
+          <span className="text-[11px] font-semibold">
+            {total} {total === 1 ? 'item' : 'itens'}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function ContratosPage() {
+  const { contracts } = useContracts();
+
   const periodosDisponiveis = React.useMemo(() => {
     const unique = new Set<string>();
-    mockContracts.forEach((contrato) => contrato.periodos.forEach((mes) => unique.add(mes)));
+    contracts.forEach((contrato) => contrato.periodos.forEach((mes) => unique.add(mes)));
     return Array.from(unique).sort((a, b) => (a < b ? 1 : -1));
-  }, []);
-  const [periodoSelecionado, setPeriodoSelecionado] = React.useState<string>(
-    () => periodosDisponiveis[0] ?? ''
-  );
+  }, [contracts]);
+
+  const [periodoSelecionado, setPeriodoSelecionado] = React.useState<string>(() => periodosDisponiveis[0] ?? '');
   const [paginaAtual, setPaginaAtual] = React.useState(1);
   const [sort, setSort] = React.useState<SortOption>('recentes');
   const [contratoSelecionado, setContratoSelecionado] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (!periodoSelecionado && periodosDisponiveis.length) {
+      setPeriodoSelecionado(periodosDisponiveis[0]);
+    } else if (periodoSelecionado && !periodosDisponiveis.includes(periodoSelecionado)) {
+      setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
+    }
+  }, [periodoSelecionado, periodosDisponiveis]);
+
   const contratosFiltrados = React.useMemo(() => {
-    const filtrados = mockContracts.filter((contrato) =>
+    const filtrados = contracts.filter((contrato) =>
       periodoSelecionado ? contrato.periodos.includes(periodoSelecionado) : true
     );
 
@@ -36,7 +93,7 @@ export default function ContratosPage() {
     }
 
     return ordenados;
-  }, [periodoSelecionado, sort]);
+  }, [contracts, periodoSelecionado, sort]);
 
   React.useEffect(() => {
     setPaginaAtual(1);
@@ -57,6 +114,22 @@ export default function ContratosPage() {
   }, [contratoSelecionado, contratosFiltrados]);
 
   const contratoDetalhado = contratosFiltrados.find((c) => c.id === contratoSelecionado) ?? null;
+
+  const statusResumoGeral = React.useMemo(() => {
+    const counts: Record<StatusResumo, number> = {
+      Conforme: 0,
+      'Em análise': 0,
+      Divergente: 0,
+    };
+
+    contratosFiltrados.forEach((contrato) => {
+      Object.values(contrato.resumoConformidades).forEach((status) => {
+        counts[status] += 1;
+      });
+    });
+
+    return counts;
+  }, [contratosFiltrados]);
 
   return (
     <div className="space-y-6 p-4">
@@ -109,18 +182,11 @@ export default function ContratosPage() {
       </header>
 
       <section aria-labelledby="lista-contratos" className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 id="lista-contratos" className="text-lg font-semibold text-gray-900">
             Lista de Contratos
           </h2>
-          <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap sm:flex-nowrap">
-            <StatusBadge status="Conforme" />
-            <span>Conforme</span>
-            <StatusBadge status="Em análise" />
-            <span>Em análise</span>
-            <StatusBadge status="Divergente" />
-            <span>Divergente</span>
-          </div>
+          <StatusPills summary={summarizeCounts(statusResumoGeral)} />
         </div>
 
         {contratosFiltrados.length === 0 ? (
@@ -140,13 +206,14 @@ export default function ContratosPage() {
                     <th className="px-4 py-3 text-left">Preço Médio</th>
                     <th className="px-4 py-3 text-left">Fonte</th>
                     <th className="px-4 py-3 text-left">Resumo</th>
+                    <th className="px-4 py-3 text-left">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {contratosPaginados.map((contrato) => (
                     <tr
                       key={contrato.id}
-                      className={`cursor-pointer transition hover:bg-yn-orange/5 ${
+                      className={`transition hover:bg-yn-orange/5 ${
                         contratoSelecionado === contrato.id ? 'bg-yn-orange/10' : 'bg-white'
                       }`}
                       onClick={() => setContratoSelecionado(contrato.id)}
@@ -161,13 +228,24 @@ export default function ContratosPage() {
                       <td className="px-4 py-3 text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
                       <td className="px-4 py-3 text-gray-600">{contrato.fonte}</td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {Object.entries(contrato.resumoConformidades).map(([label, status]) => (
-                            <span key={label} className="inline-flex items-center gap-1">
-                              <StatusBadge status={status} />
-                              <span className="text-[11px] text-gray-500">{label}</span>
-                            </span>
-                          ))}
+                        <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          <Link
+                            to={`/contratos/${contrato.id}`}
+                            className="rounded-md border border-gray-200 px-3 py-1 font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Abrir
+                          </Link>
+                          <Link
+                            to={`/contratos/${contrato.id}/editar`}
+                            className="rounded-md border border-yn-orange px-3 py-1 font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Editar
+                          </Link>
                         </div>
                       </td>
                     </tr>
@@ -178,28 +256,41 @@ export default function ContratosPage() {
 
             <div className="space-y-3 lg:hidden">
               {contratosPaginados.map((contrato) => (
-                <button
+                <div
                   key={contrato.id}
-                  type="button"
-                  onClick={() => setContratoSelecionado(contrato.id)}
-                  className={`w-full rounded-xl border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:border-yn-orange hover:shadow ${
+                  className={`rounded-xl border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:border-yn-orange hover:shadow ${
                     contratoSelecionado === contrato.id ? 'border-yn-orange bg-yn-orange/10' : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
-                    <span>{contrato.codigo}</span>
-                    <span className="text-xs text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setContratoSelecionado(contrato.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                      <span>{contrato.codigo}</span>
+                      <span className="text-xs text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-gray-700">{contrato.cliente}</div>
+                    <div className="mt-2">
+                      <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
+                    </div>
+                  </button>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Link
+                      to={`/contratos/${contrato.id}`}
+                      className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-center font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
+                    >
+                      Abrir
+                    </Link>
+                    <Link
+                      to={`/contratos/${contrato.id}/editar`}
+                      className="flex-1 rounded-md border border-yn-orange px-3 py-2 text-center font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                    >
+                      Editar
+                    </Link>
                   </div>
-                  <div className="mt-1 text-sm text-gray-700">{contrato.cliente}</div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    {Object.entries(contrato.resumoConformidades).map(([label, status]) => (
-                      <span key={label} className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-1">
-                        <StatusBadge status={status} />
-                        <span className="text-[11px] text-gray-500">{label}</span>
-                      </span>
-                    ))}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
 
@@ -232,20 +323,21 @@ export default function ContratosPage() {
 
       {contratoDetalhado && (
         <section aria-labelledby="detalhes-contrato" className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 id="detalhes-contrato" className="text-lg font-semibold text-gray-900">
                 Detalhe do Contrato · {contratoDetalhado.codigo}
               </h2>
               <p className="text-sm text-gray-500">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs flex-wrap sm:flex-nowrap">
-              {Object.entries(contratoDetalhado.resumoConformidades).map(([label, status]) => (
-                <span key={label} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] shadow">
-                  <StatusBadge status={status} />
-                  <span className="text-gray-600">{label}</span>
-                </span>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPills summary={summarizeResumo(contratoDetalhado.resumoConformidades)} />
+              <Link
+                to={`/contratos/${contratoDetalhado.id}/editar`}
+                className="inline-flex items-center justify-center rounded-md border border-yn-orange px-3 py-2 text-sm font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+              >
+                Editar contrato
+              </Link>
             </div>
           </div>
 
