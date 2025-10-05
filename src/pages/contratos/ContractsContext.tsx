@@ -8,6 +8,7 @@ type ContractsContextValue = {
   contracts: ContractMock[];
   updateContract: (id: string, updater: ContractUpdater | Partial<ContractMock>) => void;
   getContractById: (id: string) => ContractMock | undefined;
+  addContract: (contract: ContractMock) => void;
 };
 
 const ContractsContext = React.createContext<ContractsContextValue | undefined>(undefined);
@@ -31,6 +32,10 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     mockContracts.map((contract) => cloneContract(contract))
   );
 
+  const addContract = React.useCallback((contract: ContractMock) => {
+    setContracts((prev) => [cloneContract(contract), ...prev]);
+  }, []);
+
   const updateContract = React.useCallback(
     (id: string, updater: ContractUpdater | Partial<ContractMock>) => {
       setContracts((prev) =>
@@ -46,8 +51,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = React.useMemo(
-    () => ({ contracts, updateContract, getContractById }),
-    [contracts, updateContract, getContractById]
+    () => ({ contracts, updateContract, getContractById, addContract }),
+    [contracts, updateContract, getContractById, addContract]
   );
 
   return <ContractsContext.Provider value={value}>{children}</ContractsContext.Provider>;
