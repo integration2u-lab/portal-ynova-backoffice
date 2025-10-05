@@ -503,8 +503,8 @@ const buildEndpointCandidates = (rawUrl: string): string[] => {
   const withoutTrailingSlash = sanitized.replace(/\/$/, '');
   const candidates = new Set<string>();
   candidates.add(withoutTrailingSlash);
-  if (!/\/(contratos|contracts)(\b|\d|\/)/i.test(withoutTrailingSlash)) {
-    candidates.add(`${withoutTrailingSlash}/contratos`);
+  if (!/\/contracts(\b|\d|\/)/i.test(withoutTrailingSlash)) {
+    candidates.add(`${withoutTrailingSlash}/contracts`);
   }
   return Array.from(candidates);
 };
