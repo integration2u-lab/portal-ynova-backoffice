@@ -22,6 +22,12 @@ export default function SimulationClientsPage() {
   const showEmptyState = !loading && clientes.length === 0;
   const showNoResults = !loading && clientes.length > 0 && filteredClientes.length === 0;
 
+  const formatKwh = (value: number) =>
+    `${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kWh`;
+
+  const formatImposto = (value: string) =>
+    value.includes('%') ? value : `${value}%`;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -70,19 +76,31 @@ export default function SimulationClientsPage() {
           <EmptyState message="Nenhum cliente encontrado com o nome informado." />
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-[#2b3238]">
-            {filteredClientes.map((cliente) => (
-              <ListRow
-                key={cliente.id}
-                to={`/leads/${cliente.id}`}
-                title={cliente.nome}
-                badgeLabel={`Bandeira: ${cliente.bandeira}`}
-                detail={`Imposto: ${cliente.imposto} • Consumo: ${cliente.consumo} kWh • Geração: ${cliente.geracao} kWh`}
-                rightPill={{
-                  label: `Saldo ${cliente.balanco >= 0 ? '+' : '-'}${Math.abs(cliente.balanco)} kWh`,
-                  color: 'green',
-                }}
-              />
-            ))}
+            {filteredClientes.map((cliente) => {
+              const hasBandeira = cliente.bandeira && cliente.bandeira.toLowerCase() !== 'sem bandeira';
+              const saldoPositivo = cliente.balanco >= 0;
+              const bandeiraLabel = hasBandeira ? `Bandeira: ${cliente.bandeira}` : undefined;
+              const impostoLabel = `Imposto: ${formatImposto(cliente.imposto)}`;
+              const consumoLabel = `Consumo: ${formatKwh(cliente.consumo)}`;
+              const geracaoLabel = `Geração: ${formatKwh(cliente.geracao)}`;
+              const saldoLabel = `Saldo ${saldoPositivo ? '+' : '-'}${Math.abs(cliente.balanco).toLocaleString('pt-BR', {
+                maximumFractionDigits: 0,
+              })} kWh`;
+
+              return (
+                <ListRow
+                  key={cliente.id}
+                  to={`/leads/${cliente.id}`}
+                  title={cliente.nome}
+                  badgeLabel={bandeiraLabel}
+                  detail={`${impostoLabel} • ${consumoLabel} • ${geracaoLabel}`}
+                  rightPill={{
+                    label: saldoLabel,
+                    color: saldoPositivo ? 'green' : 'red',
+                  }}
+                />
+              );
+            })}
           </ul>
         )}
       </div>

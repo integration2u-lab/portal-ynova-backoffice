@@ -11,7 +11,7 @@ export type LeadSimulationResponse = {
   error?: string;
 };
 
-const DEFAULT_BFF_URL = 'https://657285488d18.ngrok-free.app';
+const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook/mockBalancoEnergetico';
 
 let lastResult: LeadSimulationResponse | null = null;
 let lastRemoteClientes: Cliente[] | null = null;
@@ -285,7 +285,6 @@ export async function fetchLeadSimulationClientes({ signal }: FetchOptions = {})
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    body: '{}',
     cache: 'no-cache',
   };
 
