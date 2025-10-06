@@ -517,19 +517,18 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
   for (const endpoint of endpoints) {
     try {
       console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
+            console.info(signal);
+
       const response = await fetch("https://657285488d18.ngrok-free.app/contracts", {
         method: 'GET',
-                  headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true',
-          },
+        headers: { "ngrok-skip-browser-warning": "true" },
+
 
         signal,
       });
 
       if (!response.ok) {
-        throw new Error(`Erro ao buscar contratos (${response.status})`);
+        throw new Error(`Erro ao buscar contratos erro aqui (${response.status})`);
       }
 
       const data = await response.json();

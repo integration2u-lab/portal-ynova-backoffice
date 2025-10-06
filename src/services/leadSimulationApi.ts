@@ -11,7 +11,7 @@ export type LeadSimulationResponse = {
   error?: string;
 };
 
-const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook/mockScde';
+const DEFAULT_BFF_URL = 'https://657285488d18.ngrok-free.app';
 
 let lastResult: LeadSimulationResponse | null = null;
 let lastRemoteClientes: Cliente[] | null = null;

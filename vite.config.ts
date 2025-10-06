@@ -7,7 +7,7 @@ export default defineConfig({
     host: true,
     port: 5173,
     allowedHosts: [
-      '942f2780b3d7.ngrok-free.app', // current ngrok tunnel host
+      'https://657285488d18.ngrok-free.app', // current ngrok tunnel host
       '.ngrok-free.app',
     ],
     hmr: {
