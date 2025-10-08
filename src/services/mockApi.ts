@@ -1,26 +1,45 @@
-﻿import { AuthUser, Paged, ContractSummary, ContractsQuery } from './api';
+import { AuthUser, Contract } from './api';
 
 let fakeUser: AuthUser | null = null;
 
-const mockContracts: ContractSummary[] = Array.from({ length: 57 }).map((_, i) => {
-  const ciclo = `2025-${String(((i % 12) + 1)).padStart(2, '0')}`;
-  const energiaContratadaMWh = 100 + (i % 10) * 10;
-  const energiaUtilizadaMWh = 80 + (i % 12) * 12;
-  const flex = 10 + (i % 5) * 5; // percent
-  const excedente = Math.max(0, energiaUtilizadaMWh - energiaContratadaMWh * (1 + flex / 100));
-  const custoExtra = excedente * 250; // placeholder for PLD-integrated calc
+const mockContracts: Contract[] = Array.from({ length: 20 }).map((_, i) => {
+  const start = new Date(2024, i % 12, 1);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 24);
+  const toIsoString = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
+  const randomId = typeof globalThis !== 'undefined'
+    && typeof globalThis.crypto !== 'undefined'
+    && 'randomUUID' in globalThis.crypto
+    ? globalThis.crypto.randomUUID()
+    : `client-${i + 1}`;
+
   return {
     id: String(i + 1),
-    cliente: `Cliente ${i + 1}`,
-    cnpj: `12.345.678/000${(i % 10)}-9${(i % 10)}`,
-    uc: `UC${1000 + i}`,
-    status: (i % 3 === 0 ? 'ativo' : i % 3 === 1 ? 'pendente' : 'inativo') as any,
-    ciclo,
-    energiaContratadaMWh,
-    energiaUtilizadaMWh,
-    flexibilidadePct: flex,
-    excedenteMWh: Number(excedente.toFixed(2)),
-    custoExtra: Number(custoExtra.toFixed(2)),
+    contract_code: `CTR-2024-${String(i + 1).padStart(3, '0')}`,
+    client_id: randomId,
+    client_name: `Cliente ${i + 1}`,
+    cnpj: `00.000.000/000${i % 10}-0${i % 10}`,
+    segment: i % 2 === 0 ? 'Comercial' : 'Industrial',
+    contact_responsible: i % 2 === 0 ? 'Maria Silva' : 'João Souza',
+    contracted_volume_mwh: (1200 + i * 50).toFixed(2),
+    status: i % 3 === 0 ? 'Ativo' : i % 3 === 1 ? 'Em análise' : 'Inativo',
+    energy_source: i % 2 === 0 ? 'Convencional' : 'Renovável',
+    contracted_modality: i % 2 === 0 ? 'PLD' : 'Tarifa Fixa',
+    start_date: toIsoString(start),
+    end_date: toIsoString(end),
+    billing_cycle: 'Mensal',
+    upper_limit_percent: '0.15',
+    lower_limit_percent: '0.05',
+    flexibility_percent: '0.10',
+    average_price_mwh: '320.50',
+    spot_price_ref_mwh: '299.90',
+    compliance_consumption: 'Em análise',
+    compliance_nf: 'Em análise',
+    compliance_invoice: 'Em análise',
+    compliance_charges: 'Em análise',
+    compliance_overall: 'Em análise',
+    created_at: toIsoString(new Date()),
+    updated_at: toIsoString(new Date()),
   };
 });
 
@@ -62,27 +81,7 @@ export async function mockFetch<T>(path: string, options: RequestInit = {}): Pro
     return undefined as unknown as T;
   }
   if (path.startsWith('/contracts')) {
-    const qs = new URLSearchParams(path.split('?')[1] || '');
-    const page = Number(qs.get('page') || 1);
-    const pageSize = Number(qs.get('pageSize') || 10);
-    const search = (qs.get('search') || '').toLowerCase();
-    const startDate = qs.get('startDate') || '';
-    const endDate = qs.get('endDate') || '';
-    const cnpj = (qs.get('cnpj') || '').toLowerCase();
-    const status = qs.get('status') || '';
-
-    let filtered = mockContracts.slice();
-    if (search) filtered = filtered.filter(c => c.cliente.toLowerCase().includes(search) || c.uc.toLowerCase().includes(search));
-    if (cnpj) filtered = filtered.filter(c => c.cnpj.toLowerCase().includes(cnpj));
-    if (status) filtered = filtered.filter(c => c.status === status);
-    if (startDate) filtered = filtered.filter(c => c.ciclo >= startDate);
-    if (endDate) filtered = filtered.filter(c => c.ciclo <= endDate);
-
-    const total = filtered.length;
-    const start = (page - 1) * pageSize;
-    const items = filtered.slice(start, start + pageSize);
-
-    return { items, total, page, pageSize } as unknown as T;
+    return mockContracts as unknown as T;
   }
   throw new Error(`No mock for ${path}`);
 }
