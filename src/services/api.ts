@@ -84,28 +84,71 @@ export type ContractsQuery = {
   orderDir?: 'asc' | 'desc';
 };
 
-export type ContractSummary = {
+export type Contract = {
   id: string;
-  cliente: string;
+  contract_code: string;
+  client_id: string;
+  client_name: string;
   cnpj: string;
-  uc: string;
-  status: 'ativo' | 'inativo' | 'pendente';
-  ciclo: string; // YYYY-MM
-  energiaContratadaMWh: number;
-  energiaUtilizadaMWh: number;
-  flexibilidadePct: number;
-  excedenteMWh: number;
-  custoExtra: number; // calculado quando excede flex
+  segment: string;
+  contact_responsible: string;
+  contracted_volume_mwh: string | number | null;
+  status: string;
+  energy_source: string;
+  contracted_modality: string;
+  start_date: string;
+  end_date: string;
+  billing_cycle: string;
+  upper_limit_percent: string | number | null;
+  lower_limit_percent: string | number | null;
+  flexibility_percent: string | number | null;
+  average_price_mwh: string | number | null;
+  spot_price_ref_mwh: string | number | null;
+  compliance_consumption: string;
+  compliance_nf: string;
+  compliance_invoice: string;
+  compliance_charges: string;
+  compliance_overall: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Paged<T> = { items: T[]; total: number; page: number; pageSize: number };
 
 export const ContractsAPI = {
-  list: (q: ContractsQuery) => {
-    const params = new URLSearchParams();
-    Object.entries(q).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  list: async (q: ContractsQuery = {}) => {
+    const contracts = await apiFetch<Contract[]>(`/contracts`, { method: 'GET' });
+
+    const searchTerm = (q.search || '').toLowerCase();
+    const cnpjFilter = (q.cnpj || '').replace(/[^0-9]/g, '');
+    const statusFilter = q.status ? q.status.toLowerCase() : '';
+    const startDateFilter = q.startDate ? new Date(`${q.startDate}-01T00:00:00Z`) : null;
+    const endDateFilter = q.endDate ? new Date(`${q.endDate}-01T00:00:00Z`) : null;
+
+    const filtered = contracts.filter((contract) => {
+      const normalizedCnpj = contract.cnpj.replace(/[^0-9]/g, '');
+      const contractStart = new Date(contract.start_date);
+      const contractEnd = new Date(contract.end_date);
+
+      const matchesSearch = !searchTerm
+        || contract.contract_code.toLowerCase().includes(searchTerm)
+        || contract.client_name.toLowerCase().includes(searchTerm);
+
+      const matchesCnpj = !cnpjFilter || normalizedCnpj.includes(cnpjFilter);
+      const matchesStatus = !statusFilter || contract.status.toLowerCase() === statusFilter;
+
+      const matchesStartDate = !startDateFilter || contractEnd >= startDateFilter;
+      const matchesEndDate = !endDateFilter || contractStart <= endDateFilter;
+
+      return matchesSearch && matchesCnpj && matchesStatus && matchesStartDate && matchesEndDate;
     });
-    return apiFetch<Paged<ContractSummary>>(`/contracts?${params.toString()}`, { method: 'GET' });
+
+    const page = q.page && q.page > 0 ? q.page : 1;
+    const pageSize = q.pageSize && q.pageSize > 0 ? q.pageSize : 10;
+    const startIndex = (page - 1) * pageSize;
+    const items = filtered.slice(startIndex, startIndex + pageSize);
+
+    const result: Paged<Contract> = { items, total: filtered.length, page, pageSize };
+    return result;
   },
 };
