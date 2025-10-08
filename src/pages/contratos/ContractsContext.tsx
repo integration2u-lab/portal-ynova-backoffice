@@ -2,7 +2,7 @@ import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
 import { mockContracts } from '../../mocks/contracts';
 
-const DEFAULT_API_URL = 'https://657285488d18.ngrok-free.app';
+const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
@@ -643,11 +643,12 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
     try {
       console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
 
-      const response = await fetch("https://657285488d18.ngrok-free.app/contracts", {
+      const response = await fetch(endpoint, {
         method: 'GET',
-        headers: { "ngrok-skip-browser-warning": "true" },
-
-
+        headers: {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         signal,
       });
 
