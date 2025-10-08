@@ -68,9 +68,11 @@ const normalizeResumoStatus = (value: unknown): StatusResumoValue => {
   const text = normalizeString(value).toLowerCase();
   if (!text) return 'Em análise';
   const sanitized = removeDiacritics(text);
-  if (sanitized === 'conforme') return 'Conforme';
-  if (sanitized === 'divergente') return 'Divergente';
-  if (sanitized.includes('analise')) return 'Em análise';
+  if (['conforme', 'compliant', 'ok'].includes(sanitized)) return 'Conforme';
+  if (['divergente', 'inconforme', 'noncompliant', 'non-compliant', 'noncompliance'].includes(sanitized)) return 'Divergente';
+  if (sanitized.includes('analise') || sanitized.includes('analysis') || sanitized.includes('review') || sanitized.includes('pending')) {
+    return 'Em análise';
+  }
   return 'Em análise';
 };
 
@@ -94,14 +96,17 @@ const normalizeInvoiceStatus = (value: unknown): InvoiceStatusValue => {
 
 const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
   const text = removeDiacritics(normalizeString(value));
-  if (text === 'ativo' || text === 'ativos') return 'Ativo';
-  if (text === 'inativo' || text === 'inativos') return 'Inativo';
+  if (['ativo', 'ativos', 'active'].includes(text)) return 'Ativo';
+  if (['inativo', 'inativos', 'inactive'].includes(text)) return 'Inativo';
+  if (['pendente', 'pending'].includes(text)) return 'Ativo';
   return 'Ativo';
 };
 
 const normalizeFonte = (value: unknown): ContractMock['fonte'] => {
   const text = removeDiacritics(normalizeString(value));
-  if (text === 'incentivada' || text === 'incentivadao') return 'Incentivada';
+  if (['incentivada', 'incentivadao', 'incentivada50', 'subsidized'].includes(text)) return 'Incentivada';
+  if (['convencional', 'conventional'].includes(text)) return 'Convencional';
+  if (['renovavel', 'renewable'].includes(text)) return 'Incentivada';
   return 'Convencional';
 };
 
@@ -118,11 +123,67 @@ const normalizeResumo = (value: unknown): ContractMock['resumoConformidades'] =>
     Object.entries(value as Record<string, unknown>).forEach(([key, status]) => {
       if (resumoKeys.includes(key as keyof ContractMock['resumoConformidades'])) {
         resumo[key as keyof ContractMock['resumoConformidades']] = normalizeResumoStatus(status);
+        return;
+      }
+
+      const sanitized = removeDiacritics(key);
+      if (sanitized === 'compliance_consumption' || sanitized === 'consumo') {
+        resumo.Consumo = normalizeResumoStatus(status);
+      } else if (sanitized === 'compliance_nf' || sanitized === 'nf' || sanitized === 'nota_fiscal') {
+        resumo.NF = normalizeResumoStatus(status);
+      } else if (sanitized === 'compliance_invoice' || sanitized === 'fatura' || sanitized === 'invoice') {
+        resumo.Fatura = normalizeResumoStatus(status);
+      } else if (sanitized === 'compliance_charges' || sanitized === 'encargos' || sanitized === 'charges') {
+        resumo.Encargos = normalizeResumoStatus(status);
+      } else if (sanitized === 'compliance_overall' || sanitized === 'conformidade' || sanitized === 'overall') {
+        resumo.Conformidade = normalizeResumoStatus(status);
       }
     });
   }
 
   return resumo;
+};
+
+const formatPercentValue = (value: unknown): string => {
+  const numeric = Number(typeof value === 'string' ? value.replace(',', '.') : value);
+  if (!Number.isFinite(numeric)) {
+    const text = normalizeString(value);
+    if (!text) return '';
+    return text.includes('%') ? text : `${text}%`;
+  }
+
+  const ratio = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'percent',
+      maximumFractionDigits: 2,
+    }).format(ratio);
+  } catch {
+    return `${(ratio * 100).toFixed(2)}%`;
+  }
+};
+
+const formatMwhValue = (value: unknown): string => {
+  const numeric = Number(typeof value === 'string' ? value.replace(',', '.') : value);
+  if (Number.isFinite(numeric)) {
+    return `${numeric.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} MWh`;
+  }
+  const text = normalizeString(value);
+  if (!text) return '';
+  return /mwh/i.test(text) ? text : `${text} MWh`;
+};
+
+const normalizeFieldLabel = (label: string): string => {
+  const text = normalizeString(label);
+  if (!text) return '';
+  const sanitized = text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ');
+  return sanitized
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 };
 
 const normalizeContractData = (value: unknown): ContractMock['dadosContrato'] => {
@@ -137,7 +198,7 @@ const normalizeContractData = (value: unknown): ContractMock['dadosContrato'] =>
   }
   if (typeof value === 'object') {
     return Object.entries(value as Record<string, unknown>)
-      .map(([label, val]) => ({ label: normalizeString(label), value: normalizeString(val) }))
+      .map(([label, val]) => ({ label: normalizeFieldLabel(label) || normalizeString(label), value: normalizeString(val) }))
       .filter((item) => item.label || item.value);
   }
   return [];
@@ -315,7 +376,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const referenceBaseRaw =
       (item as { reference_base?: unknown }).reference_base ??
       (item as { referenciaBase?: unknown }).referenciaBase ??
-      (item as { baseReferencia?: unknown }).baseReferencia;
+      (item as { baseReferencia?: unknown }).baseReferencia ??
+      (item as { billing_cycle?: unknown }).billing_cycle;
 
     const referenceMonth = normalizeReferenceMonth(referenceBaseRaw);
     const ciclo =
@@ -323,6 +385,7 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { cicloFaturamento?: unknown; ciclo?: unknown; periodo?: unknown }).cicloFaturamento ??
           (item as { ciclo?: unknown }).ciclo ??
           (item as { periodo?: unknown }).periodo ??
+          (item as { billing_cycle?: unknown }).billing_cycle ??
           referenceMonth
       ) || referenceMonth;
 
@@ -330,17 +393,21 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { codigo?: unknown }).codigo ??
       (item as { codigoContrato?: unknown }).codigoContrato ??
       (item as { contract?: unknown }).contract ??
+      (item as { contract_code?: unknown }).contract_code ??
       id;
     const rawCliente =
       (item as { cliente?: unknown }).cliente ??
       (item as { client?: unknown }).client ??
       (item as { nomeCliente?: unknown }).nomeCliente ??
+      (item as { client_name?: unknown }).client_name ??
       'Cliente não informado';
-    const rawSegmento = (item as { segmento?: unknown }).segmento ?? 'Não informado';
+    const rawSegmento =
+      (item as { segmento?: unknown }).segmento ?? (item as { segment?: unknown }).segment ?? 'Não informado';
     const rawContato =
       (item as { contato?: unknown }).contato ??
       (item as { responsavel?: unknown }).responsavel ??
       (item as { contact?: unknown }).contact ??
+      (item as { contact_responsible?: unknown }).contact_responsible ??
       '';
 
     const contatoAtivoRaw =
@@ -356,32 +423,42 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         : undefined;
 
     const supplier =
-      normalizeString((item as { supplier?: unknown }).supplier ?? (item as { fornecedor?: unknown }).fornecedor) ||
+      normalizeString(
+        (item as { supplier?: unknown }).supplier ??
+          (item as { fornecedor?: unknown }).fornecedor ??
+          (item as { supplier_name?: unknown }).supplier_name
+      ) ||
       'Não informado';
     const meter = normalizeString((item as { meter?: unknown }).meter ?? (item as { medidor?: unknown }).medidor);
     const clientId = normalizeString(
-      (item as { client_id?: unknown }).client_id ?? (item as { clienteId?: unknown }).clienteId
+      (item as { client_id?: unknown }).client_id ??
+        (item as { clienteId?: unknown }).clienteId ??
+        (item as { clientId?: unknown }).clientId
     );
 
     const rawPrice =
       (item as { price?: unknown }).price ??
       (item as { preco?: unknown }).preco ??
-      (item as { precoMedio?: unknown }).precoMedio;
+      (item as { precoMedio?: unknown }).precoMedio ??
+      (item as { average_price_mwh?: unknown }).average_price_mwh;
     const precoMedio = Number(rawPrice) || 0;
     const precoSpotReferencia =
       Number(
         (item as { precoSpotReferencia?: unknown; precoSpot?: unknown }).precoSpotReferencia ??
-          (item as { precoSpot?: unknown }).precoSpot
+          (item as { precoSpot?: unknown }).precoSpot ??
+          (item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh
       ) || 0;
 
     const inicioVigencia = normalizeIsoDate(
       (item as { inicioVigencia?: unknown; vigenciaInicio?: unknown }).inicioVigencia ??
         (item as { vigenciaInicio?: unknown }).vigenciaInicio ??
+        (item as { start_date?: unknown }).start_date ??
         referenceBaseRaw
     );
     const fimVigencia = normalizeIsoDate(
       (item as { fimVigencia?: unknown; vigenciaFim?: unknown }).fimVigencia ??
-        (item as { vigenciaFim?: unknown }).vigenciaFim
+        (item as { vigenciaFim?: unknown }).vigenciaFim ??
+        (item as { end_date?: unknown }).end_date
     );
 
     const periodosBase = normalizePeriodos(
@@ -395,7 +472,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 
     const resumo = normalizeResumo(
       (item as { resumoConformidades?: unknown; conformidades?: unknown }).resumoConformidades ??
-        (item as { conformidades?: unknown }).conformidades
+        (item as { conformidades?: unknown }).conformidades ??
+        {
+          Consumo: (item as { compliance_consumption?: unknown }).compliance_consumption,
+          NF: (item as { compliance_nf?: unknown }).compliance_nf,
+          Fatura: (item as { compliance_invoice?: unknown }).compliance_invoice,
+          Encargos: (item as { compliance_charges?: unknown }).compliance_charges,
+          Conformidade: (item as { compliance_overall?: unknown }).compliance_overall,
+        }
     );
 
     const adjustedRaw =
@@ -432,23 +516,53 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       }
     };
 
+    const contractedVolume =
+      (item as { energiaContratada?: unknown }).energiaContratada ??
+      (item as { contracted_volume_mwh?: unknown }).contracted_volume_mwh;
+    const flexValue =
+      (item as { flex?: unknown; flexibilidade?: unknown }).flex ??
+      (item as { flexibilidade?: unknown }).flexibilidade ??
+      (item as { flexibility_percent?: unknown }).flexibility_percent;
+    const upperLimitRaw =
+      (item as { limiteSuperior?: unknown }).limiteSuperior ??
+      (item as { upper_limit_percent?: unknown }).upper_limit_percent;
+    const lowerLimitRaw =
+      (item as { limiteInferior?: unknown }).limiteInferior ??
+      (item as { lower_limit_percent?: unknown }).lower_limit_percent;
+
     ensureField('Fornecedor', supplier);
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
+    ensureField('Preço Spot Ref. (R$/MWh)', precoSpotReferencia ? formatCurrencyBRL(precoSpotReferencia) : 'Não informado');
     ensureField('Contrato', normalizeString(rawCodigo));
     ensureField('Cliente ID', clientId || 'Não informado');
+    ensureField('Volume contratado', formatMwhValue(contractedVolume));
+    ensureField(
+      'Flex / Limites',
+      [formatPercentValue(flexValue), formatPercentValue(lowerLimitRaw), formatPercentValue(upperLimitRaw)]
+        .filter(Boolean)
+        .join(' · ')
+    );
+    ensureField('Ciclo de faturamento', normalizeString(ciclo) || 'Não informado');
     if (adjusted !== undefined) {
       ensureField('Ajustado', adjusted ? 'Sim' : 'Não');
     }
     if (referenceBaseRaw) {
       ensureField('Base de referência', normalizeIsoDate(referenceBaseRaw) || normalizeString(referenceBaseRaw));
     }
+    ensureField('Início da vigência', inicioVigencia);
+    ensureField('Fim da vigência', fimVigencia);
+    ensureField('Criado em', normalizeIsoDate((item as { created_at?: unknown }).created_at));
+    ensureField('Atualizado em', normalizeIsoDate((item as { updated_at?: unknown }).updated_at));
 
     const kpisBase: ContractMock['kpis'] = [
       ...normalizeKpis((item as { kpis?: unknown; indicadores?: unknown }).kpis ?? (item as { indicadores?: unknown }).indicadores),
     ];
     if (precoMedio) {
       kpisBase.push({ label: 'Preço contratado', value: formatCurrencyBRL(precoMedio) });
+    }
+    if (contractedVolume) {
+      kpisBase.push({ label: 'Volume contratado', value: formatMwhValue(contractedVolume) });
     }
     if (typeof contatoAtivo === 'boolean') {
       kpisBase.push({ label: 'Contato', value: contatoAtivo ? 'Ativo' : 'Inativo' });
@@ -473,13 +587,24 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       segmento: normalizeString(rawSegmento),
       contato: contatoFinal,
       status: statusValor,
-      fonte: normalizeFonte((item as { fonte?: unknown }).fonte),
-      modalidade: normalizeString((item as { modalidade?: unknown }).modalidade || 'Não informado'),
+      fonte: normalizeFonte((item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source),
+      modalidade:
+        normalizeString(
+          (item as { modalidade?: unknown }).modalidade ?? (item as { contracted_modality?: unknown }).contracted_modality
+        ) || 'Não informado',
       inicioVigencia: inicioVigencia || normalizeString((item as { inicio?: unknown }).inicio),
       fimVigencia: fimVigencia,
-      limiteSuperior: normalizeString((item as { limiteSuperior?: unknown }).limiteSuperior),
-      limiteInferior: normalizeString((item as { limiteInferior?: unknown }).limiteInferior),
-      flex: normalizeString((item as { flex?: unknown; flexibilidade?: unknown }).flex ?? (item as { flexibilidade?: unknown }).flexibilidade),
+      limiteSuperior: formatPercentValue(
+        (item as { limiteSuperior?: unknown }).limiteSuperior ?? (item as { upper_limit_percent?: unknown }).upper_limit_percent
+      ),
+      limiteInferior: formatPercentValue(
+        (item as { limiteInferior?: unknown }).limiteInferior ?? (item as { lower_limit_percent?: unknown }).lower_limit_percent
+      ),
+      flex: formatPercentValue(
+        (item as { flex?: unknown; flexibilidade?: unknown }).flex ??
+          (item as { flexibilidade?: unknown }).flexibilidade ??
+          (item as { flexibility_percent?: unknown }).flexibility_percent
+      ),
       precoMedio,
       precoSpotReferencia,
       cicloFaturamento: ciclo,
@@ -517,7 +642,6 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
   for (const endpoint of endpoints) {
     try {
       console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
-            console.info(signal);
 
       const response = await fetch("https://657285488d18.ngrok-free.app/contracts", {
         method: 'GET',

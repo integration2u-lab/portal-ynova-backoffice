@@ -113,6 +113,100 @@ export type Contract = {
   updated_at: string;
 };
 
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.replace(/\s/g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+};
+
+const toPercentNumber = (value: unknown): number => {
+  const numeric = toNumber(value, 0);
+  if (!numeric) return 0;
+  const ratio = Math.abs(numeric) <= 1 ? numeric * 100 : numeric;
+  return Number(ratio.toFixed(2));
+};
+
+const normalizeStatus = (value: unknown): ContractSummary['status'] => {
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (['ativo', 'active', 'actives'].includes(text)) return 'ativo';
+  if (['inativo', 'inactive'].includes(text)) return 'inativo';
+  if (['pendente', 'pending'].includes(text)) return 'pendente';
+  return 'ativo';
+};
+
+const mapContractSummary = (raw: unknown, index: number): ContractSummary => {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  const id =
+    (obj.id as string | undefined) ??
+    (obj.contract_code as string | undefined) ??
+    (obj.codigoContrato as string | undefined) ??
+    (obj.codigo as string | undefined) ??
+    `contract-${index + 1}`;
+
+  const clientName =
+    (obj.client_name as string | undefined) ??
+    (obj.cliente as string | undefined) ??
+    (obj.client as string | undefined) ??
+    'Cliente não informado';
+
+  const billingCycle =
+    (obj.billing_cycle as string | undefined) ??
+    (obj.cicloFaturamento as string | undefined) ??
+    (obj.ciclo as string | undefined) ??
+    (obj.periodo as string | undefined) ??
+    (typeof obj.start_date === 'string' ? obj.start_date.slice(0, 7) : undefined) ??
+    '';
+
+  const contracted = toNumber(obj.contracted_volume_mwh ?? obj.energiaContratadaMWh ?? obj.energiaContratada ?? 0, 0);
+  const utilized =
+    toNumber(
+      obj.energy_used_mwh ??
+        obj.energiaUtilizadaMWh ??
+        obj.energiaUtilizada ??
+        obj.consumo ??
+        obj.volumeUtilizado ??
+        contracted,
+      contracted
+    );
+
+  const flex =
+    toPercentNumber(
+      obj.flexibility_percent ??
+        obj.flexibilidadePct ??
+        obj.flex ??
+        (obj.limiteSuperior !== undefined && obj.limiteInferior !== undefined
+          ? (toPercentNumber(obj.limiteSuperior) + toPercentNumber(obj.limiteInferior)) / 2
+          : 0)
+    );
+
+  const excedente = toNumber(obj.excedenteMWh ?? obj.excedente_mwh ?? 0, 0);
+  const extraCost = toNumber(obj.custoExtra ?? obj.extra_cost ?? 0, 0);
+
+  return {
+    id: String(id),
+    cliente: clientName,
+    cnpj: (obj.cnpj as string | undefined) ?? '',
+    uc:
+      (obj.uc as string | undefined) ??
+      (obj.contract_code as string | undefined) ??
+      (obj.client_id as string | undefined) ??
+      String(id),
+    status: normalizeStatus(obj.status),
+    ciclo: billingCycle,
+    energiaContratadaMWh: contracted,
+    energiaUtilizadaMWh: utilized,
+    flexibilidadePct: flex,
+    excedenteMWh: excedente,
+    custoExtra: extraCost,
+  };
+};
+
 export type Paged<T> = { items: T[]; total: number; page: number; pageSize: number };
 
 export const ContractsAPI = {
