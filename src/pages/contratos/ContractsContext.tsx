@@ -2,7 +2,49 @@ import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
 import { mockContracts } from '../../mocks/contracts';
 
-const DEFAULT_API_URL = 'https://657285488d18.ngrok-free.app';
+const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
+
+const runtimeEnv: Record<string, string | undefined> =
+  ((typeof import.meta !== 'undefined'
+    ? (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    : undefined) ??
+    ((typeof globalThis !== 'undefined'
+      ? (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      : undefined)?.process?.env) ??
+    {});
+
+const resolveReadApiUrl = () => {
+  const candidates = [
+    runtimeEnv.VITE_CONTRACTS_API_URL,
+    runtimeEnv.VITE_CONTRACTS_API,
+    runtimeEnv.REACT_APP_CONTRACTS_API_URL,
+    runtimeEnv.REACT_APP_CONTRACTS_API,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeString(candidate);
+    if (normalized) return normalized;
+  }
+
+  return DEFAULT_API_URL;
+};
+
+const resolveWriteApiUrl = () => {
+  const candidates = [
+    runtimeEnv.VITE_CONTRACTS_API_WRITE_URL,
+    runtimeEnv.VITE_CONTRACTS_API_URL,
+    runtimeEnv.VITE_CONTRACTS_API,
+    runtimeEnv.REACT_APP_CONTRACTS_API_URL,
+    runtimeEnv.REACT_APP_CONTRACTS_API,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeString(candidate);
+    if (normalized) return normalized;
+  }
+
+  return DEFAULT_API_URL;
+};
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
@@ -63,6 +105,33 @@ const formatCurrencyBRL = (value: number): string => {
 
 const removeDiacritics = (value: string) =>
   value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+const parsePercentInput = (value: unknown): number | null => {
+  const text = normalizeString(value);
+  if (!text) return null;
+  const match = text.replace(/%/g, '').replace(/\s/g, '').replace(',', '.');
+  if (!match) return null;
+  const numeric = Number(match);
+  if (!Number.isFinite(numeric)) return null;
+  const normalized = Math.abs(numeric) > 1 ? numeric / 100 : numeric;
+  return Number.isFinite(normalized) ? normalized : null;
+};
+
+const parseNumericInput = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const text = normalizeString(value).replace(/[^0-9,-.]/g, '').replace(',', '.');
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const toIsoDateTime = (value: unknown): string | undefined => {
+  const normalized = normalizeIsoDate(value);
+  if (!normalized) return undefined;
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+};
 
 const normalizeResumoStatus = (value: unknown): StatusResumoValue => {
   const text = normalizeString(value).toLowerCase();
@@ -634,8 +703,150 @@ const buildEndpointCandidates = (rawUrl: string): string[] => {
   return Array.from(candidates);
 };
 
+const buildResourceEndpointCandidates = (rawUrl: string, resourceId: string): string[] => {
+  const sanitizedId = encodeURIComponent(resourceId);
+  return buildEndpointCandidates(rawUrl).map((endpoint) => `${endpoint.replace(/\/$/, '')}/${sanitizedId}`);
+};
+
+const baseHeaders = {
+  Accept: 'application/json',
+  'ngrok-skip-browser-warning': 'true',
+} as const;
+
+const contractToApiPayload = (contract: ContractMock): Record<string, unknown> => {
+  const findDadosValue = (keywords: string[]): string | undefined => {
+    const match = contract.dadosContrato.find((item) => {
+      const normalized = removeDiacritics(item.label);
+      return keywords.some((keyword) => normalized.includes(keyword));
+    });
+    return match ? normalizeString(match.value) : undefined;
+  };
+
+  const supplier = findDadosValue(['fornecedor', 'supplier']);
+  const groupName = findDadosValue(['grupo', 'group']);
+  const volumeField =
+    contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
+  const contractedVolume = parseNumericInput(volumeField);
+
+  const payload: Record<string, unknown> = {
+    contract_code: normalizeString(contract.codigo) || contract.id,
+    client_id: normalizeString(contract.id),
+    client_name: normalizeString(contract.cliente),
+    groupName: groupName || undefined,
+    supplier: supplier || undefined,
+    cnpj: normalizeString(contract.cnpj),
+    segment: normalizeString(contract.segmento),
+    contact_responsible: normalizeString(contract.contato),
+    contracted_volume_mwh: contractedVolume ?? undefined,
+    status: normalizeString(contract.status),
+    energy_source: normalizeString(contract.fonte),
+    contracted_modality: normalizeString(contract.modalidade),
+    start_date: toIsoDateTime(contract.inicioVigencia),
+    end_date: toIsoDateTime(contract.fimVigencia),
+    billing_cycle: normalizeString(contract.cicloFaturamento),
+    upper_limit_percent: parsePercentInput(contract.limiteSuperior),
+    lower_limit_percent: parsePercentInput(contract.limiteInferior),
+    flexibility_percent: parsePercentInput(contract.flex),
+    average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
+    spot_price_ref_mwh: parseNumericInput(contract.precoSpotReferencia) ?? contract.precoSpotReferencia,
+    compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,
+    compliance_nf: normalizeString(contract.resumoConformidades.NF) || undefined,
+    compliance_invoice: normalizeString(contract.resumoConformidades.Fatura) || undefined,
+    compliance_charges: normalizeString(contract.resumoConformidades.Encargos) || undefined,
+    compliance_overall: normalizeString(contract.resumoConformidades.Conformidade) || undefined,
+    contact_active: Boolean(normalizeString(contract.contato)),
+    adjusted: parsePercentInput(contract.flex) ? true : undefined,
+    price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
+  };
+
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+};
+
+const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => ({
+  client: normalizeString(contract.cliente) || contract.id,
+  price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio ?? 0,
+  adjusted: Boolean(parsePercentInput(contract.flex)),
+  contact_active: Boolean(normalizeString(contract.contato)),
+});
+
+const requestContractApi = async (
+  endpoints: string[],
+  method: 'POST' | 'PUT' | 'DELETE',
+  payload?: Record<string, unknown>
+): Promise<unknown> => {
+  let lastError: unknown;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          ...baseHeaders,
+          ...(payload ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => '');
+        throw new Error(message || `${method} ${endpoint} falhou com status ${response.status}`);
+      }
+
+      const text = await response.text().catch(() => '');
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch (parseError) {
+        console.error('[ContractsContext] Falha ao interpretar resposta da API.', parseError);
+        return null;
+      }
+    } catch (error) {
+      lastError = error;
+      console.error(`[ContractsContext] Falha ao executar ${method} em ${endpoint}.`, error);
+    }
+  }
+
+  throw (lastError instanceof Error ? lastError : new Error('Falha na requisição da API de contratos.'));
+};
+
+const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
+  const payload = contractToApiPayload(contract);
+  const endpoints = buildEndpointCandidates(resolveWriteApiUrl());
+  const response = await requestContractApi(endpoints, 'POST', payload);
+  if (!response) {
+    return contract;
+  }
+  const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
+  return normalized[0] ?? contract;
+};
+
+const updateContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
+  const payload = contractToApiPayload(contract);
+  const id = normalizeString(contract.id);
+  const baseUrl = resolveWriteApiUrl();
+  const endpoints = id ? buildResourceEndpointCandidates(baseUrl, id) : buildEndpointCandidates(baseUrl);
+  const response = await requestContractApi(endpoints, 'PUT', payload);
+  if (!response) {
+    return contract;
+  }
+  const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
+  return normalized.find((item) => item.id === contract.id) ?? normalized[0] ?? contract;
+};
+
+const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
+  const id = normalizeString(contract.id);
+  const baseUrl = resolveWriteApiUrl();
+  const endpoints = [
+    ...(id ? buildResourceEndpointCandidates(baseUrl, id) : []),
+    ...buildEndpointCandidates(baseUrl),
+  ];
+  await requestContractApi(endpoints, 'DELETE', buildDeletePayload(contract));
+};
+
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
-  const rawUrl = normalizeString(import.meta.env.VITE_CONTRACTS_API_URL);
+  const rawUrl = resolveReadApiUrl();
   const endpoints = buildEndpointCandidates(rawUrl);
   let lastError: unknown;
 
@@ -643,11 +854,12 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
     try {
       console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
 
-      const response = await fetch("https://657285488d18.ngrok-free.app/contracts", {
+      const response = await fetch(endpoint, {
         method: 'GET',
-        headers: { "ngrok-skip-browser-warning": "true" },
-
-
+        headers: {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         signal,
       });
 
@@ -693,9 +905,13 @@ type ContractsContextValue = {
   contracts: ContractMock[];
   isLoading: boolean;
   error: string | null;
-  updateContract: (id: string, updater: ContractUpdater | Partial<ContractMock>) => void;
+  updateContract: (
+    id: string,
+    updater: ContractUpdater | Partial<ContractMock>
+  ) => Promise<ContractMock | undefined>;
   getContractById: (id: string) => ContractMock | undefined;
-  addContract: (contract: ContractMock) => void;
+  addContract: (contract: ContractMock) => Promise<ContractMock>;
+  deleteContract: (id: string) => Promise<void>;
   refreshContracts: () => Promise<void>;
 };
 
@@ -752,17 +968,78 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     await loadContracts();
   }, [loadContracts]);
 
-  const addContract = React.useCallback((contract: ContractMock) => {
-    setContracts((prev) => [cloneContract(contract), ...prev]);
+  const addContract = React.useCallback(async (contract: ContractMock) => {
+    const draft = cloneContract(contract);
+    try {
+      const saved = await createContractInApi(draft);
+      setContracts((prev) => [cloneContract(saved), ...prev.filter((item) => item.id !== saved.id)]);
+      setError(null);
+      return saved;
+    } catch (apiError) {
+      console.error('[ContractsProvider] Falha ao criar contrato na API.', apiError);
+      const message =
+        apiError instanceof Error ? apiError.message : 'Erro desconhecido ao criar contrato na API';
+      setError(message);
+      throw apiError instanceof Error ? apiError : new Error(message);
+    }
   }, []);
 
   const updateContract = React.useCallback(
-    (id: string, updater: ContractUpdater | Partial<ContractMock>) => {
+    async (id: string, updater: ContractUpdater | Partial<ContractMock>) => {
+      const current = contracts.find((contract) => contract.id === id);
+      if (!current) return undefined;
+
+      const updated = applyUpdate(current, updater);
       setContracts((prev) =>
-        prev.map((contract) => (contract.id === id ? applyUpdate(contract, updater) : contract))
+        prev.map((contract) => (contract.id === id ? cloneContract(updated) : contract))
       );
+
+      try {
+        const saved = await updateContractInApi(updated);
+        setContracts((prev) =>
+          prev.map((contract) => (contract.id === saved.id ? cloneContract(saved) : contract))
+        );
+        setError(null);
+        return saved;
+      } catch (apiError) {
+        console.error('[ContractsProvider] Falha ao atualizar contrato na API.', apiError);
+        const message =
+          apiError instanceof Error ? apiError.message : 'Erro desconhecido ao atualizar contrato na API';
+        setError(message);
+        setContracts((prev) =>
+          prev.map((contract) => (contract.id === current.id ? cloneContract(current) : contract))
+        );
+        throw apiError instanceof Error ? apiError : new Error(message);
+      }
     },
-    []
+    [contracts]
+  );
+
+  const deleteContract = React.useCallback(
+    async (id: string) => {
+      const current = contracts.find((contract) => contract.id === id);
+      if (!current) return;
+
+      setContracts((prev) => prev.filter((contract) => contract.id !== id));
+
+      try {
+        await deleteContractInApi(current);
+        setError(null);
+      } catch (apiError) {
+        console.error('[ContractsProvider] Falha ao excluir contrato na API.', apiError);
+        const message =
+          apiError instanceof Error ? apiError.message : 'Erro desconhecido ao excluir contrato na API';
+        setError(message);
+        setContracts((prev) => {
+          if (prev.some((contract) => contract.id === current.id)) {
+            return prev;
+          }
+          return [cloneContract(current), ...prev];
+        });
+        throw apiError instanceof Error ? apiError : new Error(message);
+      }
+    },
+    [contracts]
   );
 
   const getContractById = React.useCallback(
@@ -778,9 +1055,19 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
       updateContract,
       getContractById,
       addContract,
+      deleteContract,
       refreshContracts,
     }),
-    [contracts, isLoading, error, updateContract, getContractById, addContract, refreshContracts]
+    [
+      contracts,
+      isLoading,
+      error,
+      updateContract,
+      getContractById,
+      addContract,
+      deleteContract,
+      refreshContracts,
+    ]
   );
 
   return <ContractsContext.Provider value={value}>{children}</ContractsContext.Provider>;

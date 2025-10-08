@@ -45,7 +45,7 @@ type FormState = {
 type CreateContractModalProps = {
   open: boolean;
   onClose: () => void;
-  onCreate: (contract: ContractMock) => void;
+  onCreate: (contract: ContractMock) => Promise<ContractMock>;
 };
 
 function buildInvoiceState(): InvoiceFormState {
@@ -160,11 +160,15 @@ function ensureId(value?: string) {
 export default function CreateContractModal({ open, onClose, onCreate }: CreateContractModalProps) {
   const [formState, setFormState] = React.useState<FormState>(() => buildInitialFormState());
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setFormState(buildInitialFormState());
       setErrors({});
+      setSubmitError(null);
+      setIsSubmitting(false);
     }
   }, [open]);
 
@@ -232,9 +236,9 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!validate()) return;
+    if (!validate() || isSubmitting) return;
 
     const id = ensureId();
     const months = getReferenceMonths(formState.cicloFaturamento || undefined);
@@ -341,9 +345,20 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       faturas,
     };
 
-    onCreate(newContract);
-    setFormState(buildInitialFormState());
-    setErrors({});
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      await onCreate(newContract);
+      setFormState(buildInitialFormState());
+      setErrors({});
+    } catch (error) {
+      console.error('[CreateContractModal] Falha ao criar contrato.', error);
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível criar o contrato. Tente novamente.';
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!open) return null;
@@ -373,6 +388,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4">
+          {submitError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
           <div className="space-y-6">
             <section aria-labelledby="dados-principais" className="space-y-4">
               <div>
@@ -706,9 +726,10 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+              disabled={isSubmitting}
+              className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Salvar contrato
+              {isSubmitting ? 'Salvando...' : 'Salvar contrato'}
             </button>
           </div>
         </form>
