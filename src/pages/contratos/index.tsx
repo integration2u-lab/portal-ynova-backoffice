@@ -152,16 +152,17 @@ export default function ContratosPage() {
   }, [contratosFiltrados]);
 
   const handleCreateContract = React.useCallback(
-    (contract: ContractMock) => {
-      addContract(contract);
+    async (contract: ContractMock) => {
+      const saved = await addContract(contract);
       setIsCreateOpen(false);
-      if (contract.cicloFaturamento) {
-        setPeriodoSelecionado(contract.cicloFaturamento);
+      if (saved.cicloFaturamento) {
+        setPeriodoSelecionado(saved.cicloFaturamento);
       }
       setSort('recentes');
       setSearchTerm('');
-      setContratoSelecionado(contract.id);
+      setContratoSelecionado(saved.id);
       setPaginaAtual(1);
+      return saved;
     },
     [addContract]
   );
