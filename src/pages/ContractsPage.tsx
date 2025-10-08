@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Contract, createContract, getContracts } from '../services/contracts';
+import { useContracts } from '../hooks/useContracts';
+import { Contract, createContract } from '../services/contracts';
 
 type FormState = {
   contract_code: string;
@@ -78,9 +79,13 @@ function toCsv(rows: Contract[]) {
 }
 
 export default function ContractsPage() {
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    contracts,
+    loading,
+    error: contractsError,
+    setContracts,
+  } = useContracts();
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(initialFormState);
 
@@ -91,29 +96,6 @@ export default function ContractsPage() {
   const [status, setStatus] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
-    getContracts()
-      .then((data) => {
-        if (!isMounted) return;
-        setContracts(data);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setError('Não foi possível carregar os contratos da API.');
-      })
-      .finally(() => {
-        if (!isMounted) return;
-        setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const filteredContracts = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
@@ -189,7 +171,7 @@ export default function ContractsPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
+    setFormError(null);
     setIsSubmitting(true);
     try {
       const payload = {
@@ -202,7 +184,7 @@ export default function ContractsPage() {
       setForm(initialFormState);
     } catch (err) {
       console.error(err);
-      setError('Falha ao salvar contrato.');
+      setFormError('Falha ao salvar contrato.');
     } finally {
       setIsSubmitting(false);
     }
@@ -356,9 +338,16 @@ export default function ContractsPage() {
         </div>
       </form>
 
-      {error && (
+      {contractsError && (
+        <div className="px-4 py-2 rounded bg-red-100 text-red-700 text-sm space-y-1">
+          <div>Não foi possível carregar os contratos. Tente novamente mais tarde.</div>
+          <div className="text-xs opacity-80 break-words">Detalhes: {contractsError}</div>
+        </div>
+      )}
+
+      {formError && (
         <div className="px-4 py-2 rounded bg-red-100 text-red-700 text-sm">
-          {error}
+          {formError}
         </div>
       )}
 
@@ -450,7 +439,7 @@ export default function ContractsPage() {
             {loading && (
               <tr><td colSpan={12} className="p-4 text-center text-gray-500">Carregando...</td></tr>
             )}
-            {!loading && currentPageItems.length === 0 && (
+            {!loading && !contractsError && currentPageItems.length === 0 && (
               <tr><td colSpan={12} className="p-4 text-center text-gray-500">Nenhum contrato encontrado.</td></tr>
             )}
           </tbody>
