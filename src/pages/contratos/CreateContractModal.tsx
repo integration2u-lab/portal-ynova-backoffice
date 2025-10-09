@@ -35,7 +35,8 @@ type FormState = {
   limiteInferior: string;
   flex: string;
   precoMedio: string;
-  precoSpotReferencia: string;
+  supplier: string;
+  proinfa: string;
   cicloFaturamento: string;
   volumeContratado: string;
   resumoConformidades: ContractMock['resumoConformidades'];
@@ -81,7 +82,8 @@ function buildInitialFormState(): FormState {
     limiteInferior: '95%',
     flex: '5%',
     precoMedio: '',
-    precoSpotReferencia: '',
+    supplier: '',
+    proinfa: '',
     cicloFaturamento: '',
     volumeContratado: '',
     resumoConformidades: {
@@ -261,11 +263,25 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       realizado: Math.max(0, (Number(formState.volumeContratado) || 0) - index * 25),
     }));
 
+    const supplierValue = formState.supplier.trim();
+    const proinfaRaw = formState.proinfa.trim();
+    const proinfaNumber = proinfaRaw ? Number(proinfaRaw.replace(',', '.')) : NaN;
+    const proinfaDisplay = proinfaRaw
+      ? Number.isNaN(proinfaNumber)
+        ? proinfaRaw
+        : proinfaNumber.toLocaleString('pt-BR', {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3,
+          })
+      : 'Não informado';
+
     const dadosContrato = [
       { label: 'Cliente', value: formState.cliente.trim() },
       { label: 'Segmento', value: formState.segmento.trim() || 'Não informado' },
       { label: 'Modalidade', value: formState.modalidade.trim() || 'Não informado' },
       { label: 'Fonte', value: formState.fonte },
+      { label: 'Fornecedor', value: supplierValue || 'Não informado' },
+      { label: 'Proinfa', value: proinfaDisplay },
       {
         label: 'Vigência',
         value:
@@ -282,10 +298,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       {
         label: 'Preço Médio',
         value: formatCurrencyInput(formState.precoMedio),
-      },
-      {
-        label: 'Preço Spot Ref.',
-        value: formatCurrencyInput(formState.precoSpotReferencia),
       },
       {
         label: 'Volume Contratado',
@@ -324,7 +336,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       limiteInferior: formState.limiteInferior || 'N/I',
       flex: formState.flex || 'N/I',
       precoMedio: Number(formState.precoMedio.replace(',', '.')) || 0,
-      precoSpotReferencia: Number(formState.precoSpotReferencia.replace(',', '.')) || 0,
+      fornecedor: supplierValue,
+      proinfa: Number.isNaN(proinfaNumber) ? null : proinfaNumber,
       cicloFaturamento: formState.cicloFaturamento,
       periodos,
       resumoConformidades: { ...formState.resumoConformidades },
@@ -494,6 +507,28 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                  Fornecedor
+                  <input
+                    type="text"
+                    value={formState.supplier}
+                    onChange={handleInputChange('supplier')}
+                    className="rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40"
+                    placeholder="Ex: Bolt"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                  Proinfa
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={formState.proinfa}
+                    onChange={handleInputChange('proinfa')}
+                    className="rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40"
+                    placeholder="Ex: 0.219"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
                   Início da vigência
                   <input
                     type="date"
@@ -566,18 +601,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                     onChange={handleInputChange('precoMedio')}
                     className="rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40"
                     placeholder="Ex: 275,50"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                  Preço spot de referência (R$ / MWh)
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formState.precoSpotReferencia}
-                    onChange={handleInputChange('precoSpotReferencia')}
-                    className="rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40"
-                    placeholder="Ex: 310,00"
                   />
                 </label>
               </div>

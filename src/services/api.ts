@@ -104,6 +104,8 @@ export type Contract = {
   lower_limit_percent: string | number | null;
   flexibility_percent: string | number | null;
   average_price_mwh: string | number | null;
+  supplier?: string | null;
+  proinfa_contribution?: string | number | null;
   spot_price_ref_mwh: string | number | null;
   compliance_consumption: string;
   compliance_nf: string;

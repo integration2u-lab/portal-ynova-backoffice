@@ -69,7 +69,8 @@ export type ContractMock = {
   limiteInferior: string;
   flex: string;
   precoMedio: number;
-  precoSpotReferencia: number;
+  fornecedor: string;
+  proinfa: number | null;
   cicloFaturamento: string;
   periodos: string[]; // YYYY-MM
   resumoConformidades: Record<'Consumo' | 'NF' | 'Fatura' | 'Encargos' | 'Conformidade', StatusResumo>;
@@ -129,7 +130,8 @@ export const mockContracts: ContractMock[] = [
     limiteInferior: '95%',
     flex: '5%',
     precoMedio: 274.32,
-    precoSpotReferencia: 312.45,
+    fornecedor: 'Neoenergia Comercializadora',
+    proinfa: 0.219,
     cicloFaturamento: '2024-06',
     periodos: meses.slice(1),
     resumoConformidades: {
@@ -147,13 +149,13 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Neoenergia Comercializadora' },
+      { label: 'Proinfa', value: '0,219' },
       { label: 'Vigência', value: 'Jul/2023 - Jun/2025' },
       { label: 'Modalidade', value: 'Preço Fixo com Ajuste PLD' },
       { label: 'Fonte', value: 'Convencional' },
       { label: 'Volume Contratado', value: '3.200 MWh/mês' },
       { label: 'Flex / Limites', value: '±5% (95% - 105%)' },
       { label: 'Preço Médio', value: 'R$ 274,32 / MWh' },
-      { label: 'Preço Spot Ref.', value: 'R$ 312,45 / MWh' },
       { label: 'Centro de Custo', value: 'Unidade Industrial SP' },
       { label: 'Responsável', value: 'Mariana Figueiredo' },
     ],
@@ -295,7 +297,8 @@ export const mockContracts: ContractMock[] = [
     limiteInferior: '92%',
     flex: '8%',
     precoMedio: 219.5,
-    precoSpotReferencia: 245.82,
+    fornecedor: 'Raízen Energia',
+    proinfa: 0.185,
     cicloFaturamento: '2024-05',
     periodos: meses.slice(0, 6),
     resumoConformidades: {
@@ -313,13 +316,13 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Raízen Energia' },
+      { label: 'Proinfa', value: '0,185' },
       { label: 'Vigência', value: 'Jan/2022 - Dez/2024' },
       { label: 'Modalidade', value: 'TUSD Verde' },
       { label: 'Fonte', value: 'Incentivada' },
       { label: 'Volume Contratado', value: '2.450 MWh/mês' },
       { label: 'Flex / Limites', value: '±8% (92% - 110%)' },
       { label: 'Preço Médio', value: 'R$ 219,50 / MWh' },
-      { label: 'Preço Spot Ref.', value: 'R$ 245,82 / MWh' },
       { label: 'Centro de Custo', value: 'Planta RS' },
       { label: 'Responsável', value: 'Renato Magalhães' },
     ],
@@ -460,7 +463,8 @@ export const mockContracts: ContractMock[] = [
     limiteInferior: '93%',
     flex: '7%',
     precoMedio: 252.9,
-    precoSpotReferencia: 271.1,
+    fornecedor: 'Brookfield Energia',
+    proinfa: null,
     cicloFaturamento: '2024-06',
     periodos: meses.slice(2),
     resumoConformidades: {
@@ -478,13 +482,13 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Brookfield Energia' },
+      { label: 'Proinfa', value: 'Não informado' },
       { label: 'Vigência', value: 'Jan/2024 - Dez/2026' },
       { label: 'Modalidade', value: 'Preço Fixo' },
       { label: 'Fonte', value: 'Convencional' },
       { label: 'Volume Contratado', value: '1.650 MWh/mês' },
       { label: 'Flex / Limites', value: '±7% (93% - 108%)' },
       { label: 'Preço Médio', value: 'R$ 252,90 / MWh' },
-      { label: 'Preço Spot Ref.', value: 'R$ 271,10 / MWh' },
       { label: 'Centro de Custo', value: 'Planta MG' },
       { label: 'Responsável', value: 'Larissa Campos' },
     ],
