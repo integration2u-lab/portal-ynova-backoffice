@@ -7,14 +7,12 @@ import { formatMesLabel } from '../../mocks/contracts';
 import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
 
-const pageSize = 5;
+const pageSize = 20;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 
 function formatMonthLabel(periodo: string) {
   return formatMesLabel(periodo).replace('.', '');
 }
-
-type SortOption = 'recentes' | 'cliente';
 
 type StatusSummaryItem = { status: StatusResumo; total: number };
 
@@ -63,38 +61,36 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
 export default function ContratosPage() {
   const { contracts, addContract, isLoading, error, refreshContracts } = useContracts();
 
-  const periodosDisponiveis = React.useMemo(() => {
-    const unique = new Set<string>();
-    contracts.forEach((contrato) => contrato.periodos.forEach((mes) => unique.add(mes)));
-    return Array.from(unique).sort((a, b) => (a < b ? 1 : -1));
-  }, [contracts]);
-
-  const [periodoSelecionado, setPeriodoSelecionado] = React.useState<string>(() => periodosDisponiveis[0] ?? '');
+  const [referencePeriod] = React.useState<'all'>('all');
   const [paginaAtual, setPaginaAtual] = React.useState(1);
-  const [sort, setSort] = React.useState<SortOption>('recentes');
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [contratoSelecionado, setContratoSelecionado] = React.useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const isUpdating = isLoading || isRefreshing;
+
+  const handleRefreshContracts = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshContracts();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshContracts]);
 
   React.useEffect(() => {
-    if (!periodoSelecionado && periodosDisponiveis.length) {
-      setPeriodoSelecionado(periodosDisponiveis[0]);
-    } else if (periodoSelecionado && !periodosDisponiveis.includes(periodoSelecionado)) {
-      setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
-    }
-  }, [periodoSelecionado, periodosDisponiveis]);
+    const handleCreated = () => {
+      void handleRefreshContracts();
+    };
+    window.addEventListener('contracts:created', handleCreated);
+    return () => window.removeEventListener('contracts:created', handleCreated);
+  }, [handleRefreshContracts]);
 
   const contratosFiltrados = React.useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const numericSearch = normalizedSearch.replace(/\D/g, '');
 
     const filtrados = contracts.filter((contrato) => {
-      const matchesPeriodo =
-        !periodoSelecionado ||
-        contrato.periodos.length === 0 ||
-        contrato.periodos.includes(periodoSelecionado);
-      if (!matchesPeriodo) return false;
-
       if (!normalizedSearch) return true;
 
       const codigo = contrato.codigo.toLowerCase();
@@ -108,19 +104,12 @@ export default function ContratosPage() {
       );
     });
 
-    const ordenados = [...filtrados];
-    if (sort === 'cliente') {
-      ordenados.sort((a, b) => a.cliente.localeCompare(b.cliente));
-    } else {
-      ordenados.sort((a, b) => (a.cicloFaturamento < b.cicloFaturamento ? 1 : -1));
-    }
-
-    return ordenados;
-  }, [contracts, periodoSelecionado, sort, searchTerm]);
+    return filtrados;
+  }, [contracts, searchTerm]);
 
   React.useEffect(() => {
     setPaginaAtual(1);
-  }, [periodoSelecionado, sort, searchTerm]);
+  }, [searchTerm]);
 
   const totalPaginas = Math.max(1, Math.ceil(contratosFiltrados.length / pageSize));
   const inicio = (paginaAtual - 1) * pageSize;
@@ -158,16 +147,13 @@ export default function ContratosPage() {
     async (contract: ContractMock) => {
       const saved = await addContract(contract);
       setIsCreateOpen(false);
-      if (saved.cicloFaturamento) {
-        setPeriodoSelecionado(saved.cicloFaturamento);
-      }
-      setSort('recentes');
+      await handleRefreshContracts();
       setSearchTerm('');
       setContratoSelecionado(saved.id);
       setPaginaAtual(1);
       return saved;
     },
-    [addContract]
+    [addContract, handleRefreshContracts]
   );
 
   return (
@@ -204,32 +190,25 @@ export default function ContratosPage() {
               <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Período de referência</span>
               <select
                 className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
-                value={periodoSelecionado}
-                onChange={(event) => setPeriodoSelecionado(event.target.value)}
+                value={referencePeriod}
+                onChange={() => {}}
               >
-                {periodosDisponiveis.map((periodo) => (
-                  <option key={periodo} value={periodo}>
-                    {formatMonthLabel(periodo)}
-                  </option>
-                ))}
+                <option value="all">Mostrar todos</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ordenar por</span>
-              <select
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortOption)}
+            <div className="flex items-end justify-end">
+              <button
+                type="button"
+                onClick={() => void handleRefreshContracts()}
+                disabled={isUpdating}
+                className="inline-flex items-center rounded-md bg-yn-orange px-4 py-2 text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <option value="recentes">Ciclos mais recentes</option>
-                <option value="cliente">Nome do cliente</option>
-              </select>
+                {isUpdating ? 'Atualizando…' : 'Atualizar'}
+              </button>
             </div>
             <button
               type="button"
               onClick={() => {
-                setPeriodoSelecionado(periodosDisponiveis[0] ?? '');
-                setSort('recentes');
                 setPaginaAtual(1);
                 setContratoSelecionado(null);
                 setSearchTerm('');
@@ -266,11 +245,11 @@ export default function ContratosPage() {
             </div>
             <button
               type="button"
-              onClick={() => refreshContracts()}
-              disabled={isLoading}
+              onClick={() => void handleRefreshContracts()}
+              disabled={isUpdating}
               className="inline-flex items-center justify-center rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:border-red-400 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isLoading ? 'Recarregando...' : 'Tentar novamente'}
+              {isUpdating ? 'Atualizando…' : 'Tentar novamente'}
             </button>
           </div>
         )}
@@ -281,7 +260,7 @@ export default function ContratosPage() {
           </div>
         ) : contratosFiltrados.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
-            Nenhum contrato encontrado para o período selecionado.
+            Nenhum contrato encontrado.
           </div>
         ) : (
           <div className="space-y-3">
