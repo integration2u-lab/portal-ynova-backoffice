@@ -77,6 +77,8 @@ export default function EditContractPage() {
   const [formState, setFormState] = React.useState<FormState | null>(() =>
     contrato ? buildFormState(contrato) : null
   );
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (contrato) {
@@ -156,43 +158,54 @@ export default function EditContractPage() {
     });
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!contrato || !formState) return;
+    if (!contrato || !formState || isSaving) return;
 
-    updateContract(contrato.id, (current) => ({
-      ...current,
-      codigo: formState.codigo.trim(),
-      cliente: formState.cliente.trim(),
-      cnpj: formState.cnpj.trim(),
-      segmento: formState.segmento.trim(),
-      contato: formState.contato.trim(),
-      status: formState.status,
-      fonte: formState.fonte,
-      modalidade: formState.modalidade.trim(),
-      inicioVigencia: formState.inicioVigencia,
-      fimVigencia: formState.fimVigencia,
-      limiteSuperior: formState.limiteSuperior.trim(),
-      limiteInferior: formState.limiteInferior.trim(),
-      flex: formState.flex.trim(),
-      precoMedio: Number(formState.precoMedio) || 0,
-      precoSpotReferencia: Number(formState.precoSpotReferencia) || 0,
-      cicloFaturamento: formState.cicloFaturamento,
-      dadosContrato: formState.dadosContrato.map((item, index) => ({
-        label: item.label.trim() || `Campo ${index + 1}`,
-        value: item.value.trim(),
-      })),
-      resumoConformidades: { ...formState.resumoConformidades },
-      faturas: formState.faturas.map((fatura) => ({
-        id: fatura.id,
-        competencia: fatura.competencia,
-        vencimento: fatura.vencimento,
-        valor: Number(fatura.valor) || 0,
-        status: fatura.status,
-      })),
-    }));
+    setSubmitError(null);
+    setIsSaving(true);
+    try {
+      await updateContract(contrato.id, (current) => ({
+        ...current,
+        codigo: formState.codigo.trim(),
+        cliente: formState.cliente.trim(),
+        cnpj: formState.cnpj.trim(),
+        segmento: formState.segmento.trim(),
+        contato: formState.contato.trim(),
+        status: formState.status,
+        fonte: formState.fonte,
+        modalidade: formState.modalidade.trim(),
+        inicioVigencia: formState.inicioVigencia,
+        fimVigencia: formState.fimVigencia,
+        limiteSuperior: formState.limiteSuperior.trim(),
+        limiteInferior: formState.limiteInferior.trim(),
+        flex: formState.flex.trim(),
+        precoMedio: Number(formState.precoMedio) || 0,
+        precoSpotReferencia: Number(formState.precoSpotReferencia) || 0,
+        cicloFaturamento: formState.cicloFaturamento,
+        dadosContrato: formState.dadosContrato.map((item, index) => ({
+          label: item.label.trim() || `Campo ${index + 1}`,
+          value: item.value.trim(),
+        })),
+        resumoConformidades: { ...formState.resumoConformidades },
+        faturas: formState.faturas.map((fatura) => ({
+          id: fatura.id,
+          competencia: fatura.competencia,
+          vencimento: fatura.vencimento,
+          valor: Number(fatura.valor) || 0,
+          status: fatura.status,
+        })),
+      }));
 
-    navigate(`/contratos/${contrato.id}`);
+      navigate(`/contratos/${contrato.id}`);
+    } catch (error) {
+      console.error('[EditContractPage] Falha ao salvar contrato.', error);
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível salvar as alterações. Tente novamente.';
+      setSubmitError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!contrato || !formState) {
@@ -511,6 +524,11 @@ export default function EditContractPage() {
           </div>
         </section>
 
+        {submitError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Link
             to={`/contratos/${contrato.id}`}
@@ -520,9 +538,10 @@ export default function EditContractPage() {
           </Link>
           <button
             type="submit"
-            className="inline-flex items-center justify-center rounded-md bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90"
+            disabled={isSaving}
+            className="inline-flex items-center justify-center rounded-md bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Salvar alterações
+            {isSaving ? 'Salvando...' : 'Salvar alterações'}
           </button>
         </div>
       </form>
