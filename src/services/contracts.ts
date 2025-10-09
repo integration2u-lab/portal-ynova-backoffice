@@ -1,8 +1,9 @@
 export type Contract = {
   id: string;
   contract_code: string;
-  client_id: string;
   client_name: string;
+  client_id?: string;
+  groupName?: string;
   cnpj: string;
   segment: string;
   contact_responsible: string;
@@ -47,8 +48,9 @@ function normalizeContract(raw: any, index: number): Contract {
   return {
     id: toString(idSource, String(index)),
     contract_code: toString(raw?.contract_code),
-    client_id: toString(raw?.client_id),
     client_name: toString(raw?.client_name),
+    client_id: raw?.client_id == null ? undefined : toString(raw?.client_id),
+    groupName: raw?.groupName == null ? undefined : toString(raw?.groupName),
     cnpj: toString(raw?.cnpj),
     segment: toString(raw?.segment),
     contact_responsible: toString(raw?.contact_responsible),
@@ -186,7 +188,7 @@ export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
   return fetchContracts(signal);
 }
 
-export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at'>;
+export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'>;
 
 export async function createContract(payload: CreateContractPayload): Promise<Contract> {
   const response = await fetch(`${CONTRACTS_API}`, {
@@ -194,7 +196,12 @@ export async function createContract(payload: CreateContractPayload): Promise<Co
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      groupName: typeof payload.groupName === 'string' && payload.groupName.trim()
+        ? payload.groupName
+        : 'default',
+    }),
   });
 
   if (!response.ok) {
