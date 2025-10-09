@@ -10,8 +10,9 @@ const contracts = [
   {
     id: '1',
     contract_code: 'CTR-2024-061-0001',
-    client_id: '17f83280-750a-473c-99d2-2bfacd101813',
     client_name: 'Cliente XPTO',
+    client_id: '17f83280-750a-473c-99d2-2bfacd101813',
+    groupName: 'default',
     cnpj: '00.000.000/0001-00',
     segment: 'Comercial',
     contact_responsible: 'Maria Silva',
@@ -83,7 +84,6 @@ function sendJson(res, statusCode, payload, origin) {
 
 const requiredFields = [
   'contract_code',
-  'client_id',
   'client_name',
   'cnpj',
   'segment',
@@ -126,6 +126,10 @@ const server = createServer(async (req, res) => {
       const contract = {
         id: randomUUID(),
         ...payload,
+        client_id: randomUUID(),
+        groupName: typeof payload.groupName === 'string' && payload.groupName.trim()
+          ? payload.groupName
+          : 'default',
         created_at: now,
         updated_at: now,
       };

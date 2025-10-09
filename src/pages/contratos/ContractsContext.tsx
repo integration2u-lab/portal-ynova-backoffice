@@ -730,9 +730,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
-    client_id: normalizeString(contract.id),
     client_name: normalizeString(contract.cliente),
-    groupName: groupName || undefined,
+    groupName: groupName || 'default',
     supplier: supplier || undefined,
     cnpj: normalizeString(contract.cnpj),
     segment: normalizeString(contract.segmento),

@@ -36,6 +36,57 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Contract' }
+    post:
+      summary: Create a new contract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContractInput'
+            example:
+              contract_code: CTR-2024-061-0002
+              client_name: Empresa Exemplo SA
+              groupName: default
+              cnpj: 11.222.333/0001-44
+              segment: Industrial
+              contact_responsible: Ana Pereira
+              contracted_volume_mwh: '1800.5'
+              status: Ativo
+              energy_source: Renovável
+              contracted_modality: Tarifa Fixa
+              start_date: 2024-04-01T00:00:00Z
+              end_date: 2025-03-31T23:59:59Z
+              billing_cycle: Mensal
+      responses:
+        '201':
+          description: Contract created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contract' }
+        '400':
+          description: Invalid payload
+      x-codeSamples:
+        - lang: cURL
+          label: Create contract
+          source: |
+            curl -X POST "https://api.example.com/contracts" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "contract_code": "CTR-2024-061-0002",
+                "client_name": "Empresa Exemplo SA",
+                "groupName": "default",
+                "cnpj": "11.222.333/0001-44",
+                "segment": "Industrial",
+                "contact_responsible": "Ana Pereira",
+                "contracted_volume_mwh": "1800.5",
+                "status": "Ativo",
+                "energy_source": "Renovável",
+                "contracted_modality": "Tarifa Fixa",
+                "start_date": "2024-04-01T00:00:00Z",
+                "end_date": "2025-03-31T23:59:59Z",
+                "billing_cycle": "Mensal"
+              }'
 components:
   schemas:
     Contract:
@@ -43,8 +94,9 @@ components:
       properties:
         id: { type: string }
         contract_code: { type: string }
-        client_id: { type: string }
         client_name: { type: string }
+        client_id: { type: string }
+        groupName: { type: string }
         cnpj: { type: string }
         segment: { type: string }
         contact_responsible: { type: string }
@@ -67,3 +119,45 @@ components:
         compliance_overall: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    CreateContractInput:
+      type: object
+      required:
+        - contract_code
+        - client_name
+        - cnpj
+        - segment
+        - contact_responsible
+        - contracted_volume_mwh
+        - status
+        - energy_source
+        - contracted_modality
+        - start_date
+        - end_date
+        - billing_cycle
+      properties:
+        contract_code: { type: string }
+        client_name: { type: string }
+        groupName:
+          type: string
+          description: Nome do agrupador do contrato
+          default: default
+        cnpj: { type: string }
+        segment: { type: string }
+        contact_responsible: { type: string }
+        contracted_volume_mwh: { type: string }
+        status: { type: string, enum: [Ativo, "Em análise", Inativo] }
+        energy_source: { type: string }
+        contracted_modality: { type: string }
+        start_date: { type: string, format: date-time }
+        end_date: { type: string, format: date-time }
+        billing_cycle: { type: string }
+        upper_limit_percent: { type: string, nullable: true }
+        lower_limit_percent: { type: string, nullable: true }
+        flexibility_percent: { type: string, nullable: true }
+        average_price_mwh: { type: string, nullable: true }
+        spot_price_ref_mwh: { type: string, nullable: true }
+        compliance_consumption: { type: string, nullable: true }
+        compliance_nf: { type: string, nullable: true }
+        compliance_invoice: { type: string, nullable: true }
+        compliance_charges: { type: string, nullable: true }
+        compliance_overall: { type: string, nullable: true }
