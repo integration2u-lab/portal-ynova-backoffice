@@ -730,9 +730,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
-    client_id: normalizeString(contract.id),
     client_name: normalizeString(contract.cliente),
-    groupName: groupName || undefined,
+    groupName: groupName || 'default',
     supplier: supplier || undefined,
     cnpj: normalizeString(contract.cnpj),
     segment: normalizeString(contract.segmento),
@@ -972,7 +971,24 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     const draft = cloneContract(contract);
     try {
       const saved = await createContractInApi(draft);
-      setContracts((prev) => [cloneContract(saved), ...prev.filter((item) => item.id !== saved.id)]);
+      setContracts((prev) => {
+        const next: ContractMock[] = [];
+        const seen = new Set<string>();
+
+        const register = (item: ContractMock) => {
+          const key = normalizeString(item.id) || `code:${normalizeString(item.codigo)}`;
+          if (seen.has(key)) {
+            return;
+          }
+          seen.add(key);
+          next.push(cloneContract(item));
+        };
+
+        register(saved);
+        prev.forEach(register);
+
+        return next;
+      });
       setError(null);
       return saved;
     } catch (apiError) {
