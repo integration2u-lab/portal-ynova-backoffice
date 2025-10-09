@@ -103,6 +103,21 @@ const formatCurrencyBRL = (value: number): string => {
   }
 };
 
+const formatProinfa = (value: number | null | undefined): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'Não informado';
+  }
+  try {
+    return value.toLocaleString('pt-BR', {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    });
+  } catch (error) {
+    console.warn('[ContractsContext] Falha ao formatar Proinfa, usando fallback.', error);
+    return value.toFixed(3);
+  }
+};
+
 const removeDiacritics = (value: string) =>
   value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
@@ -496,8 +511,13 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { supplier?: unknown }).supplier ??
           (item as { fornecedor?: unknown }).fornecedor ??
           (item as { supplier_name?: unknown }).supplier_name
-      ) ||
-      'Não informado';
+      );
+    const proinfa = parseNumericInput(
+      (item as { proinfa_contribution?: unknown }).proinfa_contribution ??
+        (item as { proinfa?: unknown }).proinfa ??
+        (item as { contribuicaoProinfa?: unknown }).contribuicaoProinfa ??
+        (item as { contribuicao_proinfa?: unknown }).contribuicao_proinfa
+    );
     const meter = normalizeString((item as { meter?: unknown }).meter ?? (item as { medidor?: unknown }).medidor);
     const clientId = normalizeString(
       (item as { client_id?: unknown }).client_id ??
@@ -511,12 +531,6 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { precoMedio?: unknown }).precoMedio ??
       (item as { average_price_mwh?: unknown }).average_price_mwh;
     const precoMedio = Number(rawPrice) || 0;
-    const precoSpotReferencia =
-      Number(
-        (item as { precoSpotReferencia?: unknown; precoSpot?: unknown }).precoSpotReferencia ??
-          (item as { precoSpot?: unknown }).precoSpot ??
-          (item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh
-      ) || 0;
 
     const inicioVigencia = normalizeIsoDate(
       (item as { inicioVigencia?: unknown; vigenciaInicio?: unknown }).inicioVigencia ??
@@ -599,10 +613,11 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { limiteInferior?: unknown }).limiteInferior ??
       (item as { lower_limit_percent?: unknown }).lower_limit_percent;
 
-    ensureField('Fornecedor', supplier);
+    const supplierDisplay = supplier || 'Não informado';
+    ensureField('Fornecedor', supplierDisplay);
+    ensureField('Proinfa', formatProinfa(proinfa));
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
-    ensureField('Preço Spot Ref. (R$/MWh)', precoSpotReferencia ? formatCurrencyBRL(precoSpotReferencia) : 'Não informado');
     ensureField('Contrato', normalizeString(rawCodigo));
     ensureField('Cliente ID', clientId || 'Não informado');
     ensureField('Volume contratado', formatMwhValue(contractedVolume));
@@ -675,7 +690,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
           (item as { flexibility_percent?: unknown }).flexibility_percent
       ),
       precoMedio,
-      precoSpotReferencia,
+      fornecedor: supplier,
+      proinfa: proinfa ?? null,
       cicloFaturamento: ciclo,
       periodos,
       resumoConformidades: resumo,
@@ -727,12 +743,20 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const volumeField =
     contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
   const contractedVolume = parseNumericInput(volumeField);
+  const supplierFromContract = normalizeString(contract.fornecedor);
+  const supplierValue = supplierFromContract || supplier || '';
+  const proinfaField = findDadosValue(['proinfa']);
+  const proinfaFromDados = parseNumericInput(proinfaField);
+  const proinfaValue =
+    contract.proinfa !== null && contract.proinfa !== undefined
+      ? contract.proinfa
+      : proinfaFromDados;
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
     groupName: groupName || 'default',
-    supplier: supplier || undefined,
+    supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),
     segment: normalizeString(contract.segmento),
     contact_responsible: normalizeString(contract.contato),
@@ -747,7 +771,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     lower_limit_percent: parsePercentInput(contract.limiteInferior),
     flexibility_percent: parsePercentInput(contract.flex),
     average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
-    spot_price_ref_mwh: parseNumericInput(contract.precoSpotReferencia) ?? contract.precoSpotReferencia,
+    proinfa_contribution: proinfaValue ?? null,
     compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,
     compliance_nf: normalizeString(contract.resumoConformidades.NF) || undefined,
     compliance_invoice: normalizeString(contract.resumoConformidades.Fatura) || undefined,
@@ -759,7 +783,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   };
 
   return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    Object.entries(payload).filter(([key, value]) => {
+      if (key === 'supplier' || key === 'proinfa_contribution') {
+        return true;
+      }
+      return value !== undefined && value !== null && value !== '';
+    })
   );
 };
 
