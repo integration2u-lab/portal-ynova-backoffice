@@ -89,7 +89,10 @@ export default function ContratosPage() {
     const numericSearch = normalizedSearch.replace(/\D/g, '');
 
     const filtrados = contracts.filter((contrato) => {
-      const matchesPeriodo = periodoSelecionado ? contrato.periodos.includes(periodoSelecionado) : true;
+      const matchesPeriodo =
+        !periodoSelecionado ||
+        contrato.periodos.length === 0 ||
+        contrato.periodos.includes(periodoSelecionado);
       if (!matchesPeriodo) return false;
 
       if (!normalizedSearch) return true;

@@ -36,7 +36,18 @@ const runtimeEnv: Record<string, string | undefined> =
   || (typeof globalThis !== 'undefined' && (globalThis as any)?.process?.env)
   || {};
 
-const CONTRACTS_API = (runtimeEnv.VITE_CONTRACTS_API || runtimeEnv.REACT_APP_CONTRACTS_API || DEFAULT_CONTRACTS_API).replace(/\/$/, '');
+const CONTRACTS_API = (
+  runtimeEnv.VITE_CONTRACTS_API || runtimeEnv.REACT_APP_CONTRACTS_API || DEFAULT_CONTRACTS_API
+).replace(/\/$/, '');
+
+const normalizeContracts = (res: unknown): unknown[] => {
+  if (Array.isArray(res)) return res;
+  if (res && typeof res === 'object' && Array.isArray((res as { data?: unknown }).data)) {
+    return (res as { data: unknown[] }).data;
+  }
+  console.error('[contracts] Unexpected response shape:', res);
+  return [];
+};
 
 function normalizeContract(raw: any, index: number): Contract {
   const idSource = raw?.id ?? raw?.contract_code ?? index;
@@ -107,6 +118,7 @@ export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> 
       method: 'GET',
       headers: {
         Accept: 'application/json',
+        'ngrok-skip-browser-warning': 'true',
       },
       signal: controller.signal,
     });
@@ -141,18 +153,8 @@ export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> 
       }
     }
 
-    const data = Array.isArray(parsed) ? parsed : parsed?.data;
-    if (!Array.isArray(data)) {
-      console.error('[contracts] Unexpected payload shape', {
-        url: CONTRACTS_API,
-        payload: parsed,
-        tookMs: Date.now() - startedAt,
-        stack: new Error().stack,
-      });
-      throw new Error('Resposta inesperada da API de contratos.');
-    }
-
-    return data.map((item, index) => normalizeContract(item, index));
+    const normalizedPayload = normalizeContracts(parsed);
+    return normalizedPayload.map((item, index) => normalizeContract(item, index));
   } catch (error) {
     if (controller.signal.aborted && !didTimeout) {
       throw error;
