@@ -18,6 +18,8 @@ export type Contract = {
   lower_limit_percent?: string | number | null;
   flexibility_percent?: string | number | null;
   average_price_mwh?: string | number | null;
+  supplier?: string | null;
+  proinfa_contribution?: string | number | null;
   spot_price_ref_mwh?: string | number | null;
   compliance_consumption?: string | number | null;
   compliance_nf?: string | number | null;
@@ -76,6 +78,14 @@ function normalizeContract(raw: any, index: number): Contract {
     lower_limit_percent: raw?.lower_limit_percent ?? null,
     flexibility_percent: raw?.flexibility_percent ?? null,
     average_price_mwh: raw?.average_price_mwh ?? null,
+    supplier: raw?.supplier != null
+      ? toString(raw?.supplier)
+      : raw?.fornecedor != null
+      ? toString(raw?.fornecedor)
+      : raw?.supplier_name != null
+      ? toString(raw?.supplier_name)
+      : null,
+    proinfa_contribution: raw?.proinfa_contribution ?? raw?.proinfa ?? null,
     spot_price_ref_mwh: raw?.spot_price_ref_mwh ?? null,
     compliance_consumption: raw?.compliance_consumption ?? null,
     compliance_nf: raw?.compliance_nf ?? null,
@@ -193,13 +203,31 @@ export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
 export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'>;
 
 export async function createContract(payload: CreateContractPayload): Promise<Contract> {
+  const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier ?? null;
+  const proinfaValueRaw = payload.proinfa_contribution;
+  let proinfaValue: number | null;
+  if (proinfaValueRaw === undefined || proinfaValueRaw === null || proinfaValueRaw === '') {
+    proinfaValue = null;
+  } else if (typeof proinfaValueRaw === 'string') {
+    const parsed = Number(proinfaValueRaw.replace(',', '.'));
+    proinfaValue = Number.isNaN(parsed) ? null : parsed;
+  } else {
+    proinfaValue = Number.isFinite(proinfaValueRaw) ? proinfaValueRaw : null;
+  }
+
+  const { spot_price_ref_mwh: _omitSpotPrice, ...restPayload } = payload as CreateContractPayload & {
+    spot_price_ref_mwh?: unknown;
+  };
+
   const response = await fetch(`${CONTRACTS_API}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      ...payload,
+      ...restPayload,
+      supplier: supplierValue === '' ? null : supplierValue,
+      proinfa_contribution: proinfaValue,
       groupName: typeof payload.groupName === 'string' && payload.groupName.trim()
         ? payload.groupName
         : 'default',
