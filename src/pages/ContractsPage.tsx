@@ -4,7 +4,6 @@ import { Contract, createContract } from '../services/contracts';
 
 type FormState = {
   contract_code: string;
-  client_id: string;
   client_name: string;
   cnpj: string;
   segment: string;
@@ -20,7 +19,6 @@ type FormState = {
 
 const initialFormState: FormState = {
   contract_code: '',
-  client_id: '',
   client_name: '',
   cnpj: '',
   segment: '',
@@ -176,6 +174,7 @@ export default function ContractsPage() {
     try {
       const payload = {
         ...form,
+        groupName: 'default',
         start_date: ensureIsoDate(form.start_date),
         end_date: ensureIsoDate(form.end_date),
       };
@@ -205,16 +204,6 @@ export default function ContractsPage() {
               onChange={handleFormChange('contract_code')}
               className="border rounded px-2 py-1"
               placeholder="CTR-2024-..."
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span>Cliente (ID)</span>
-            <input
-              required
-              value={form.client_id}
-              onChange={handleFormChange('client_id')}
-              className="border rounded px-2 py-1"
-              placeholder="UUID"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">

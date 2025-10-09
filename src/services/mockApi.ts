@@ -18,6 +18,7 @@ const mockContracts: Contract[] = Array.from({ length: 20 }).map((_, i) => {
     contract_code: `CTR-2024-${String(i + 1).padStart(3, '0')}`,
     client_id: randomId,
     client_name: `Cliente ${i + 1}`,
+    groupName: 'default',
     cnpj: `00.000.000/000${i % 10}-0${i % 10}`,
     segment: i % 2 === 0 ? 'Comercial' : 'Industrial',
     contact_responsible: i % 2 === 0 ? 'Maria Silva' : 'João Souza',

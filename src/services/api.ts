@@ -87,8 +87,9 @@ export type ContractsQuery = {
 export type Contract = {
   id: string;
   contract_code: string;
-  client_id: string;
   client_name: string;
+  client_id?: string;
+  groupName?: string;
   cnpj: string;
   segment: string;
   contact_responsible: string;
