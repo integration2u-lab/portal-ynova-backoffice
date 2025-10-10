@@ -739,6 +739,11 @@ export default function SimulationPage() {
     if (!file) return;
 
     setArquivo(file);
+    setSimulationData(null);
+    setModoEdicao(false);
+    setTarifaTab('atual');
+    setDemandaTab('atual');
+    setPossuiGeracaoSolar('Não');
 
     // Simulação de extração automática
     setTimeout(() => {
@@ -775,6 +780,16 @@ export default function SimulationPage() {
     setEtapa('proposta');
   };
 
+  const handleReset = () => {
+    setArquivo(null);
+    setSimulationData(null);
+    setEtapa('upload');
+    setModoEdicao(false);
+    setTarifaTab('atual');
+    setDemandaTab('atual');
+    setPossuiGeracaoSolar('Não');
+  };
+
   const steps = useMemo(
     () => [
       { id: 'upload' as Etapa, label: 'Upload de Dados' },
@@ -800,6 +815,22 @@ export default function SimulationPage() {
       ? simulationData.demanda_proposta_verde
       : simulationData.demanda_proposta_azul
     : null;
+
+  const canProceedToSimulation = useMemo(() => {
+    if (!simulationData) {
+      return false;
+    }
+
+    const { cliente } = simulationData;
+    const camposObrigatoriosPreenchidos =
+      cliente.nome.trim().length > 0 &&
+      cliente.distribuidora.trim().length > 0 &&
+      cliente.modalidade.trim().length > 0 &&
+      Number.isFinite(cliente.demanda_contratada_kW) &&
+      cliente.demanda_contratada_kW > 0;
+
+    return camposObrigatoriosPreenchidos;
+  }, [simulationData]);
 
   return (
     <div className="space-y-6">
@@ -1021,7 +1052,11 @@ export default function SimulationPage() {
 
                 <div className="mt-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
                   <AlertCircle size={18} />
-                  <p>Confirme os campos obrigatórios antes de avançar para a simulação.</p>
+                  <p>
+                    {canProceedToSimulation
+                      ? 'Todos os campos obrigatórios estão preenchidos. Você pode avançar para a simulação.'
+                      : 'Revise os campos obrigatórios (*) antes de avançar para a simulação.'}
+                  </p>
                 </div>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
@@ -1448,14 +1483,19 @@ export default function SimulationPage() {
                 >
                   Voltar
                 </button>
-                <button
-                  type="button"
-                  onClick={calcularSimulacao}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-yn-orange px-5 py-2 text-sm font-semibold text-white transition hover:bg-yn-orange/90"
-                >
-                  <Calculator size={18} />
-                  Calcular simulação
-                </button>
+              <button
+                type="button"
+                onClick={calcularSimulacao}
+                disabled={!canProceedToSimulation}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition ${
+                  canProceedToSimulation
+                    ? 'bg-yn-orange text-white hover:bg-yn-orange/90'
+                    : 'cursor-not-allowed bg-gray-200 text-gray-500'
+                }`}
+              >
+                <Calculator size={18} />
+                Calcular simulação
+              </button>
               </div>
             </>
           )}
@@ -1562,12 +1602,7 @@ export default function SimulationPage() {
 
           <button
             type="button"
-            onClick={() => {
-              setArquivo(null);
-              setSimulationData(null);
-              setEtapa('upload');
-              setModoEdicao(false);
-            }}
+            onClick={handleReset}
             className="mt-6 text-sm font-medium text-gray-600 underline transition hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
           >
             Iniciar nova simulação
