@@ -116,6 +116,20 @@ export type Contract = {
   updated_at: string;
 };
 
+export type ContractSummary = {
+  id: string;
+  cliente: string;
+  cnpj: string;
+  uc: string;
+  status: 'ativo' | 'inativo' | 'pendente';
+  ciclo: string;
+  energiaContratadaMWh: number;
+  energiaUtilizadaMWh: number;
+  flexibilidadePct: number;
+  excedenteMWh: number;
+  custoExtra: number;
+};
+
 const toNumber = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : fallback;
