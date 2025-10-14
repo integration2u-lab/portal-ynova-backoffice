@@ -136,6 +136,7 @@ export default function InvoiceProcessingPage() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isPolling, setIsPolling] = useState(false);
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -147,14 +148,18 @@ export default function InvoiceProcessingPage() {
     return order.indexOf(etapa);
   }, [etapa]);
 
-  // Cleanup polling on unmount
+  // Cleanup polling and Object URLs on unmount
   useEffect(() => {
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
+      // Clean up Object URL to prevent memory leaks
+      if (pdfObjectUrl) {
+        URL.revokeObjectURL(pdfObjectUrl);
+      }
     };
-  }, []);
+  }, [pdfObjectUrl]);
 
   // Elapsed time counter
   useEffect(() => {
@@ -192,6 +197,10 @@ export default function InvoiceProcessingPage() {
     });
   };
 
+  const createObjectUrl = (file: File): string => {
+    return URL.createObjectURL(file);
+  };
+
   const processFile = async (file: File) => {
     // Prevent multiple simultaneous uploads
     if (isUploading) {
@@ -222,9 +231,16 @@ export default function InvoiceProcessingPage() {
       // Convert file to base64 for API
       const base64File = await convertFileToBase64(file);
       
-      // Convert file to data URL for PDF viewer
-      const dataUrl = await convertFileToDataUrl(file);
-      setPdfDataUrl(dataUrl);
+      // For PDF viewer, use Object URL for larger files (>1MB) to avoid memory issues
+      if (file.size > 1024 * 1024) { // 1MB threshold
+        const objectUrl = createObjectUrl(file);
+        setPdfObjectUrl(objectUrl);
+        setPdfDataUrl(null);
+      } else {
+        const dataUrl = await convertFileToDataUrl(file);
+        setPdfDataUrl(dataUrl);
+        setPdfObjectUrl(null);
+      }
 
       // Prepare request payload
       const payload = {
@@ -360,6 +376,13 @@ export default function InvoiceProcessingPage() {
     setIsUploading(false);
     setIsPolling(false);
     setPdfDataUrl(null);
+    
+    // Clean up Object URL to prevent memory leaks
+    if (pdfObjectUrl) {
+      URL.revokeObjectURL(pdfObjectUrl);
+      setPdfObjectUrl(null);
+    }
+    
     setIsDragOver(false);
     setIsSidebarCollapsed(false);
     
@@ -386,7 +409,7 @@ export default function InvoiceProcessingPage() {
   );
 
   return (
-    <div className={`space-y-6 transition-all duration-300 ${isSidebarCollapsed ? 'ml-0' : ''}`}>
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Análise de Fatura</h1>
@@ -636,12 +659,12 @@ export default function InvoiceProcessingPage() {
               </div>
               <div className={`w-full ${
                 isSidebarCollapsed 
-                  ? 'h-[calc(100vh-200px)]' 
-                  : 'h-[calc(100vh-400px)]'
+                  ? 'h-[calc(100vh-120px)]' 
+                  : 'h-[calc(100vh-300px)]'
               }`}>
-                {pdfDataUrl ? (
+                {(pdfDataUrl || pdfObjectUrl) ? (
                   <iframe
-                    src={pdfDataUrl}
+                    src={pdfDataUrl || pdfObjectUrl || ''}
                     className="w-full h-full rounded-lg border border-gray-200 dark:border-[#2b3238]"
                     title="Fatura PDF"
                   />

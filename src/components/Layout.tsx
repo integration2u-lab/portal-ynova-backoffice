@@ -39,10 +39,15 @@ interface LayoutProps {
   toggleTheme: () => void;
 }
 
+interface LayoutState {
+  isSidebarCollapsed: boolean;
+}
+
 export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,11 +74,19 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
         className="sticky top-0 z-50 h-16 bg-yn-orange text-white shadow-sm px-4 md:px-6"
       >
         <div className="flex items-center justify-between h-full">
-        <Link
-            to="/dashboard"
-            aria-label="Ir para a pÃ¡gina inicial"
-            className="flex items-center gap-2"
-          >
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              aria-label="Toggle sidebar"
+            >
+              <Menu size={20} />
+            </button>
+            <Link
+              to="/dashboard"
+              aria-label="Ir para a página inicial"
+              className="flex items-center gap-2"
+            >
             {logoError ? (
               <span className="font-semibold text-white">YNOVA</span>
             ) : (
@@ -85,7 +98,8 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                 onError={() => setLogoError(true)}
               />
             )}
-          </Link>
+            </Link>
+          </div>
           <div className="flex items-center gap-3">
             <div className="relative" ref={notifRef}>
               <button
@@ -139,7 +153,9 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
       </header>
 
       <div className="flex">
-        <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 md:top-16">
+        <aside className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 md:top-16 transition-all duration-300 ${
+          isSidebarCollapsed ? 'md:w-20' : 'md:w-64'
+        }`}>
           <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#1a1f24] border-r border-gray-200 dark:border-[#2b3238]">
             <nav className="flex-1 px-4 py-4 space-y-1">
               {navigation.map((item) => {
@@ -155,9 +171,10 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
                       }`
                     }
+                    title={isSidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon size={20} className="mr-3" />
-                    {item.label}
+                    <Icon size={28} className={isSidebarCollapsed ? '' : 'mr-3'} />
+                    {!isSidebarCollapsed && item.label}
                   </NavLink>
                 );
               })}
@@ -166,9 +183,10 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                title={isSidebarCollapsed ? 'Sair' : undefined}
               >
-                <LogOut size={20} className="mr-3" />
-                Sair
+                <LogOut size={28} className={isSidebarCollapsed ? '' : 'mr-3'} />
+                {!isSidebarCollapsed && 'Sair'}
               </button>
             </div>
           </div>
@@ -218,7 +236,9 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
           </div>
         )}
 
-        <main className="flex-1 md:ml-64">
+        <main className={`flex-1 transition-all duration-300 ${
+          isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'
+        }`}>
           <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 overflow-x-hidden py-4 sm:py-6 lg:py-8">
             <Outlet />
           </div>
