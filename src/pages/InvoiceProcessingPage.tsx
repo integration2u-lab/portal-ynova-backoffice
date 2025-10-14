@@ -137,6 +137,7 @@ export default function InvoiceProcessingPage() {
   const [isPolling, setIsPolling] = useState(false);
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -360,6 +361,7 @@ export default function InvoiceProcessingPage() {
     setIsPolling(false);
     setPdfDataUrl(null);
     setIsDragOver(false);
+    setIsSidebarCollapsed(false);
     
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -384,7 +386,7 @@ export default function InvoiceProcessingPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 transition-all duration-300 ${isSidebarCollapsed ? 'ml-0' : ''}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Análise de Fatura</h1>
@@ -392,14 +394,35 @@ export default function InvoiceProcessingPage() {
             Envie uma fatura de energia em PDF para extração automática de dados.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#2b3238] dark:text-gray-200 dark:hover:bg-[#111418]"
-        >
-          <RefreshCw size={18} />
-          Nova fatura
-        </button>
+        <div className="flex gap-2">
+          {etapa === 'dados' && (
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#2b3238] dark:text-gray-200 dark:hover:bg-[#111418]"
+            >
+              {isSidebarCollapsed ? (
+                <>
+                  <Eye size={18} />
+                  Mostrar dados
+                </>
+              ) : (
+                <>
+                  <Eye size={18} />
+                  Ocultar dados
+                </>
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-[#2b3238] dark:text-gray-200 dark:hover:bg-[#111418]"
+          >
+            <RefreshCw size={18} />
+            Nova fatura
+          </button>
+        </div>
       </div>
 
       <nav aria-label="Etapas do processamento" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
@@ -598,278 +621,290 @@ export default function InvoiceProcessingPage() {
             )}
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-             {/* PDF Viewer */}
-             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-               <div className="flex items-center gap-2 mb-4">
-                 <Eye size={20} className="text-yn-orange" />
-                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Fatura Original</h3>
-               </div>
-               <div className="aspect-[3/4] w-full">
-                 {pdfDataUrl ? (
-                   <iframe
-                     src={pdfDataUrl}
-                     className="w-full h-full rounded-lg border border-gray-200 dark:border-[#2b3238]"
-                     title="Fatura PDF"
-                   />
-                 ) : (
-                   <div className="w-full h-full bg-gray-50 dark:bg-[#111418] rounded-lg border border-gray-200 dark:border-[#2b3238] flex items-center justify-center">
-                     <div className="text-center p-8">
-                       <FileText size={48} className="mx-auto text-gray-400 dark:text-gray-500 mb-4" />
-                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                         Carregando PDF...
-                       </p>
-                     </div>
-                   </div>
-                 )}
-               </div>
-             </div>
-
-            {/* Extracted Data */}
-            <div className="space-y-6">
-              {/* Customer Information */}
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Informações do Cliente</h3>
-                <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Nome:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.nome_cliente}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Documento:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.documento_cliente}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Código do Cliente:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.codigo_cliente || '-'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Endereço:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100 text-right">
-                      {processingStatus.extracted_data.address}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Bairro:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.neighborhood}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Cidade/Estado:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.city}/{processingStatus.extracted_data.state}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">CEP:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.zip_code}
-                    </dd>
-                  </div>
-                </dl>
+          <div className={`grid gap-6 transition-all duration-300 ${
+            isSidebarCollapsed 
+              ? 'lg:grid-cols-1' 
+              : 'lg:grid-cols-2'
+          }`}>
+            {/* PDF Viewer */}
+            <div className={`rounded-xl border border-gray-200 bg-white shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24] ${
+              isSidebarCollapsed ? 'p-2' : 'p-6'
+            }`}>
+              <div className="flex items-center gap-2 mb-4">
+                <Eye size={20} className="text-yn-orange" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Fatura Original</h3>
               </div>
-
-              {/* Invoice Information */}
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Informações da Fatura</h3>
-                <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Período:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.periodo_fatura}
-                    </dd>
+              <div className={`w-full ${
+                isSidebarCollapsed 
+                  ? 'h-[calc(100vh-200px)]' 
+                  : 'h-[calc(100vh-400px)]'
+              }`}>
+                {pdfDataUrl ? (
+                  <iframe
+                    src={pdfDataUrl}
+                    className="w-full h-full rounded-lg border border-gray-200 dark:border-[#2b3238]"
+                    title="Fatura PDF"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-50 dark:bg-[#111418] rounded-lg border border-gray-200 dark:border-[#2b3238] flex items-center justify-center">
+                    <div className="text-center p-8">
+                      <FileText size={48} className="mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                        Carregando PDF...
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Vencimento:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.data_vencimento}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Valor da Fatura:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {formatCurrency(processingStatus.extracted_data.valor_fatura)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Modalidade:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.modalidade_tarifaria}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Bandeira:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.bandeira_tarifaria}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Distribuidora:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100 text-right">
-                      {processingStatus.extracted_data.distribuidora}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Código Instalação:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.codigo_instalacao}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Subgrupo:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.subgrupo}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Demanda Contratada FP:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {formatNumber(processingStatus.extracted_data.demanda_contratada_fora_ponta)} kW
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-600 dark:text-gray-300">Demanda Contratada P:</dt>
-                    <dd className="font-semibold text-gray-900 dark:text-gray-100">
-                      {processingStatus.extracted_data.demanda_contratada_ponta 
-                        ? `${formatNumber(processingStatus.extracted_data.demanda_contratada_ponta)} kW`
-                        : '-'
-                      }
-                    </dd>
-                  </div>
-                </dl>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* Taxes Table */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Tributos</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
-                  <tr>
-                    <th className="px-4 py-3">Tipo de Tributo</th>
-                    <th className="px-4 py-3 text-right">Alíquota (%)</th>
-                    <th className="px-4 py-3 text-right">Valor (R$)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
-                  <tr>
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">ICMS</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                      {formatNumber(processingStatus.extracted_data.tributos.icms.aliquota, {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1,
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
-                      {formatCurrency(processingStatus.extracted_data.tributos.icms.valor)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">PIS</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                      {formatNumber(processingStatus.extracted_data.tributos.pis.aliquota, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 4,
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
-                      {formatCurrency(processingStatus.extracted_data.tributos.pis.valor)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">COFINS</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                      {formatNumber(processingStatus.extracted_data.tributos.cofins.aliquota, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 4,
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
-                      {formatCurrency(processingStatus.extracted_data.tributos.cofins.valor)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+            {/* Extracted Data and Tables - Only show when sidebar is not collapsed */}
+            {!isSidebarCollapsed && (
+              <div className="space-y-6">
+                {/* Customer Information */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Informações do Cliente</h3>
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Nome:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.nome_cliente}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Documento:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.documento_cliente}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Código do Cliente:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.codigo_cliente || '-'}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Endereço:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100 text-right">
+                        {processingStatus.extracted_data.address}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Bairro:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.neighborhood}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Cidade/Estado:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.city}/{processingStatus.extracted_data.state}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">CEP:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.zip_code}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
 
-          {/* Consumption History Table */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Histórico de Consumo</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
-                  <tr>
-                    <th className="px-4 py-3">Mês</th>
-                    <th className="px-4 py-3 text-right">Consumo Ponta (kWh)</th>
-                    <th className="px-4 py-3 text-right">Consumo Fora Ponta (kWh)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
-                   {processingStatus.extracted_data.historico_consumo.map((item, index) => (
-                     <tr key={index} className="hover:bg-gray-50/70 dark:hover:bg-[#111418]">
-                       <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
-                         {item.mes}
-                       </td>
-                       <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                         {formatNumber(Math.floor(item.consumo_ponta_kwh), {
-                           maximumFractionDigits: 0,
-                         })}
-                       </td>
-                       <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                         {formatNumber(Math.floor(item.consumo_fora_ponta_kwh), {
-                           maximumFractionDigits: 0,
-                         })}
-                       </td>
-                     </tr>
-                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                {/* Invoice Information */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Informações da Fatura</h3>
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Período:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.periodo_fatura}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Vencimento:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.data_vencimento}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Valor da Fatura:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {formatCurrency(processingStatus.extracted_data.valor_fatura)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Modalidade:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.modalidade_tarifaria}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Bandeira:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.bandeira_tarifaria}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Distribuidora:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100 text-right">
+                        {processingStatus.extracted_data.distribuidora}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Código Instalação:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.codigo_instalacao}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Subgrupo:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.subgrupo}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Demanda Contratada FP:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {formatNumber(processingStatus.extracted_data.demanda_contratada_fora_ponta)} kW
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Demanda Contratada P:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                        {processingStatus.extracted_data.demanda_contratada_ponta 
+                          ? `${formatNumber(processingStatus.extracted_data.demanda_contratada_ponta)} kW`
+                          : '-'
+                        }
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
 
-          {/* Demand History Table */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Histórico de Demanda</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
-                <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
-                  <tr>
-                    <th className="px-4 py-3">Mês</th>
-                    <th className="px-4 py-3 text-right">Demanda Ponta (kW)</th>
-                    <th className="px-4 py-3 text-right">Demanda Fora Ponta (kW)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
-                   {processingStatus.extracted_data.historico_demanda.map((item, index) => (
-                     <tr key={index} className="hover:bg-gray-50/70 dark:hover:bg-[#111418]">
-                       <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
-                         {item.mes}
-                       </td>
-                       <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                         {formatNumber(Math.floor(item.demanda_ponta_kw), {
-                           maximumFractionDigits: 0,
-                         })}
-                       </td>
-                       <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                         {formatNumber(Math.floor(item.demanda_fora_ponta_kw), {
-                           maximumFractionDigits: 0,
-                         })}
-                       </td>
-                     </tr>
-                   ))}
-                </tbody>
-              </table>
-            </div>
+                {/* Taxes Table */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Tributos</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
+                      <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3">Tipo de Tributo</th>
+                          <th className="px-4 py-3 text-right">Alíquota (%)</th>
+                          <th className="px-4 py-3 text-right">Valor (R$)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
+                        <tr>
+                          <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">ICMS</td>
+                          <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                            {formatNumber(processingStatus.extracted_data.tributos.icms.aliquota, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
+                            {formatCurrency(processingStatus.extracted_data.tributos.icms.valor)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">PIS</td>
+                          <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                            {formatNumber(processingStatus.extracted_data.tributos.pis.aliquota, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 4,
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
+                            {formatCurrency(processingStatus.extracted_data.tributos.pis.valor)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">COFINS</td>
+                          <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                            {formatNumber(processingStatus.extracted_data.tributos.cofins.aliquota, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 4,
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-gray-100">
+                            {formatCurrency(processingStatus.extracted_data.tributos.cofins.valor)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Consumption History Table */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Histórico de Consumo</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
+                      <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3">Mês</th>
+                          <th className="px-4 py-3 text-right">Consumo Ponta (kWh)</th>
+                          <th className="px-4 py-3 text-right">Consumo Fora Ponta (kWh)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
+                        {processingStatus.extracted_data.historico_consumo.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50/70 dark:hover:bg-[#111418]">
+                            <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
+                              {item.mes}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(Math.floor(item.consumo_ponta_kwh), {
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(Math.floor(item.consumo_fora_ponta_kwh), {
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Demand History Table */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Histórico de Demanda</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
+                      <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3">Mês</th>
+                          <th className="px-4 py-3 text-right">Demanda Ponta (kW)</th>
+                          <th className="px-4 py-3 text-right">Demanda Fora Ponta (kW)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
+                        {processingStatus.extracted_data.historico_demanda.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50/70 dark:hover:bg-[#111418]">
+                            <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
+                              {item.mes}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(Math.floor(item.demanda_ponta_kw), {
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(Math.floor(item.demanda_fora_ponta_kw), {
+                                maximumFractionDigits: 0,
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}
