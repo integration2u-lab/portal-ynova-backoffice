@@ -41,13 +41,27 @@ describe('DashboardPage', () => {
   });
 
   it('trocar o mês altera os números dos cards', async () => {
+    server.use(
+      http.get('*/api/dashboard/overview', ({ request }) => {
+        const url = new URL(request.url);
+        const mes = url.searchParams.get('mes');
+        const totalContratosAtivos = mes === '2025-08' ? 42 : 10;
+        return HttpResponse.json({
+          totalContratosAtivos,
+          distribuicaoConformidade: { Subutilizado: 2, Conforme: 5, Excedente: 2, Indefinido: 1 },
+          totalOportunidades: 3,
+          totalDivergenciasNF: 2,
+          totalDivergenciasFatura: 1,
+        });
+      })
+    );
+
     renderWithProviders(<DashboardPage />);
     const month = await screen.findByLabelText(/Selecionar mês/i);
     // aguarda primeiro valor
     const kpi = await screen.findByRole('button', { name: /Contratos Ativos/i });
     const firstText = kpi.textContent;
-    await userEvent.clear(month);
-    await userEvent.type(month as HTMLInputElement, '2025-08');
+    await userEvent.type(month as HTMLInputElement, '{Control>}a{/Control}{Backspace}2025-08');
     await waitFor(() => {
       expect(kpi.textContent).not.toEqual(firstText);
     });
