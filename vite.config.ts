@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
@@ -7,8 +7,8 @@ export default defineConfig({
     host: true,
     port: 5173,
     allowedHosts: [
-      'https://657285488d18.ngrok-free.app', // current ngrok tunnel hosts
-      '.ngrok-free.app',
+      'https://api.ynovamarketplace.com.br', 
+      'http://localhost:3000',
     ],
     hmr: {
       clientPort: 443,

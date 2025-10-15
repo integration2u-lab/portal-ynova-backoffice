@@ -59,8 +59,8 @@ export const mockComissoes: DealComissao[] = [
 ];
 
 export const mockUser = {
-  name: 'João Consultor',
-  email: 'joao@ynova.com',
+  name: 'Ynova Parceiro',
+  email: 'parceiro@ynovamarketplace.com.br',
 };
 
 export const mockClientes: Cliente[] = [

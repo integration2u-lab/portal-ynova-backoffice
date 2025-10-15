@@ -6,8 +6,11 @@ const ALLOW_ANY_LOGIN = (() => {
   if (typeof flag === 'string') {
     return flag === 'true';
   }
-  return import.meta.env.PROD;
+  // In development mode, allow any login by default
+  return import.meta.env.DEV;
 })();
+
+console.log('ALLOW_ANY_LOGIN:', ALLOW_ANY_LOGIN, 'DEV:', import.meta.env.DEV);
 
 const STORAGE_KEY = 'ynova.portal.auth.user';
 
@@ -33,7 +36,7 @@ function persistUser(user: AuthUser | null) {
 }
 
 function buildFallbackUser(email: string): AuthUser {
-  const baseEmail = email && email.includes('@') ? email : `${email || 'visitante'}@ynova.local`;
+  const baseEmail = email && email.includes('@') ? email : `${email || 'visitante'}@ynovamarketplace.com.br`;
   const displayName = baseEmail.split('@')[0].replace(/[^a-zA-Z0-9]+/g, ' ').trim() || 'Visitante Ynova';
   return {
     id: `local-${Date.now()}`,
@@ -78,6 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const fallback = loadStoredUser();
         if (fallback) {
           setUser(fallback);
+        } else if (ALLOW_ANY_LOGIN) {
+          // Create a default fallback user when ALLOW_ANY_LOGIN is true
+          const defaultUser = buildFallbackUser('parceiro@ynovamarketplace.com.br');
+          console.log('Creating fallback user:', defaultUser);
+          setUser(defaultUser);
+          persistUser(defaultUser);
         } else {
           setUser(null);
           persistUser(null);

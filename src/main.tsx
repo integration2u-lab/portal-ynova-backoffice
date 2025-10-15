@@ -13,7 +13,8 @@ const client = new QueryClient({
 const ALLOW_ANY_LOGIN = (() => {
   const flag = import.meta.env.VITE_ALLOW_ANY_LOGIN
   if (typeof flag === 'string') return flag === 'true'
-  return import.meta.env.PROD
+  // In development mode, allow any login by default
+  return import.meta.env.DEV
 })()
 
 async function bootstrap() {
