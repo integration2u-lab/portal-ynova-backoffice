@@ -304,13 +304,28 @@ export default function InvoiceProcessingPage() {
     }
 
     const files = e.dataTransfer.files;
+    
+    // Validate that only one file is dropped
+    if (files.length > 1) {
+      setUploadError('Por favor, envie apenas um arquivo PDF por vez.');
+      return;
+    }
+    
     if (files && files[0]) {
       processFile(files[0]);
     }
   };
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = event.target.files;
+    
+    // Validate that only one file is selected
+    if (files && files.length > 1) {
+      setUploadError('Por favor, selecione apenas um arquivo PDF por vez.');
+      return;
+    }
+    
+    const file = files?.[0];
     if (!file) return;
     
     await processFile(file);
@@ -506,7 +521,7 @@ export default function InvoiceProcessingPage() {
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
             {isDragOver 
               ? 'Arquivo detectado! Solte para fazer o upload.' 
-              : 'Arraste e solte o arquivo PDF aqui ou clique no botão abaixo para escolher uma fatura.'
+              : 'Arraste e solte apenas um arquivo PDF ou clique no botão abaixo para escolher uma fatura.'
             }
           </p>
           
