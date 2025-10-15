@@ -659,8 +659,8 @@ export default function InvoiceProcessingPage() {
               </div>
               <div className={`w-full ${
                 isSidebarCollapsed 
-                  ? 'h-[calc(100vh-120px)]' 
-                  : 'h-[calc(100vh-300px)]'
+                  ? 'h-[calc(100vh-40px)]' 
+                  : 'h-[calc(100vh-200px)]'
               }`}>
                 {(pdfDataUrl || pdfObjectUrl) ? (
                   <iframe
