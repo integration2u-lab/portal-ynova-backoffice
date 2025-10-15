@@ -112,22 +112,26 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1f24] border border-gray-200 dark:border-[#2b3238] rounded-lg shadow-lg p-4 text-sm text-gray-700 dark:text-gray-200">
                   <ul className="space-y-2">
-                    <li>Verifique seu e-mail</li>
-                    <li>Nova mensagem da gestÃ£o</li>
-                    <li>Duas reuniÃµes perdidas</li>
+                    <li>Notificações serão exibidas aqui</li>
                   </ul>
                 </div>
               )}
             </div>
-            <label className="hidden">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={theme === 'dark'}
-                onChange={toggleTheme}
-              />
-              <div className="w-11 h-6 bg-white/30 rounded-full peer-focus:outline-none peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white/30"></div>
-            </label>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition-colors"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
             <div className="flex items-center gap-2">
               <div
                 className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center"

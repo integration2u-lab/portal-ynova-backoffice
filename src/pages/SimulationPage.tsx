@@ -891,7 +891,7 @@ export default function SimulationPage() {
           </div>
           <h2 className="mt-6 text-xl font-semibold text-gray-900 dark:text-gray-100">Carregue a planilha de consumo</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-            Arraste e solte o arquivo aqui ou clique no botão abaixo para escolher um arquivo com os últimos 12 meses.
+            Selecione para escolher um arquivo com os dados da simulação.
           </p>
           <label className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-lg bg-yn-orange px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-yn-orange/90">
             <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
