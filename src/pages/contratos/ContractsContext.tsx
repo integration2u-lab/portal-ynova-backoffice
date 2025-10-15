@@ -1,6 +1,13 @@
 import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
 import { mockContracts } from '../../mocks/contracts';
+import {
+  createContract as createContractService,
+  deleteContract as deleteContractService,
+  listContracts as listContractsService,
+  updateContract as updateContractService,
+  type CreateContractPayload,
+} from '../../services/contracts';
 
 const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
 
@@ -792,6 +799,54 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   );
 };
 
+const contractToServicePayload = (contract: ContractMock): CreateContractPayload => {
+  const payload = contractToApiPayload(contract);
+  const record = payload as Record<string, unknown>;
+
+  const pickString = (key: string, fallback = '') => normalizeString(record[key] ?? fallback);
+  const pickNullableValue = (key: string): string | number | null => {
+    const value = record[key];
+    if (value === undefined || value === '') {
+      return null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return value as string | number | null;
+  };
+
+  return {
+    contract_code: pickString('contract_code', contract.codigo || contract.id),
+    client_name: pickString('client_name', contract.cliente),
+    cnpj: pickString('cnpj', contract.cnpj),
+    segment: pickString('segment', contract.segmento),
+    contact_responsible: pickString('contact_responsible', contract.contato),
+    contracted_volume_mwh: record.contracted_volume_mwh ?? null,
+    status: pickString('status', contract.status),
+    energy_source: pickString('energy_source', contract.fonte),
+    contracted_modality: pickString('contracted_modality', contract.modalidade),
+    start_date: pickString('start_date', contract.inicioVigencia),
+    end_date: pickString('end_date', contract.fimVigencia),
+    billing_cycle: pickString('billing_cycle', contract.cicloFaturamento),
+    upper_limit_percent: record.upper_limit_percent ?? null,
+    lower_limit_percent: record.lower_limit_percent ?? null,
+    flexibility_percent: record.flexibility_percent ?? null,
+    average_price_mwh: record.average_price_mwh ?? null,
+    supplier: (record.supplier ?? null) as string | null,
+    proinfa_contribution: record.proinfa_contribution ?? null,
+    groupName: pickString('groupName', 'default') || 'default',
+    spot_price_ref_mwh: record.spot_price_ref_mwh ?? null,
+    compliance_consumption: pickNullableValue('compliance_consumption'),
+    compliance_nf: pickNullableValue('compliance_nf'),
+    compliance_invoice: pickNullableValue('compliance_invoice'),
+    compliance_charges: pickNullableValue('compliance_charges'),
+    compliance_overall: pickNullableValue('compliance_overall'),
+  };
+};
+
 const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => ({
   client: normalizeString(contract.cliente) || contract.id,
   price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio ?? 0,
@@ -840,6 +895,16 @@ const requestContractApi = async (
 };
 
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
+  try {
+    const created = await createContractService(contractToServicePayload(contract));
+    const normalized = normalizeContractsFromApi(created);
+    if (normalized[0]) {
+      return normalized[0];
+    }
+  } catch (serviceError) {
+    console.error('[ContractsContext] Falha ao criar contrato via apiClient.', serviceError);
+  }
+
   const payload = contractToApiPayload(contract);
   const endpoints = buildEndpointCandidates(resolveWriteApiUrl());
   const response = await requestContractApi(endpoints, 'POST', payload);
@@ -851,8 +916,24 @@ const createContractInApi = async (contract: ContractMock): Promise<ContractMock
 };
 
 const updateContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
-  const payload = contractToApiPayload(contract);
   const id = normalizeString(contract.id);
+  if (id) {
+    try {
+      const updated = await updateContractService(id, contractToServicePayload(contract));
+      const normalizedFromService = normalizeContractsFromApi(updated);
+      const match = normalizedFromService.find((item) => item.id === contract.id);
+      if (match) {
+        return match;
+      }
+      if (normalizedFromService[0]) {
+        return normalizedFromService[0];
+      }
+    } catch (serviceError) {
+      console.error('[ContractsContext] Falha ao atualizar contrato via apiClient.', serviceError);
+    }
+  }
+
+  const payload = contractToApiPayload(contract);
   const baseUrl = resolveWriteApiUrl();
   const endpoints = id ? buildResourceEndpointCandidates(baseUrl, id) : buildEndpointCandidates(baseUrl);
   const response = await requestContractApi(endpoints, 'PUT', payload);
@@ -865,6 +946,14 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
 
 const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
   const id = normalizeString(contract.id);
+  if (id) {
+    try {
+      await deleteContractService(id);
+      return;
+    } catch (serviceError) {
+      console.error('[ContractsContext] Falha ao excluir contrato via apiClient.', serviceError);
+    }
+  }
   const baseUrl = resolveWriteApiUrl();
   const endpoints = [
     ...(id ? buildResourceEndpointCandidates(baseUrl, id) : []),
@@ -874,13 +963,33 @@ const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
 };
 
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
+  let lastError: unknown;
+
+  try {
+    const apiContracts = await listContractsService({ signal });
+    const normalized = normalizeContractsFromApi(apiContracts);
+    if (normalized.length) {
+      console.info(
+        `[ContractsContext] Contratos carregados via apiClient: ${normalized.length} itens recebidos.`
+      );
+      return normalized;
+    }
+    console.warn('[ContractsContext] API retornou lista vazia de contratos.');
+    return normalized;
+  } catch (serviceError) {
+    if (signal?.aborted) {
+      throw serviceError;
+    }
+    lastError = serviceError;
+    console.error('[ContractsContext] Falha ao buscar contratos via apiClient.', serviceError);
+  }
+
   const rawUrl = resolveReadApiUrl();
   const endpoints = buildEndpointCandidates(rawUrl);
-  let lastError: unknown;
 
   for (const endpoint of endpoints) {
     try {
-      console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
+      console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET (fallback).`);
 
       const response = await fetch(endpoint, {
         method: 'GET',
@@ -901,7 +1010,7 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
         console.warn('[ContractsContext] API retornou lista vazia de contratos.');
       }
       console.info(
-        `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos.`
+        `[ContractsContext] Contratos carregados com sucesso (fallback): ${contracts.length} itens recebidos.`
       );
       return contracts;
     } catch (error) {
@@ -910,7 +1019,7 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
       }
       lastError = error;
       console.error(
-        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
+        `[ContractsContext] Erro ao buscar contratos em ${endpoint} (fallback).`,
         error instanceof Error ? error : new Error(String(error))
       );
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
