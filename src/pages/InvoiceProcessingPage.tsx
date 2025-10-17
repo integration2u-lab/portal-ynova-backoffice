@@ -35,6 +35,12 @@ type HistoricoDemanda = {
   demanda_fora_ponta_kw: number;
 };
 
+type HistoricoEnergiaReativa = {
+  mes: string;
+  energia_reativa_ponta_kvarh: number;
+  energia_reativa_fora_ponta_kvarh: number;
+};
+
 type ExtractedData = {
   modalidade_tarifaria: string;
   address: string;
@@ -53,10 +59,13 @@ type ExtractedData = {
   zip_code: string;
   historico_consumo: HistoricoConsumo[];
   historico_demanda: HistoricoDemanda[];
+  historico_energia_reativa: HistoricoEnergiaReativa[];
+  incentivo_irrigacao: boolean;
+  investimento_adequacao_solar: boolean;
   subgrupo: string;
   distribuidora: string;
   periodo_fatura: string;
-  bandeira_tarifaria: string;
+  bandeira_tarifaria: string | null;
   neighborhood: string;
   state: string;
   demanda_contratada_fora_ponta: number;
@@ -705,7 +714,10 @@ export default function InvoiceProcessingPage() {
                   <dl className="space-y-3 text-sm">
                     <div className="flex justify-between">
                       <dt className="text-gray-600 dark:text-gray-300">Nome:</dt>
-                      <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                      <dd 
+                        className="font-semibold text-gray-900 dark:text-gray-100 truncate max-w-[400px] cursor-help" 
+                        title={processingStatus.extracted_data.nome_cliente}
+                      >
                         {processingStatus.extracted_data.nome_cliente}
                       </dd>
                     </div>
@@ -723,7 +735,10 @@ export default function InvoiceProcessingPage() {
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-gray-600 dark:text-gray-300">Endereço:</dt>
-                      <dd className="font-semibold text-gray-900 dark:text-gray-100 text-right">
+                      <dd 
+                        className="font-semibold text-gray-900 dark:text-gray-100 text-right truncate max-w-[400px] cursor-help" 
+                        title={processingStatus.extracted_data.address}
+                      >
                         {processingStatus.extracted_data.address}
                       </dd>
                     </div>
@@ -813,6 +828,24 @@ export default function InvoiceProcessingPage() {
                           ? `${formatNumber(processingStatus.extracted_data.demanda_contratada_ponta)} kW`
                           : '-'
                         }
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Incentivo Irrigante:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${
+                          processingStatus.extracted_data.incentivo_irrigacao ? 'bg-green-500' : 'bg-gray-500'
+                        }`} />
+                        <span className="w-6 text-right">{processingStatus.extracted_data.incentivo_irrigacao ? 'Sim' : 'Não'}</span>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-gray-300">Investimento Adequação Solar:</dt>
+                      <dd className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${
+                          processingStatus.extracted_data.investimento_adequacao_solar ? 'bg-yellow-500' : 'bg-gray-500'
+                        }`} />
+                        <span className="w-6 text-right">{processingStatus.extracted_data.investimento_adequacao_solar ? 'Sim' : 'Não'}</span>
                       </dd>
                     </div>
                   </dl>
@@ -933,6 +966,43 @@ export default function InvoiceProcessingPage() {
                             <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
                               {formatNumber(Math.floor(item.demanda_fora_ponta_kw), {
                                 maximumFractionDigits: 0,
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Reactive Energy History Table */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Histórico de Energia Reativa</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-[#2b3238]">
+                      <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-[#1a1f24] dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3">Mês</th>
+                          <th className="px-4 py-3 text-right">Energia Reativa Ponta (kvarh)</th>
+                          <th className="px-4 py-3 text-right">Energia Reativa Fora Ponta (kvarh)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-[#2b3238]">
+                        {processingStatus.extracted_data.historico_energia_reativa.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50/70 dark:hover:bg-[#111418]">
+                            <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
+                              {item.mes}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(item.energia_reativa_ponta_kvarh, {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
+                              {formatNumber(item.energia_reativa_fora_ponta_kvarh, {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
                               })}
                             </td>
                           </tr>
