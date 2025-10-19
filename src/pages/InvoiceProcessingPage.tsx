@@ -994,15 +994,13 @@ export default function InvoiceProcessingPage() {
                               {item.mes}
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                              {formatNumber(item.energia_reativa_ponta_kvarh, {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
+                              {formatNumber(Math.floor(item.energia_reativa_ponta_kvarh), {
+                                maximumFractionDigits: 0,
                               })}
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">
-                              {formatNumber(item.energia_reativa_fora_ponta_kvarh, {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
+                              {formatNumber(Math.floor(item.energia_reativa_fora_ponta_kvarh), {
+                                maximumFractionDigits: 0,
                               })}
                             </td>
                           </tr>
