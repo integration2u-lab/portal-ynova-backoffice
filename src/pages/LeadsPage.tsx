@@ -130,12 +130,12 @@ export default function LeadsPage() {
                     <table className="w-full table-auto min-w-[720px] divide-y divide-gray-200 dark:divide-[#1E1E1E]">
                       <thead className="bg-gray-50 dark:bg-[#3E3E3E]">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Empresa</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">CNPJ</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Segmento</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status Funil</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Migração</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Ações</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">Empresa</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">CNPJ</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">Segmento</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">Status Funil</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">Migração</th>
+                          <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-white uppercase tracking-wider">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-[#3E3E3E] divide-y divide-gray-200 dark:divide-[#1E1E1E]">
@@ -146,18 +146,18 @@ export default function LeadsPage() {
                           >
                             <td className="px-6 py-4 whitespace-normal break-words truncate">
                               <div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words truncate">
+                                <div className="text-sm font-bold text-gray-900 dark:text-white whitespace-normal break-words truncate">
                                   {lead.nome}
                                 </div>
-                                <div className="text-sm text-gray-500 dark:text-gray-300 whitespace-normal break-words truncate">
+                                <div className="text-sm font-bold text-gray-500 dark:text-white whitespace-normal break-words truncate">
                                   {lead.contato}
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-normal break-words truncate text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-6 py-4 whitespace-normal break-words truncate text-sm font-bold text-gray-900 dark:text-white">
                               {lead.cnpj}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">
                               {lead.segmento}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -173,11 +173,11 @@ export default function LeadsPage() {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => setSelectedLead(lead)}
-                          className="text-yn-orange hover:text-yn-orange/80"
+                          className="text-yn-orange hover:text-yn-orange/80 font-bold"
                                 >
                                   Abrir
                                 </button>
-                                <button className="text-blue-600 hover:text-blue-900">
+                                <button className="text-blue-600 hover:text-blue-900 font-bold">
                                   Solicitar fatura
                                 </button>
                                 <button
@@ -195,13 +195,13 @@ export default function LeadsPage() {
                               {openMenuId === lead.id && (
                                 <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-[#3E3E3E] border border-gray-200 dark:border-[#1E1E1E] rounded-md shadow-lg z-10">
                                   <button
-                                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-[#1E1E1E]"
+                                    className="block w-full text-left px-4 py-2 text-sm font-bold text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-[#1E1E1E]"
                                     onClick={() => setOpenMenuId(null)}
                                   >
                                     Editar
                                   </button>
                                   <button
-                                    className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-500 hover:bg-gray-100 dark:hover:bg-[#1E1E1E]"
+                                    className="block w-full text-left px-4 py-2 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-[#1E1E1E]"
                                     onClick={() => {
                                       setLeadToDelete(lead);
                                       setIsDeleteOpen(true);
@@ -255,27 +255,27 @@ export default function LeadsPage() {
         <button onClick={() => setSelectedLead(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-[#1E1E1E] rounded-lg" aria-label="Voltar">
           ←
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{selectedLead.nome}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{selectedLead.nome}</h1>
       </div>
 
       <div className="bg-white dark:bg-[#3E3E3E] rounded-lg p-6 shadow-sm border border-gray-200 dark:border-[#1E1E1E]">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div>
-            <label className="text-sm text-gray-600 dark:text-gray-300">CNPJ</label>
-            <p className="font-medium text-gray-900 dark:text-gray-100">{selectedLead.cnpj}</p>
+            <label className="text-sm font-bold text-gray-600 dark:text-white">CNPJ</label>
+            <p className="font-bold text-gray-900 dark:text-white">{selectedLead.cnpj}</p>
           </div>
           <div>
-            <label className="text-sm text-gray-600 dark:text-gray-300">Contato</label>
-            <p className="font-medium text-gray-900 dark:text-gray-100">{selectedLead.contato}</p>
+            <label className="text-sm font-bold text-gray-600 dark:text-white">Contato</label>
+            <p className="font-bold text-gray-900 dark:text-white">{selectedLead.contato}</p>
           </div>
           <div>
-            <label className="text-sm text-gray-600 dark:text-gray-300">Status Funil</label>
+            <label className="text-sm font-bold text-gray-600 dark:text-white">Status Funil</label>
             <div className="mt-1">
               <StatusBadge status={selectedLead.statusFunil} type="funil" />
             </div>
           </div>
           <div>
-            <label className="text-sm text-gray-600 dark:text-gray-300">Status Migração</label>
+            <label className="text-sm font-bold text-gray-600 dark:text-white">Status Migração</label>
             <div className="mt-1">
               <StatusBadge status={selectedLead.statusMigracao} type="migracao" />
             </div>

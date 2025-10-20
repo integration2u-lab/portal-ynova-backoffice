@@ -71,8 +71,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato }) => {
               key={item.label}
               className="rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm shadow-sm transition hover:border-yn-orange/60 hover:shadow"
             >
-              <div className="text-gray-500">{item.label}</div>
-              <div className="mt-2 text-lg font-semibold text-gray-900">{item.value}</div>
+              <div className="font-bold text-gray-500">{item.label}</div>
+              <div className="mt-2 text-lg font-bold text-gray-900">{item.value}</div>
               <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                 {item.helper && <span>{item.helper}</span>}
                 {item.variation && (
@@ -95,8 +95,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato }) => {
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
           {contrato.dadosContrato.map((field) => (
             <div key={field.label} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{field.label}</dt>
-              <dd className="mt-1 text-sm font-semibold text-gray-900">{field.value}</dd>
+              <dt className="text-xs font-bold uppercase tracking-wide text-gray-500">{field.label}</dt>
+              <dd className="mt-1 text-sm font-bold text-gray-900">{field.value}</dd>
             </div>
           ))}
         </dl>
@@ -170,7 +170,7 @@ export const ContractDetail: React.FC<Props> = ({ contrato }) => {
             <tbody className="divide-y divide-gray-100 bg-white">
               {contrato.obrigacoes.map((linha) => (
                 <tr key={linha.periodo} className="hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-3 py-2 text-sm font-medium text-gray-900">{linha.periodo}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-sm font-bold text-gray-900">{linha.periodo}</td>
                   {obrigacaoColunas.slice(1).map((col) => (
                     <td key={col} className="px-3 py-2">
                       <StatusBadge status={linha.status[col]} />
@@ -192,15 +192,15 @@ export const ContractDetail: React.FC<Props> = ({ contrato }) => {
         <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
           {contrato.analises.map((area) => (
             <div key={area.area} className="rounded-lg border border-gray-100 bg-gray-50 p-4 shadow-sm">
-              <div className="mb-3 text-sm font-semibold text-gray-900">{area.area}</div>
-              <ol className="space-y-2 text-xs text-gray-600">
+              <div className="mb-3 text-sm font-bold text-gray-900">{area.area}</div>
+              <ol className="space-y-2 text-xs font-bold text-gray-600">
                 {area.etapas.map((etapa) => (
                   <li key={etapa.nome} className="flex items-center justify-between gap-4 rounded-md bg-white px-3 py-2 shadow-sm">
                     <div className="flex items-center gap-2">
                       <span className={`inline-block h-2.5 w-2.5 rounded-full ${analiseStyles[etapa.status]}`} aria-hidden />
-                      <span className="font-medium text-gray-800">{etapa.nome}</span>
+                      <span className="font-bold text-gray-800">{etapa.nome}</span>
                     </div>
-                    {etapa.observacao && <span className="text-[11px] text-gray-500">{etapa.observacao}</span>}
+                    {etapa.observacao && <span className="text-[11px] font-bold text-gray-500">{etapa.observacao}</span>}
                   </li>
                 ))}
               </ol>

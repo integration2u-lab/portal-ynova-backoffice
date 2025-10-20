@@ -42,14 +42,14 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
   if (!summary.length) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+    <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-600">
       {summary.map(({ status, total }) => (
         <span
           key={status}
           className="inline-flex items-center gap-2 rounded-full bg-white px-2 py-1 shadow-sm"
         >
           <StatusBadge status={status} />
-          <span className="text-[11px] font-semibold">
+          <span className="text-[11px] font-bold">
             {total} {total === 1 ? 'item' : 'itens'}
           </span>
         </span>
@@ -127,6 +127,116 @@ export default function ContratosPage() {
 
   const contratoDetalhado = contratosFiltrados.find((c) => c.id === contratoSelecionado) ?? null;
 
+  // Aba ativa para a seção de detalhes do contrato
+  const [detailTab, setDetailTab] = React.useState<'resumo' | 'balanco'>('resumo');
+
+  // Mock de dados do Balanço Energético (por enquanto somente frontend)
+  type EnergyBalanceRow = {
+    id: string;
+    meter: string;
+    reference: string; // AAAA-MM
+    consumptionKwh: number;
+    pricePerMwh: number; // R$/MWh
+    billable?: number; // custo do mês, quando houver
+    proinfaContribution: number; // R$
+    contractedVolumeMwh: number;
+    lowerLimitPct: number; // 0.95 -> 95%
+    upperLimitPct: number; // 1.05 -> 105%
+    adjusted: boolean;
+  };
+
+  const mockEnergyBalance: EnergyBalanceRow[] = React.useMemo(() => {
+    // cria 6 linhas mock para 2 medidores e 3 meses
+    const base: EnergyBalanceRow[] = [
+      {
+        id: 'mb-1',
+        meter: 'MTR-001',
+        reference: '2024-04',
+        consumptionKwh: 3200000,
+        pricePerMwh: 272.4,
+        billable: 872000,
+        proinfaContribution: 14500,
+        contractedVolumeMwh: 3200,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: false,
+      },
+      {
+        id: 'mb-2',
+        meter: 'MTR-001',
+        reference: '2024-05',
+        consumptionKwh: 3120000,
+        pricePerMwh: 274.3,
+        billable: 856000,
+        proinfaContribution: 14120,
+        contractedVolumeMwh: 3200,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: false,
+      },
+      {
+        id: 'mb-3',
+        meter: 'MTR-001',
+        reference: '2024-06',
+        consumptionKwh: 3450000,
+        pricePerMwh: 277.9,
+        billable: 958000,
+        proinfaContribution: 15080,
+        contractedVolumeMwh: 3200,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: true,
+      },
+      {
+        id: 'mb-4',
+        meter: 'MTR-002',
+        reference: '2024-04',
+        consumptionKwh: 1580000,
+        pricePerMwh: 269.8,
+        billable: 428000,
+        proinfaContribution: 7300,
+        contractedVolumeMwh: 1600,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: false,
+      },
+      {
+        id: 'mb-5',
+        meter: 'MTR-002',
+        reference: '2024-05',
+        consumptionKwh: 1510000,
+        pricePerMwh: 271.1,
+        proinfaContribution: 7200,
+        contractedVolumeMwh: 1600,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: false,
+      },
+      {
+        id: 'mb-6',
+        meter: 'MTR-002',
+        reference: '2024-06',
+        consumptionKwh: 1680000,
+        pricePerMwh: 275.0,
+        billable: 462000,
+        proinfaContribution: 7800,
+        contractedVolumeMwh: 1600,
+        lowerLimitPct: 0.95,
+        upperLimitPct: 1.05,
+        adjusted: false,
+      },
+    ];
+    return base;
+  }, []);
+
+  const formatMonthShort = (isoMonth: string) => {
+    const [y, m] = isoMonth.split('-').map(Number);
+    return new Date(y, (m ?? 1) - 1, 1).toLocaleDateString('pt-BR', {
+      month: 'short',
+      year: 'numeric',
+    }).replace('.', '');
+  };
+
   const statusResumoGeral = React.useMemo(() => {
     const counts: Record<StatusResumo, number> = {
       Conforme: 0,
@@ -160,8 +270,8 @@ export default function ContratosPage() {
     <div className="space-y-6 p-4">
       <header className="space-y-6">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Contratos</h1>
-          <p className="mt-2 max-w-2xl text-sm text-gray-600">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Contratos</h1>
+          <p className="mt-2 max-w-2xl text-sm font-bold text-gray-600 dark:text-white">
             Visualize contratos ativos, acompanhe indicadores e status das análises com filtros inteligentes.
           </p>
         </div>
@@ -169,7 +279,7 @@ export default function ContratosPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1fr))_auto_auto] lg:items-end">
             <div className="sm:col-span-2 lg:col-span-1">
               <div className="space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Busca</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">Busca</span>
                 <div className="relative">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -181,15 +291,15 @@ export default function ContratosPage() {
                     onChange={(event) => setSearchTerm(event.target.value)}
                     placeholder="Buscar por código, cliente ou CNPJ"
                     aria-label="Buscar contratos"
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+                    className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm font-bold text-gray-900 placeholder-gray-500 shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
                   />
                 </div>
               </div>
             </div>
             <div className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Período de referência</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">Período de referência</span>
               <select
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+                className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900 shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
                 value={referencePeriod}
                 onChange={() => {}}
               >
@@ -201,7 +311,7 @@ export default function ContratosPage() {
                 type="button"
                 onClick={() => void handleRefreshContracts()}
                 disabled={isUpdating}
-                className="inline-flex items-center rounded-md bg-yn-orange px-4 py-2 text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center rounded-md bg-yn-orange px-4 py-2 font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isUpdating ? 'Atualizando…' : 'Atualizar'}
               </button>
@@ -213,14 +323,14 @@ export default function ContratosPage() {
                 setContratoSelecionado(null);
                 setSearchTerm('');
               }}
-              className="inline-flex h-11 items-center justify-center rounded-lg border border-gray-200 px-4 text-sm font-medium text-gray-600 shadow-sm transition hover:border-yn-orange hover:text-yn-orange lg:self-end"
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 px-4 text-sm font-bold text-gray-600 dark:text-white shadow-sm transition hover:border-yn-orange hover:text-yn-orange lg:self-end"
             >
               Resetar filtros
             </button>
             <button
               type="button"
               onClick={() => setIsCreateOpen(true)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-yn-orange px-5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 sm:col-span-2 lg:col-auto lg:self-end"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 sm:col-span-2 lg:col-auto lg:self-end"
             >
               <Plus size={18} /> Criar contrato manualmente
             </button>
@@ -230,24 +340,24 @@ export default function ContratosPage() {
 
       <section aria-labelledby="lista-contratos" className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 id="lista-contratos" className="text-lg font-semibold text-gray-900">
+          <h2 id="lista-contratos" className="text-lg font-bold text-gray-900 dark:text-white">
             Lista de Contratos
           </h2>
           <StatusPills summary={summarizeCounts(statusResumoGeral)} />
         </div>
 
         {error && (
-          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4 text-sm text-red-700 dark:text-red-300 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="font-semibold">Não foi possível carregar os contratos da API.</p>
-              <p className="text-red-600/80">{error}</p>
-              <p className="text-red-600/80">Os dados exibidos podem estar desatualizados.</p>
+              <p className="font-bold">Não foi possível carregar os contratos da API.</p>
+              <p className="font-bold text-red-600/80 dark:text-red-400">{error}</p>
+              <p className="font-bold text-red-600/80 dark:text-red-400">Os dados exibidos podem estar desatualizados.</p>
             </div>
             <button
               type="button"
               onClick={() => void handleRefreshContracts()}
               disabled={isUpdating}
-              className="inline-flex items-center justify-center rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:border-red-400 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-lg border border-red-300 dark:border-red-700 px-4 py-2 text-sm font-bold text-red-700 dark:text-red-300 transition hover:border-red-400 dark:hover:border-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUpdating ? 'Atualizando…' : 'Tentar novamente'}
             </button>
@@ -255,18 +365,18 @@ export default function ContratosPage() {
         )}
 
         {isLoading ? (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500">
+          <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-8 text-center text-sm font-bold text-gray-500 dark:text-white">
             Carregando contratos...
           </div>
         ) : contratosFiltrados.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-8 text-center text-sm font-bold text-gray-500 dark:text-white">
             Nenhum contrato encontrado.
           </div>
         ) : (
           <div className="space-y-3">
             <div className="hidden overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm lg:block">
               <table className="min-w-full table-auto text-sm">
-                <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+                <thead className="bg-gray-50 dark:bg-[#3E3E3E] text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">
                   <tr>
                     <th className="px-4 py-3 text-left">Contrato</th>
                     <th className="px-4 py-3 text-left">Cliente</th>
@@ -287,15 +397,15 @@ export default function ContratosPage() {
                       }`}
                       onClick={() => setContratoSelecionado(contrato.id)}
                     >
-                      <td className="px-4 py-3 font-medium text-gray-900">{contrato.codigo}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{contrato.codigo}</td>
                       <td className="px-4 py-3">
-                        <div className="text-gray-900">{contrato.cliente}</div>
-                        <div className="text-xs text-gray-500">CNPJ {contrato.cnpj}</div>
+                        <div className="font-bold text-gray-900">{contrato.cliente}</div>
+                        <div className="text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{contrato.segmento}</td>
-                      <td className="px-4 py-3 text-gray-600">{formatMonthLabel(contrato.cicloFaturamento)}</td>
-                      <td className="px-4 py-3 text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-gray-600">{contrato.fonte}</td>
+                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento}</td>
+                      <td className="px-4 py-3 font-bold text-gray-600">{formatMonthLabel(contrato.cicloFaturamento)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.fonte}</td>
                       <td className="px-4 py-3">
                         <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
                       </td>
@@ -303,14 +413,14 @@ export default function ContratosPage() {
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Link
                             to={`/contratos/${contrato.id}`}
-                            className="rounded-md border border-gray-200 px-3 py-1 font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
+                            className="rounded-md border border-gray-200 dark:border-gray-600 px-3 py-1 font-bold text-gray-600 dark:text-white transition hover:border-yn-orange hover:text-yn-orange"
                             onClick={(event) => event.stopPropagation()}
                           >
                             Abrir
                           </Link>
                           <Link
                             to={`/contratos/${contrato.id}/editar`}
-                            className="rounded-md border border-yn-orange px-3 py-1 font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                            className="rounded-md border border-yn-orange px-3 py-1 font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
                             onClick={(event) => event.stopPropagation()}
                           >
                             Editar
@@ -336,11 +446,11 @@ export default function ContratosPage() {
                     onClick={() => setContratoSelecionado(contrato.id)}
                     className="w-full text-left"
                   >
-                    <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                    <div className="flex items-center justify-between text-sm font-bold text-gray-900">
                       <span>{contrato.codigo}</span>
-                      <span className="text-xs text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
+                      <span className="text-xs font-bold text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-700">{contrato.cliente}</div>
+                    <div className="mt-1 text-sm font-bold text-gray-700">{contrato.cliente}</div>
                     <div className="mt-2">
                       <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
                     </div>
@@ -348,13 +458,13 @@ export default function ContratosPage() {
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <Link
                       to={`/contratos/${contrato.id}`}
-                      className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-center font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
+                      className="flex-1 rounded-md border border-gray-200 dark:border-gray-600 px-3 py-2 text-center font-bold text-gray-600 dark:text-white transition hover:border-yn-orange hover:text-yn-orange"
                     >
                       Abrir
                     </Link>
                     <Link
                       to={`/contratos/${contrato.id}/editar`}
-                      className="flex-1 rounded-md border border-yn-orange px-3 py-2 text-center font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                      className="flex-1 rounded-md border border-yn-orange px-3 py-2 text-center font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
                     >
                       Editar
                     </Link>
@@ -364,7 +474,7 @@ export default function ContratosPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs font-bold text-gray-500 dark:text-white">
                 Página {paginaAtual} de {totalPaginas}
               </p>
               <div className="flex items-center gap-2">
@@ -372,7 +482,7 @@ export default function ContratosPage() {
                   type="button"
                   onClick={() => setPaginaAtual((page) => Math.max(1, page - 1))}
                   disabled={paginaAtual === 1}
-                  className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-1 text-sm font-bold text-gray-600 dark:text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Anterior
                 </button>
@@ -380,7 +490,7 @@ export default function ContratosPage() {
                   type="button"
                   onClick={() => setPaginaAtual((page) => Math.min(totalPaginas, page + 1))}
                   disabled={paginaAtual === totalPaginas}
-                  className="rounded-lg border border-gray-200 px-3 py-1 text-sm text-gray-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-1 text-sm font-bold text-gray-600 dark:text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Próxima
                 </button>
@@ -394,23 +504,129 @@ export default function ContratosPage() {
         <section aria-labelledby="detalhes-contrato" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 id="detalhes-contrato" className="text-lg font-semibold text-gray-900">
+              <h2 id="detalhes-contrato" className="text-lg font-bold text-gray-900 dark:text-white">
                 Detalhe do Contrato · {contratoDetalhado.codigo}
               </h2>
-              <p className="text-sm text-gray-500">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
+              <p className="text-sm font-bold text-gray-500 dark:text-white">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPills summary={summarizeResumo(contratoDetalhado.resumoConformidades)} />
               <Link
                 to={`/contratos/${contratoDetalhado.id}/editar`}
-                className="inline-flex items-center justify-center rounded-md border border-yn-orange px-3 py-2 text-sm font-medium text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                className="inline-flex items-center justify-center rounded-md border border-yn-orange px-3 py-2 text-sm font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
               >
                 Editar contrato
               </Link>
+              <button
+                type="button"
+                onClick={() => setDetailTab('balanco')}
+                className={`inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-bold transition border ${detailTab === 'balanco' ? 'bg-yn-orange text-white border-yn-orange' : 'text-gray-600 dark:text-white border-gray-200 dark:border-gray-600 hover:border-yn-orange hover:text-yn-orange'}`}
+                title="Abrir Balanço Energético"
+              >
+                Balanço Energético
+              </button>
             </div>
           </div>
 
-          <ContractDetail contrato={contratoDetalhado} />
+          {/* Tabs simples entre Resumo e Balanço Energético */}
+          <div className="border-b border-gray-200 dark:border-[#2b3238]">
+            <nav className="-mb-px flex flex-wrap gap-2" role="tablist">
+              <button
+                onClick={() => setDetailTab('resumo')}
+                className={`py-2 px-3 border-b-2 text-sm font-bold ${detailTab === 'resumo' ? 'border-yn-orange text-yn-orange' : 'border-transparent text-gray-600 dark:text-white hover:text-yn-orange hover:border-yn-orange/40'}`}
+                aria-selected={detailTab === 'resumo'}
+              >
+                Resumo
+              </button>
+              <button
+                onClick={() => setDetailTab('balanco')}
+                className={`py-2 px-3 border-b-2 text-sm font-bold ${detailTab === 'balanco' ? 'border-yn-orange text-yn-orange' : 'border-transparent text-gray-600 dark:text-white hover:text-yn-orange hover:border-yn-orange/40'}`}
+                aria-selected={detailTab === 'balanco'}
+              >
+                Balanço Energético
+              </button>
+            </nav>
+          </div>
+
+          {detailTab === 'resumo' ? (
+            <ContractDetail contrato={contratoDetalhado} />
+          ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {/* KPIs do balanço */}
+                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo do mês</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">
+                    { (mockEnergyBalance[0].consumptionKwh / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) } MWh
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo do mês</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">
+                    { (mockEnergyBalance[0].billable ?? (mockEnergyBalance[0].pricePerMwh * (mockEnergyBalance[0].consumptionKwh / 1000))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">
+                    { mockEnergyBalance[0].proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial</div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">R$ 31.200</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-auto">
+                <table className="min-w-[920px] w-full table-auto text-sm">
+                  <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Mês</th>
+                      <th className="px-4 py-3 text-left">Medidor</th>
+                      <th className="px-4 py-3 text-left">Consumo (MWh)</th>
+                      <th className="px-4 py-3 text-left">Preço (R$/MWh)</th>
+                      <th className="px-4 py-3 text-left">Custo do mês</th>
+                      <th className="px-4 py-3 text-left">PROINFA</th>
+                      <th className="px-4 py-3 text-left">Faixa contratual</th>
+                      <th className="px-4 py-3 text-left">Ajustado</th>
+                      <th className="px-4 py-3 text-left">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {mockEnergyBalance.map((row) => {
+                      const consumoMwh = row.consumptionKwh / 1000;
+                      const custo = row.billable ?? (row.pricePerMwh * consumoMwh);
+                      const faixaMin = row.contractedVolumeMwh * row.lowerLimitPct;
+                      const faixaMax = row.contractedVolumeMwh * row.upperLimitPct;
+                      return (
+                        <tr key={row.id} className="bg-white hover:bg-gray-50">
+                          <td className="px-4 py-3 font-bold text-gray-900">{formatMonthShort(row.reference)}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{row.meter}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{consumoMwh.toLocaleString('pt-BR')}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{row.pricePerMwh.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{row.proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{faixaMin.toFixed(0)} – {faixaMax.toFixed(0)} MWh</td>
+                          <td className="px-4 py-3 font-bold text-gray-900">{row.adjusted ? 'Sim' : 'Não'}</td>
+                          <td className="px-4 py-3">
+                            <button className="rounded-md border border-gray-200 px-3 py-1 font-bold text-gray-600 transition hover:border-yn-orange hover:text-yn-orange">Ver detalhes</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                <div className="text-sm font-bold text-gray-900">Balanço Energético</div>
+                <p className="mt-1 text-xs font-bold text-gray-600">
+                  Linha do tempo mensal por medidor/cliente/contrato consolidando consumo, preço e encargos para cálculo, auditoria e geração de oportunidades.
+                </p>
+              </div>
+            </div>
+          )}
         </section>
       )}
       <CreateContractModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreate={handleCreateContract} />
