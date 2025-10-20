@@ -23,7 +23,7 @@ const navigation = [
   { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
-  { to: '/leads', label: 'Balanço Energético', icon: FileText },
+  /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
   { to: '/profile', label: 'Perfil', icon: User },

@@ -1,117 +1,26 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useContracts } from './ContractsContext';
+import { useEnergyBalance } from '../../hooks/useEnergyBalance';
+import { EnergyBalanceUtils } from '../../services/energyBalance';
 
 export default function BalancoEnergeticoPage() {
   const { id } = useParams();
   const { getContractById } = useContracts();
   const contrato = React.useMemo(() => (id ? getContractById(id) : undefined), [getContractById, id]);
 
-  // Mock de dados do Balanço Energético
-  type EnergyBalanceRow = {
-    id: string;
-    meter: string;
-    reference: string; // AAAA-MM
-    consumptionKwh: number;
-    pricePerMwh: number; // R$/MWh
-    billable?: number; // custo do mês, quando houver
-    proinfaContribution: number; // R$
-    contractedVolumeMwh: number;
-    lowerLimitPct: number; // 0.95 -> 95%
-    upperLimitPct: number; // 1.05 -> 105%
-    adjusted: boolean;
-  };
-
-  const mockEnergyBalance: EnergyBalanceRow[] = React.useMemo(() => {
-    const base: EnergyBalanceRow[] = [
-      {
-        id: 'mb-1',
-        meter: 'MTR-001',
-        reference: '2024-04',
-        consumptionKwh: 3200000,
-        pricePerMwh: 272.4,
-        billable: 872000,
-        proinfaContribution: 14500,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-2',
-        meter: 'MTR-001',
-        reference: '2024-05',
-        consumptionKwh: 3120000,
-        pricePerMwh: 274.3,
-        billable: 856000,
-        proinfaContribution: 14120,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-3',
-        meter: 'MTR-001',
-        reference: '2024-06',
-        consumptionKwh: 3450000,
-        pricePerMwh: 277.9,
-        billable: 958000,
-        proinfaContribution: 15080,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: true,
-      },
-      {
-        id: 'mb-4',
-        meter: 'MTR-002',
-        reference: '2024-04',
-        consumptionKwh: 1580000,
-        pricePerMwh: 269.8,
-        billable: 428000,
-        proinfaContribution: 7300,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-5',
-        meter: 'MTR-002',
-        reference: '2024-05',
-        consumptionKwh: 1510000,
-        pricePerMwh: 271.1,
-        proinfaContribution: 7200,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-6',
-        meter: 'MTR-002',
-        reference: '2024-06',
-        consumptionKwh: 1680000,
-        pricePerMwh: 275.0,
-        billable: 462000,
-        proinfaContribution: 7800,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-    ];
-    return base;
-  }, []);
-
-  const formatMonthShort = (isoMonth: string) => {
-    const [y, m] = isoMonth.split('-').map(Number);
-    return new Date(y, (m ?? 1) - 1, 1).toLocaleDateString('pt-BR', {
-      month: 'short',
-      year: 'numeric',
-    }).replace('.', '');
-  };
+  // Fetch energy balance data from API
+  const { 
+    data: energyBalanceData, 
+    summary, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useEnergyBalance({
+    contractId: id,
+    pageSize: 50, // Show more items per page
+    autoFetch: !!id,
+  });
 
   if (!contrato) {
     return (
@@ -154,31 +63,57 @@ export default function BalancoEnergeticoPage() {
       </header>
 
       <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {/* KPIs do balanço */}
-          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo do mês</div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">
-              { (mockEnergyBalance[0].consumptionKwh / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) } MWh
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex items-center justify-center p-8">
+            <div className="text-sm font-bold text-gray-500 dark:text-white">Carregando dados do balanço energético...</div>
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+            <div className="text-sm font-bold text-red-700 dark:text-red-300">
+              Erro ao carregar dados: {error}
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1 text-sm font-bold text-red-700 hover:bg-red-50 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
+        {/* KPIs do balanço */}
+        {summary && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo total</div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {EnergyBalanceUtils.formatMwh(summary.total_consumption_mwh)} MWh
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo total</div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {EnergyBalanceUtils.formatCurrency(summary.total_cost)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA total</div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {EnergyBalanceUtils.formatCurrency(summary.total_proinfa)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial</div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {EnergyBalanceUtils.formatCurrency(summary.potential_savings)}
+              </div>
             </div>
           </div>
-          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo do mês</div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">
-              { (mockEnergyBalance[0].billable ?? (mockEnergyBalance[0].pricePerMwh * (mockEnergyBalance[0].consumptionKwh / 1000))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
-            </div>
-          </div>
-          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA</div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">
-              { mockEnergyBalance[0].proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
-            </div>
-          </div>
-          <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial</div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">R$ 31.200</div>
-          </div>
-        </div>
+        )}
 
         <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-auto">
           <table className="min-w-[920px] w-full table-auto text-sm">
@@ -196,27 +131,38 @@ export default function BalancoEnergeticoPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {mockEnergyBalance.map((row) => {
-                const consumoMwh = row.consumptionKwh / 1000;
-                const custo = row.billable ?? (row.pricePerMwh * consumoMwh);
-                const faixaMin = row.contractedVolumeMwh * row.lowerLimitPct;
-                const faixaMax = row.contractedVolumeMwh * row.upperLimitPct;
-                return (
-                  <tr key={row.id} className="bg-white hover:bg-gray-50">
-                    <td className="px-4 py-3 font-bold text-gray-900">{formatMonthShort(row.reference)}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{row.meter}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{consumoMwh.toLocaleString('pt-BR')}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{row.pricePerMwh.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{row.proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{faixaMin.toFixed(0)} – {faixaMax.toFixed(0)} MWh</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{row.adjusted ? 'Sim' : 'Não'}</td>
-                    <td className="px-4 py-3">
-                      <DetalhamentoButton row={row} />
-                    </td>
-                  </tr>
-                );
-              })}
+              {energyBalanceData.length === 0 && !isLoading ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm font-bold text-gray-500 dark:text-white">
+                    Nenhum dado de balanço energético encontrado para este contrato.
+                  </td>
+                </tr>
+              ) : (
+                energyBalanceData.map((row) => {
+                  const consumoMwh = EnergyBalanceUtils.kwhToMwh(row.consumption_kwh);
+                  const custo = EnergyBalanceUtils.calculateCurrentCost(row);
+                  const faixaMin = row.min_demand || 0;
+                  const faixaMax = row.max_demand || 0;
+                  
+                  return (
+                    <tr key={row.id} className="bg-white hover:bg-gray-50">
+                      <td className="px-4 py-3 font-bold text-gray-900">{EnergyBalanceUtils.formatMonthReference(row.reference_base)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{row.meter}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{EnergyBalanceUtils.formatMwh(consumoMwh)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{EnergyBalanceUtils.formatCurrency(row.price)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{EnergyBalanceUtils.formatCurrency(custo)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{EnergyBalanceUtils.formatCurrency(row.proinfa_contribution)}</td>
+                      <td className="px-4 py-3 font-bold text-gray-900">
+                        {faixaMin > 0 && faixaMax > 0 ? `${faixaMin.toFixed(0)} – ${faixaMax.toFixed(0)} MWh` : 'Não informado'}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-gray-900">{row.adjusted ? 'Sim' : 'Não'}</td>
+                      <td className="px-4 py-3">
+                        <DetalhamentoButton row={row} />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -236,13 +182,13 @@ export default function BalancoEnergeticoPage() {
 function DetalhamentoButton({ row }: { row: any }) {
   const [open, setOpen] = React.useState(false);
 
-  const consumoMwh = row.consumptionKwh / 1000;
-  const custoAtual = row.billable ?? row.pricePerMwh * consumoMwh;
-  const alvo = row.contractedVolumeMwh;
-  const faixaMin = alvo * row.lowerLimitPct;
-  const faixaMax = alvo * row.upperLimitPct;
-  const custoEsperado = row.pricePerMwh * alvo; // mock simplificado
-  const economiaPotencial = Math.max(0, custoAtual - custoEsperado);
+  const consumoMwh = EnergyBalanceUtils.kwhToMwh(row.consumption_kwh);
+  const custoAtual = EnergyBalanceUtils.calculateCurrentCost(row);
+  const alvo = row.min_demand || 0; // Using min_demand as contracted volume approximation
+  const faixaMin = row.min_demand || 0;
+  const faixaMax = row.max_demand || 0;
+  const custoEsperado = row.price * alvo; // Expected cost calculation
+  const economiaPotencial = EnergyBalanceUtils.calculatePotentialSavings(custoAtual, custoEsperado);
 
   return (
     <>
@@ -256,19 +202,19 @@ function DetalhamentoButton({ row }: { row: any }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-5xl rounded-xl bg-white p-4 shadow-lg">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-lg font-bold text-gray-900">Detalhamento · {row.meter} · {new Date(row.reference + '-01').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '')}</h3>
+              <h3 className="text-lg font-bold text-gray-900">Detalhamento · {row.meter} · {EnergyBalanceUtils.formatMonthReference(row.reference_base)}</h3>
               <button onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-sm font-bold text-gray-600 hover:text-yn-orange">Fechar</button>
             </div>
 
             {/* KPIs principais exigidos */}
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Kpi label="Consumo (MWh)" value={`${consumoMwh.toLocaleString('pt-BR')}`} />
-              <Kpi label="Custo atual do mês" value={custoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-              <Kpi label="Alvo contratual (MWh)" value={alvo.toLocaleString('pt-BR')} />
+              <Kpi label="Consumo (MWh)" value={EnergyBalanceUtils.formatMwh(consumoMwh)} />
+              <Kpi label="Custo atual do mês" value={EnergyBalanceUtils.formatCurrency(custoAtual)} />
+              <Kpi label="Alvo contratual (MWh)" value={EnergyBalanceUtils.formatMwh(alvo)} />
               <Kpi label="Faixa contratual" value={`${faixaMin.toFixed(0)} – ${faixaMax.toFixed(0)} MWh`} />
-              <Kpi label="PROINFA (R$)" value={row.proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-              <Kpi label="Custo esperado" value={custoEsperado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-              <Kpi label="Economia potencial" value={economiaPotencial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
+              <Kpi label="PROINFA (R$)" value={EnergyBalanceUtils.formatCurrency(row.proinfa_contribution)} />
+              <Kpi label="Custo esperado" value={EnergyBalanceUtils.formatCurrency(custoEsperado)} />
+              <Kpi label="Economia potencial" value={EnergyBalanceUtils.formatCurrency(economiaPotencial)} />
             </div>
 
             {/* Tabelas espelhando as guias da imagem */}
@@ -289,12 +235,12 @@ function DetalhamentoButton({ row }: { row: any }) {
                   </thead>
                   <tbody>
                     <tr className="border-b">
-                      <td className="px-2 py-1 font-bold">{new Date(row.reference + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '')}</td>
-                      <td className="px-2 py-1">{consumoMwh.toLocaleString('pt-BR')} MWh</td>
+                      <td className="px-2 py-1 font-bold">{EnergyBalanceUtils.formatMonthReference(row.reference_base)}</td>
+                      <td className="px-2 py-1">{EnergyBalanceUtils.formatMwh(consumoMwh)} MWh</td>
                       <td className="px-2 py-1">{(consumoMwh * 0.03).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
-                      <td className="px-2 py-1">{(row.proinfaContribution / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
-                      <td className="px-2 py-1">{consumoMwh.toLocaleString('pt-BR')} MWh</td>
-                      <td className="px-2 py-1">{consumoMwh.toLocaleString('pt-BR')} MWh</td>
+                      <td className="px-2 py-1">{(row.proinfa_contribution / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
+                      <td className="px-2 py-1">{EnergyBalanceUtils.formatMwh(consumoMwh)} MWh</td>
+                      <td className="px-2 py-1">{EnergyBalanceUtils.formatMwh(consumoMwh)} MWh</td>
                       <td className="px-2 py-1">{(0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
                     </tr>
                   </tbody>
@@ -314,8 +260,8 @@ function DetalhamentoButton({ row }: { row: any }) {
                   </thead>
                   <tbody>
                     <tr className="border-b">
-                      <td className="px-2 py-1 font-bold">{new Date(row.reference + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '')}</td>
-                      <td className="px-2 py-1">{alvo.toLocaleString('pt-BR')} MWh</td>
+                      <td className="px-2 py-1 font-bold">{EnergyBalanceUtils.formatMonthReference(row.reference_base)}</td>
+                      <td className="px-2 py-1">{EnergyBalanceUtils.formatMwh(alvo)} MWh</td>
                       <td className="px-2 py-1">{faixaMin.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
                       <td className="px-2 py-1">{faixaMax.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} MWh</td>
                     </tr>

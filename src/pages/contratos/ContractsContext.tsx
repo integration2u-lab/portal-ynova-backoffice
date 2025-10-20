@@ -9,7 +9,7 @@ import {
   type CreateContractPayload,
 } from '../../services/contracts';
 
-const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
+const DEFAULT_API_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000/contracts';
 
 const runtimeEnv: Record<string, string | undefined> =
   ((typeof import.meta !== 'undefined'
