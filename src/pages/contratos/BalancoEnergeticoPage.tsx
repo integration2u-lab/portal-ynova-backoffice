@@ -3,11 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import { useContracts } from './ContractsContext';
 import { useEnergyBalance } from '../../hooks/useEnergyBalance';
 import { EnergyBalanceUtils } from '../../services/energyBalance';
+import { GenerateEnergyBalanceModal } from '../../components/GenerateEnergyBalanceModal';
 
 export default function BalancoEnergeticoPage() {
   const { id } = useParams();
   const { getContractById } = useContracts();
   const contrato = React.useMemo(() => (id ? getContractById(id) : undefined), [getContractById, id]);
+  const [isGenerationModalOpen, setGenerationModalOpen] = React.useState(false);
 
   // Fetch energy balance data from API
   const { 
@@ -47,6 +49,13 @@ export default function BalancoEnergeticoPage() {
           <p className="text-sm font-bold text-gray-600 dark:text-white">{contrato.cliente} · CNPJ {contrato.cnpj}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGenerationModalOpen(true)}
+            className="inline-flex items-center justify-center rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90"
+          >
+            Criar Balanço Energético
+          </button>
           <Link
             to={`/contratos/${contrato.id}`}
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm font-bold text-gray-700 dark:text-white transition hover:border-yn-orange hover:text-yn-orange"
@@ -67,6 +76,23 @@ export default function BalancoEnergeticoPage() {
         {isLoading && (
           <div className="flex items-center justify-center p-8">
             <div className="text-sm font-bold text-gray-500 dark:text-white">Carregando dados do balanço energético...</div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && !error && energyBalanceData.length === 0 && (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-white p-10 text-center shadow-sm">
+            <h2 className="text-base font-semibold text-gray-900">Nenhum balanço energético disponível</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Gere um novo balanço energético enviando a planilha CSV do contrato selecionado.
+            </p>
+            <button
+              type="button"
+              onClick={() => setGenerationModalOpen(true)}
+              className="mt-4 inline-flex items-center justify-center rounded-md bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90"
+            >
+              Criar Balanço Energético
+            </button>
           </div>
         )}
 
@@ -173,7 +199,15 @@ export default function BalancoEnergeticoPage() {
             Linha do tempo mensal por medidor/cliente/contrato consolidando consumo, preço e encargos para cálculo, auditoria e geração de oportunidades.
           </p>
         </div>
-      </div>
+    </div>
+      <GenerateEnergyBalanceModal
+        isOpen={isGenerationModalOpen}
+        onClose={() => setGenerationModalOpen(false)}
+        contract={contrato}
+        onSuccess={async () => {
+          await refetch();
+        }}
+      />
     </div>
   );
 }

@@ -63,6 +63,28 @@ export type EnergyBalanceSummary = {
   meters_count: number;
 };
 
+export type EnergyBalanceGenerationFile = {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+};
+
+export type EnergyBalanceGenerationRequest = {
+  contract: Record<string, unknown>;
+  startMonth: string;
+  endMonth: string;
+  file: EnergyBalanceGenerationFile;
+  requestedAt?: string;
+  triggerSource?: string;
+};
+
+export type EnergyBalanceGenerationResponse = {
+  status: 'queued' | 'processing' | 'completed' | 'error' | string;
+  message?: string;
+  data?: unknown;
+};
+
 export type PagedEnergyBalance = {
   items: EnergyBalanceRow[];
   total: number;
@@ -200,6 +222,16 @@ export const EnergyBalanceAPI = {
   delete: async (id: string): Promise<void> => {
     return apiFetch<void>(`/energy-balance/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  // Trigger energy balance generation workflow via n8n proxy
+  triggerGeneration: async (
+    payload: EnergyBalanceGenerationRequest,
+  ): Promise<EnergyBalanceGenerationResponse> => {
+    return apiFetch<EnergyBalanceGenerationResponse>('/energy-balance/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 };
