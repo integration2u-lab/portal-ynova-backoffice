@@ -2,11 +2,13 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ContractDetail } from './ContractDetail';
 import { useContracts } from './ContractsContext';
+import { GenerateEnergyBalanceModal } from '../../components/GenerateEnergyBalanceModal';
 
 export default function DetalheContratoPage() {
   const { id } = useParams();
   const { getContractById } = useContracts();
   const contrato = React.useMemo(() => (id ? getContractById(id) : undefined), [getContractById, id]);
+  const [isGenerationModalOpen, setGenerationModalOpen] = React.useState(false);
 
   if (!contrato) {
     return (
@@ -33,6 +35,13 @@ export default function DetalheContratoPage() {
           <p className="text-sm text-gray-600">{contrato.cliente} · CNPJ {contrato.cnpj}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGenerationModalOpen(true)}
+            className="inline-flex items-center justify-center rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90"
+          >
+            Criar Balanço Energético
+          </button>
           <Link
             to={`/contratos/${contrato.id}/balanco-energetico`}
             className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm font-bold text-gray-700 dark:text-white transition hover:border-yn-orange hover:text-yn-orange"
@@ -50,6 +59,11 @@ export default function DetalheContratoPage() {
       </header>
 
       <ContractDetail contrato={contrato} />
+      <GenerateEnergyBalanceModal
+        isOpen={isGenerationModalOpen}
+        onClose={() => setGenerationModalOpen(false)}
+        contract={contrato}
+      />
     </div>
   );
 }
