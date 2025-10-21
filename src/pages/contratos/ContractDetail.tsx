@@ -156,7 +156,7 @@ export const ContractDetail: React.FC<Props> = ({ contrato }) => {
             Obrigações &amp; Status
           </h2>
         </div>
-        <div className="overflow-auto">
+        <div className="overflow-x-auto">
           <table className="min-w-[960px] w-full table-auto divide-y divide-gray-100 text-sm">
             <thead className="bg-gray-50">
               <tr>

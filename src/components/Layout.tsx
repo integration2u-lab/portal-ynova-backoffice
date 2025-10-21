@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, NavLink, Link} from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Outlet, NavLink, Link } from 'react-router-dom';
 import {
   Home,
   Calendar,
@@ -14,6 +14,8 @@ import {
   X,
   GraduationCap,
   Handshake,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
@@ -24,12 +26,12 @@ const navigation = [
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
   { to: '/leads', label: 'Balanço Energético', icon: FileText },
-  /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
-  /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
+  // { to: '/negociacoes', label: 'Negociações', icon: Handshake },
+  // { to: '/agenda', label: 'Agenda', icon: Calendar },
   { to: '/profile', label: 'Perfil', icon: User },
- /*  { to: '/ranking', label: 'Ranking', icon: CrownIcon }, */
-  /* { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap }, */
- /*  { to: '/notifications', label: 'Notificações', icon: Bell }, */
+  // { to: '/ranking', label: 'Ranking', icon: CrownIcon },
+  // { to: '/training', label: 'Treinamento para Consultor', icon: GraduationCap },
+  // { to: '/notifications', label: 'Notificações', icon: Bell },
   { to: '/help', label: 'Ajuda', icon: HelpCircle },
 ];
 
@@ -37,10 +39,6 @@ interface LayoutProps {
   onLogout: () => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
-}
-
-interface LayoutState {
-  isSidebarCollapsed: boolean;
 }
 
 export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
@@ -51,16 +49,23 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
   const user = mockUser;
+
+  const initials = user.name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 
   const handleLogout = () => {
     onLogout();
@@ -69,84 +74,74 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-[#111418] dark:text-gray-100">
-      <header
-        role="banner"
-        className="sticky top-0 z-50 h-16 bg-yn-orange text-white shadow-sm px-4 md:px-6"
-      >
-        <div className="flex items-center justify-between h-full">
-          <div className="flex items-center gap-4">
+      <header role="banner" className="sticky top-0 z-50 bg-yn-orange text-white shadow-sm">
+        <div className="flex h-16 items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-3 md:gap-4">
             <button
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-              aria-label="Toggle sidebar"
+              type="button"
+              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+              className="hidden rounded-md p-2 text-white transition hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 md:inline-flex"
+              aria-label="Alternar menu lateral"
             >
-              <Menu size={20} />
+              {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
             </button>
-            <Link
-              to="/dashboard"
-              aria-label="Ir para a página inicial"
-              className="flex items-center gap-2"
-            >
-            {logoError ? (
-              <span className="font-semibold text-white">YNOVA</span>
-            ) : (
-              <img
-                src="https://i.imgur.com/eFBlDDM.png"
-                alt="YNOVA"
-                className="h-40 md:h-40 w-auto"
-                loading="eager"
-                onError={() => setLogoError(true)}
-              />
-            )}
+            <Link to="/dashboard" aria-label="Ir para a página inicial" className="flex items-center gap-2">
+              {logoError ? (
+                <span className="text-lg font-semibold text-white md:text-xl">YNOVA</span>
+              ) : (
+                <img
+                  src="https://i.imgur.com/eFBlDDM.png"
+                  alt="YNOVA"
+                  className="h-10 w-auto md:h-12"
+                  loading="eager"
+                  onError={() => setLogoError(true)}
+                />
+              )}
             </Link>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2 md:gap-3">
             <div className="relative" ref={notifRef}>
               <button
-                className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-                aria-label="NotificaÃ§Ãµes"
-                onClick={() => setShowNotifications((p) => !p)}
+                type="button"
+                className="rounded-md p-2 text-white transition hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                aria-label="Abrir notificações"
+                onClick={() => setShowNotifications((prev) => !prev)}
               >
                 <Bell size={20} />
               </button>
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1f24] border border-gray-200 dark:border-[#2b3238] rounded-lg shadow-lg p-4 text-sm text-gray-700 dark:text-gray-200">
-                  <ul className="space-y-2">
-                    <li>Notificações serão exibidas aqui</li>
-                  </ul>
+                <div className="absolute right-0 mt-2 w-64 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-lg dark:border-[#2b3238] dark:bg-[#1a1f24] dark:text-gray-200">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">Notificações</p>
+                  <p className="mt-2 text-gray-600 dark:text-gray-300">
+                    Você ainda não possui notificações.
+                  </p>
                 </div>
               )}
             </div>
+
             <button
+              type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition-colors"
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="rounded-md p-2 text-white transition hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              title={theme === 'dark' ? 'Alterar para tema claro' : 'Alterar para tema escuro'}
             >
-              {theme === 'dark' ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              )}
+              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center"
-                aria-hidden
-              >
-                <span className="text-white text-sm font-medium">
-                  {user.name.split(' ').map((n) => n[0]).join('')}
-                </span>
+
+            <div className="hidden sm:flex items-center gap-2 rounded-full bg-white/10 px-3 py-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-semibold">
+                {initials || 'YN'}
               </div>
-              <span className="hidden sm:block text-sm font-medium text-white">
-                {user.name}
-              </span>
+              <div className="text-left text-xs leading-tight">
+                <span className="block font-semibold text-white">{user.name}</span>
+                <span className="text-white/80">{user.email}</span>
+              </div>
             </div>
+
             <button
-              className="md:hidden p-2 rounded-md text-white hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              type="button"
+              className="rounded-md p-2 text-white transition hover:text-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 md:hidden"
               onClick={() => setIsMobileMenuOpen(true)}
               aria-label="Abrir menu"
             >
@@ -157,11 +152,14 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
       </header>
 
       <div className="flex">
-        <aside className={`hidden md:flex md:flex-col md:fixed md:inset-y-0 md:top-16 transition-all duration-300 ${
-          isSidebarCollapsed ? 'md:w-20' : 'md:w-64'
-        }`}>
-          <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#1a1f24] border-r border-gray-200 dark:border-[#2b3238]">
-            <nav className="flex-1 px-4 py-4 space-y-1">
+        <aside
+          className={`hidden md:fixed md:inset-y-0 md:top-16 md:flex md:flex-col transition-all duration-300 ${
+            isSidebarCollapsed ? 'md:w-20' : 'md:w-64'
+          }`}
+          aria-label="Menu lateral"
+        >
+          <div className="flex min-h-0 flex-1 flex-col border-r border-gray-200 bg-white dark:border-[#2b3238] dark:bg-[#1a1f24]">
+            <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
               {navigation.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -169,27 +167,28 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      `flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
-                          ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
+                          ? 'border border-yn-orange/40 bg-yn-orange/10 text-yn-orange dark:border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-[#1f252b] dark:hover:text-gray-100'
                       }`
                     }
                     title={isSidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon size={28} className={isSidebarCollapsed ? '' : 'mr-3'} />
+                    <Icon size={24} className={isSidebarCollapsed ? 'mx-auto' : 'mr-3'} />
                     {!isSidebarCollapsed && item.label}
                   </NavLink>
                 );
               })}
             </nav>
-            <div className="p-4 border-t border-gray-200 dark:border-[#2b3238]">
+            <div className="border-t border-gray-200 p-4 dark:border-[#2b3238]">
               <button
+                type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/40"
                 title={isSidebarCollapsed ? 'Sair' : undefined}
               >
-                <LogOut size={28} className={isSidebarCollapsed ? '' : 'mr-3'} />
+                <LogOut size={24} className={isSidebarCollapsed ? 'mx-auto' : 'mr-3'} />
                 {!isSidebarCollapsed && 'Sair'}
               </button>
             </div>
@@ -197,15 +196,20 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
         </aside>
 
         {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 bg-black/50" role="dialog" aria-modal="true">
-            <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-[#1a1f24]">
-              <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-[#2b3238]">
-                <div className="text-xl font-bold text-yn-orange">YNOVA</div>
-                <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Fechar menu">
-                  <X size={24} />
+          <div className="fixed inset-0 z-50 bg-black/50 md:hidden" role="dialog" aria-modal="true">
+            <div className="fixed inset-y-0 left-0 flex w-72 flex-col bg-white shadow-xl dark:bg-[#1a1f24]">
+              <div className="flex h-16 items-center justify-between px-4">
+                <span className="text-xl font-semibold text-yn-orange">YNOVA</span>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="rounded-md p-2 text-gray-600 transition hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange"
+                  aria-label="Fechar menu"
+                >
+                  <X size={22} />
                 </button>
               </div>
-              <nav className="px-4 py-4 space-y-1">
+              <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">
                 {navigation.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -213,26 +217,27 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                       key={item.to}
                       to={item.to}
                       onClick={() => setIsMobileMenuOpen(false)}
-                    className={({ isActive }) =>
-                        `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      className={({ isActive }) =>
+                        `flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                           isActive
-                            ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
-                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
+                            ? 'border border-yn-orange/40 bg-yn-orange/10 text-yn-orange dark:border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-[#1f252b] dark:hover:text-gray-100'
                         }`
-                    }
-                  >
-                      <Icon size={20} className="mr-3" />
+                      }
+                    >
+                      <Icon size={22} className="mr-3" />
                       {item.label}
                     </NavLink>
                   );
                 })}
               </nav>
-              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-[#2b3238]">
+              <div className="border-t border-gray-200 p-4 dark:border-[#2b3238]">
                 <button
+                  type="button"
                   onClick={handleLogout}
-                  className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/40"
                 >
-                  <LogOut size={20} className="mr-3" />
+                  <LogOut size={22} className="mr-3" />
                   Sair
                 </button>
               </div>
@@ -240,10 +245,12 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
           </div>
         )}
 
-        <main className={`flex-1 transition-all duration-300 ${
-          isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'
-        }`}>
-          <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 overflow-x-hidden py-4 sm:py-6 lg:py-8">
+        <main
+          className={`flex-1 overflow-x-hidden transition-all duration-300 ${
+            isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'
+          }`}
+        >
+          <div className="mx-auto w-full max-w-screen-2xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8 xl:px-10 2xl:px-12">
             <Outlet />
           </div>
         </main>
@@ -251,5 +258,3 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
     </div>
   );
 }
-
-

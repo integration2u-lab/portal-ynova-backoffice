@@ -42,7 +42,7 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
   if (!summary.length) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+    <div className="flex max-w-full flex-wrap items-center gap-2 text-xs text-gray-600">
       {summary.map(({ status, total }) => (
         <span
           key={status}
@@ -157,7 +157,7 @@ export default function ContratosPage() {
   );
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6">
       <header className="space-y-6">
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Contratos</h1>
@@ -264,7 +264,7 @@ export default function ContratosPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="hidden overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm lg:block">
+            <div className="hidden overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm lg:block">
               <table className="min-w-full table-auto text-sm">
                 <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
                   <tr>
@@ -363,7 +363,7 @@ export default function ContratosPage() {
               ))}
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-gray-500">
                 Página {paginaAtual} de {totalPaginas}
               </p>

@@ -61,7 +61,7 @@ export type ContractMock = {
   segmento: string;
   contato: string;
   status: 'Ativo' | 'Inativo';
-  fonte: 'Convencional' | 'Incentivada';
+  fonte: 'Convencional' | 'Incentivada' | 'Incentivada 0%' | 'Incentivada 50%' | 'Incentivada 100%';
   modalidade: string;
   inicioVigencia: string;
   fimVigencia: string;
@@ -69,6 +69,7 @@ export type ContractMock = {
   limiteInferior: string;
   flex: string;
   precoMedio: number;
+  precosMedios?: number[];
   fornecedor: string;
   proinfa: number | null;
   cicloFaturamento: string;
