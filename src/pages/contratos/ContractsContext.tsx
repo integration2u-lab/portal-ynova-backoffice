@@ -66,7 +66,7 @@ type StatusResumoValue = (typeof statusResumoValues)[number];
 const analiseStatusValues = ['verde', 'amarelo', 'vermelho'] as const;
 type AnaliseStatusValue = (typeof analiseStatusValues)[number];
 
-const invoiceStatusValues = ['Paga', 'Em aberto', 'Em análise'] as const;
+const invoiceStatusValues = ['Paga', 'Em aberto', 'Em análise', 'Vencida'] as const;
 type InvoiceStatusValue = (typeof invoiceStatusValues)[number];
 
 const normalizeString = (value: unknown, fallback = '') => {
@@ -180,6 +180,7 @@ const normalizeInvoiceStatus = (value: unknown): InvoiceStatusValue => {
   const text = removeDiacritics(normalizeString(value));
   if (text === 'paga' || text === 'pagas') return 'Paga';
   if (text === 'em aberto' || text === 'aberto') return 'Em aberto';
+  if (text === 'vencida' || text === 'vencido' || text === 'overdue') return 'Vencida';
   if (text.includes('analise')) return 'Em análise';
   return 'Em análise';
 };

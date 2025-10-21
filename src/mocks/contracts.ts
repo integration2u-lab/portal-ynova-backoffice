@@ -42,7 +42,7 @@ export type AnaliseArea = {
   }>;
 };
 
-export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise';
+export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise' | 'Vencida';
 
 export type ContractInvoice = {
   id: string;
