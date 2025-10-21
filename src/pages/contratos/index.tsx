@@ -2,10 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Plus } from 'lucide-react';
 import { ContractDetail, StatusBadge } from './ContractDetail';
-import type { ContractMock, StatusResumo } from '../../mocks/contracts';
-import { formatMesLabel } from '../../mocks/contracts';
+import type { ContractDetails as ContractMock, StatusResumo } from '../../types/contracts';
+import { formatMesLabel } from '../../types/contracts';
 import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
+import { useEnergyBalance } from '../../hooks/useEnergyBalance';
+import { EnergyBalanceUtils } from '../../services/energyBalance';
 
 const pageSize = 20;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
@@ -130,112 +132,23 @@ export default function ContratosPage() {
   // Aba ativa para a seção de detalhes do contrato
   const [detailTab, setDetailTab] = React.useState<'resumo' | 'balanco'>('resumo');
 
-  // Mock de dados do Balanço Energético (por enquanto somente frontend)
-  type EnergyBalanceRow = {
-    id: string;
-    meter: string;
-    reference: string; // AAAA-MM
-    consumptionKwh: number;
-    pricePerMwh: number; // R$/MWh
-    billable?: number; // custo do mês, quando houver
-    proinfaContribution: number; // R$
-    contractedVolumeMwh: number;
-    lowerLimitPct: number; // 0.95 -> 95%
-    upperLimitPct: number; // 1.05 -> 105%
-    adjusted: boolean;
-  };
+  const {
+    data: energyBalanceData,
+    summary: energyBalanceSummary,
+    isLoading: isEnergyBalanceLoading,
+    error: energyBalanceError,
+    refetch: refetchEnergyBalance,
+  } = useEnergyBalance({
+    contractId: contratoSelecionado ?? undefined,
+    pageSize: 12,
+    autoFetch: false,
+  });
 
-  const mockEnergyBalance: EnergyBalanceRow[] = React.useMemo(() => {
-    // cria 6 linhas mock para 2 medidores e 3 meses
-    const base: EnergyBalanceRow[] = [
-      {
-        id: 'mb-1',
-        meter: 'MTR-001',
-        reference: '2024-04',
-        consumptionKwh: 3200000,
-        pricePerMwh: 272.4,
-        billable: 872000,
-        proinfaContribution: 14500,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-2',
-        meter: 'MTR-001',
-        reference: '2024-05',
-        consumptionKwh: 3120000,
-        pricePerMwh: 274.3,
-        billable: 856000,
-        proinfaContribution: 14120,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-3',
-        meter: 'MTR-001',
-        reference: '2024-06',
-        consumptionKwh: 3450000,
-        pricePerMwh: 277.9,
-        billable: 958000,
-        proinfaContribution: 15080,
-        contractedVolumeMwh: 3200,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: true,
-      },
-      {
-        id: 'mb-4',
-        meter: 'MTR-002',
-        reference: '2024-04',
-        consumptionKwh: 1580000,
-        pricePerMwh: 269.8,
-        billable: 428000,
-        proinfaContribution: 7300,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-5',
-        meter: 'MTR-002',
-        reference: '2024-05',
-        consumptionKwh: 1510000,
-        pricePerMwh: 271.1,
-        proinfaContribution: 7200,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-      {
-        id: 'mb-6',
-        meter: 'MTR-002',
-        reference: '2024-06',
-        consumptionKwh: 1680000,
-        pricePerMwh: 275.0,
-        billable: 462000,
-        proinfaContribution: 7800,
-        contractedVolumeMwh: 1600,
-        lowerLimitPct: 0.95,
-        upperLimitPct: 1.05,
-        adjusted: false,
-      },
-    ];
-    return base;
-  }, []);
-
-  const formatMonthShort = (isoMonth: string) => {
-    const [y, m] = isoMonth.split('-').map(Number);
-    return new Date(y, (m ?? 1) - 1, 1).toLocaleDateString('pt-BR', {
-      month: 'short',
-      year: 'numeric',
-    }).replace('.', '');
-  };
+  React.useEffect(() => {
+    if (detailTab === 'balanco' && contratoSelecionado) {
+      void refetchEnergyBalance();
+    }
+  }, [detailTab, contratoSelecionado, refetchEnergyBalance]);
 
   const statusResumoGeral = React.useMemo(() => {
     const counts: Record<StatusResumo, number> = {
@@ -552,77 +465,152 @@ export default function ContratosPage() {
             <ContractDetail contrato={contratoDetalhado} />
           ) : (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {/* KPIs do balanço */}
-                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo do mês</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">
-                    { (mockEnergyBalance[0].consumptionKwh / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) } MWh
-                  </div>
-                </div>
-                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo do mês</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">
-                    { (mockEnergyBalance[0].billable ?? (mockEnergyBalance[0].pricePerMwh * (mockEnergyBalance[0].consumptionKwh / 1000))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
-                  </div>
-                </div>
-                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">
-                    { mockEnergyBalance[0].proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }
-                  </div>
-                </div>
-                <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial</div>
-                  <div className="mt-2 text-2xl font-bold text-gray-900">R$ 31.200</div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white/80">
+                  Dados carregados via API de balanço energético
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void refetchEnergyBalance()}
+                    disabled={isEnergyBalanceLoading || !contratoSelecionado}
+                    className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-600 px-3 py-2 text-sm font-bold text-gray-700 dark:text-white transition hover:border-yn-orange hover:text-yn-orange disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isEnergyBalanceLoading ? 'Atualizando…' : 'Atualizar balanço'}
+                  </button>
+                  <Link
+                    to={`/contratos/${contratoDetalhado.id}/balanco-energetico`}
+                    className="inline-flex items-center rounded-md border border-yn-orange px-3 py-2 text-sm font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
+                  >
+                    Ver página completa
+                  </Link>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-auto">
-                <table className="min-w-[920px] w-full table-auto text-sm">
-                  <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Mês</th>
-                      <th className="px-4 py-3 text-left">Medidor</th>
-                      <th className="px-4 py-3 text-left">Consumo (MWh)</th>
-                      <th className="px-4 py-3 text-left">Preço (R$/MWh)</th>
-                      <th className="px-4 py-3 text-left">Custo do mês</th>
-                      <th className="px-4 py-3 text-left">PROINFA</th>
-                      <th className="px-4 py-3 text-left">Faixa contratual</th>
-                      <th className="px-4 py-3 text-left">Ajustado</th>
-                      <th className="px-4 py-3 text-left">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {mockEnergyBalance.map((row) => {
-                      const consumoMwh = row.consumptionKwh / 1000;
-                      const custo = row.billable ?? (row.pricePerMwh * consumoMwh);
-                      const faixaMin = row.contractedVolumeMwh * row.lowerLimitPct;
-                      const faixaMax = row.contractedVolumeMwh * row.upperLimitPct;
-                      return (
-                        <tr key={row.id} className="bg-white hover:bg-gray-50">
-                          <td className="px-4 py-3 font-bold text-gray-900">{formatMonthShort(row.reference)}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{row.meter}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{consumoMwh.toLocaleString('pt-BR')}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{row.pricePerMwh.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{row.proinfaContribution.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{faixaMin.toFixed(0)} – {faixaMax.toFixed(0)} MWh</td>
-                          <td className="px-4 py-3 font-bold text-gray-900">{row.adjusted ? 'Sim' : 'Não'}</td>
-                          <td className="px-4 py-3">
-                            <button className="rounded-md border border-gray-200 px-3 py-1 font-bold text-gray-600 transition hover:border-yn-orange hover:text-yn-orange">Ver detalhes</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {energyBalanceError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+                  <div className="text-sm font-bold text-red-700 dark:text-red-300">
+                    Erro ao carregar balanço energético: {energyBalanceError}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void refetchEnergyBalance()}
+                    className="mt-2 inline-flex items-center rounded-md border border-red-300 dark:border-red-700 px-3 py-1 text-sm font-bold text-red-700 dark:text-red-300 transition hover:border-red-400 hover:bg-red-100 dark:hover:border-red-500 dark:hover:bg-red-900/40"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+
+              {isEnergyBalanceLoading && (
+                <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-600 bg-white p-6 text-center text-sm font-bold text-gray-500 dark:text-white">
+                  Carregando dados do balanço energético...
+                </div>
+              )}
+
+              {!isEnergyBalanceLoading && !energyBalanceError && energyBalanceData.length === 0 && (
+                <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-600 bg-white p-6 text-center text-sm font-bold text-gray-500 dark:text-white">
+                  Nenhum dado de balanço energético disponível para este contrato.
+                </div>
+              )}
+
+              {energyBalanceSummary && energyBalanceData.length > 0 && !isEnergyBalanceLoading && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo total</div>
+                    <div className="mt-2 text-2xl font-bold text-gray-900">
+                      {EnergyBalanceUtils.formatMwh(energyBalanceSummary.total_consumption_mwh)} MWh
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo total</div>
+                    <div className="mt-2 text-2xl font-bold text-gray-900">
+                      {EnergyBalanceUtils.formatCurrency(energyBalanceSummary.total_cost)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA total</div>
+                    <div className="mt-2 text-2xl font-bold text-gray-900">
+                      {EnergyBalanceUtils.formatCurrency(energyBalanceSummary.total_proinfa)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial</div>
+                    <div className="mt-2 text-2xl font-bold text-gray-900">
+                      {EnergyBalanceUtils.formatCurrency(energyBalanceSummary.potential_savings)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {energyBalanceData.length > 0 && !isEnergyBalanceLoading && (
+                <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-auto">
+                  <table className="min-w-[920px] w-full table-auto text-sm">
+                    <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Mês</th>
+                        <th className="px-4 py-3 text-left">Medidor</th>
+                        <th className="px-4 py-3 text-left">Consumo (MWh)</th>
+                        <th className="px-4 py-3 text-left">Preço (R$/MWh)</th>
+                        <th className="px-4 py-3 text-left">Custo do mês</th>
+                        <th className="px-4 py-3 text-left">PROINFA</th>
+                        <th className="px-4 py-3 text-left">Faixa contratual</th>
+                        <th className="px-4 py-3 text-left">Ajustado</th>
+                        <th className="px-4 py-3 text-left">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {energyBalanceData.map((row) => {
+                        const consumoMwh = EnergyBalanceUtils.kwhToMwh(row.consumption_kwh);
+                        const custo = EnergyBalanceUtils.calculateCurrentCost(row);
+                        const faixaMin = row.min_demand ?? null;
+                        const faixaMax = row.max_demand ?? null;
+
+                        return (
+                          <tr key={row.id} className="bg-white hover:bg-gray-50">
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {EnergyBalanceUtils.formatMonthReference(row.reference_base)}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{row.meter}</td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {EnergyBalanceUtils.formatMwh(consumoMwh)}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {EnergyBalanceUtils.formatCurrency(row.price)} / MWh
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {EnergyBalanceUtils.formatCurrency(custo)}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {EnergyBalanceUtils.formatCurrency(row.proinfa_contribution)}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {faixaMin !== null && faixaMax !== null
+                                ? `${EnergyBalanceUtils.formatMwh(faixaMin)} – ${EnergyBalanceUtils.formatMwh(faixaMax)} MWh`
+                                : 'Não informado'}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">{row.adjusted ? 'Sim' : 'Não'}</td>
+                            <td className="px-4 py-3">
+                              <Link
+                                to={`/contratos/${contratoDetalhado.id}/balanco-energetico`}
+                                className="rounded-md border border-gray-200 dark:border-gray-600 px-3 py-1 text-xs font-bold text-gray-600 dark:text-white transition hover:border-yn-orange hover:text-yn-orange"
+                              >
+                                Ver detalhes
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
                 <div className="text-sm font-bold text-gray-900">Balanço Energético</div>
-                <p className="mt-1 text-xs font-bold text-gray-600">
-                  Linha do tempo mensal por medidor/cliente/contrato consolidando consumo, preço e encargos para cálculo, auditoria e geração de oportunidades.
+                <p className="mt-1 text-xs font-bold text-gray-600 dark:text-white/80">
+                  Dados provenientes da API de balanço energético consolidam consumo, preço e encargos para cálculo,
+                  auditoria e geração de oportunidades.
                 </p>
               </div>
             </div>

@@ -2,9 +2,9 @@ import React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type {
   ContractInvoiceStatus,
-  ContractMock,
+  ContractDetails as ContractMock,
   StatusResumo,
-} from '../../mocks/contracts';
+} from '../../types/contracts';
 import { useContracts } from './ContractsContext';
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];

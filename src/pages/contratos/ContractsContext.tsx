@@ -1,6 +1,5 @@
 import React from 'react';
-import { ContractMock } from '../../mocks/contracts';
-import { mockContracts } from '../../mocks/contracts';
+import type { ContractDetails as ContractMock } from '../../types/contracts';
 import {
   createContract as createContractService,
   deleteContract as deleteContractService,
@@ -189,7 +188,8 @@ const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
   const text = removeDiacritics(normalizeString(value));
   if (['ativo', 'ativos', 'active'].includes(text)) return 'Ativo';
   if (['inativo', 'inativos', 'inactive'].includes(text)) return 'Inativo';
-  if (['pendente', 'pending'].includes(text)) return 'Ativo';
+  if (text.includes('analise') || text.includes('analysis')) return 'Em análise';
+  if (['pendente', 'pending'].includes(text)) return 'Em análise';
   return 'Ativo';
 };
 
@@ -1083,9 +1083,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       } catch (err) {
         if (signal?.aborted) return;
-        console.error('[ContractsProvider] Falha ao buscar contratos da API, utilizando mocks.', err);
+        console.error('[ContractsProvider] Falha ao buscar contratos da API.', err);
         setError(err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos');
-        setContracts(mockContracts.map((contract) => cloneContract(contract)));
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false);
