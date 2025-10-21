@@ -8,7 +8,7 @@ import type {
 import { useContracts } from './ContractsContext';
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
-const invoiceStatusOptions: ContractInvoiceStatus[] = ['Paga', 'Em aberto', 'Em análise'];
+const invoiceStatusOptions: ContractInvoiceStatus[] = ['Paga', 'Em aberto', 'Em análise', 'Vencida'];
 
 type FormState = {
   codigo: string;
