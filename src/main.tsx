@@ -24,7 +24,7 @@ const SHOULD_USE_MOCK_API = (() => {
 })()
 
 async function bootstrap() {
-  // Enable MSW only when mock API mode is explicitly requestedd
+  // Enable MSW only when mock API mode is explicitly requested
   if (SHOULD_USE_MOCK_API) {
     const { worker } = await import('./mocks/browser')
     await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
