@@ -10,11 +10,11 @@ import {
   YAxis,
 } from 'recharts';
 import type {
-  ContractMock,
+  ContractDetails as ContractMock,
   StatusResumo,
   AnaliseStatus,
-} from '../../mocks/contracts';
-import { obrigacaoColunas, formatMesLabel } from '../../mocks/contracts';
+} from '../../types/contracts';
+import { obrigacaoColunas, formatMesLabel } from '../../types/contracts';
 
 const statusStyles: Record<StatusResumo, string> = {
   Conforme: 'bg-green-100 text-green-700 border border-green-200',
