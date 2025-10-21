@@ -2,12 +2,12 @@ import React from 'react';
 import { X, Plus, Trash2, UploadCloud } from 'lucide-react';
 import {
   type ContractInvoiceStatus,
-  type ContractMock,
+  type ContractDetails as ContractMock,
   type StatusResumo,
   type AnaliseArea,
   obrigacaoColunas,
   formatMesLabel,
-} from '../../mocks/contracts';
+} from '../../types/contracts';
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 const invoiceStatusOptions: ContractInvoiceStatus[] = ['Paga', 'Em aberto', 'Em análise'];

@@ -1,6 +1,5 @@
 import React from 'react';
-import { ContractMock } from '../../mocks/contracts';
-import { mockContracts } from '../../mocks/contracts';
+import type { ContractDetails as ContractMock } from '../../types/contracts';
 import {
   createContract as createContractService,
   deleteContract as deleteContractService,
@@ -189,7 +188,8 @@ const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
   const text = removeDiacritics(normalizeString(value));
   if (['ativo', 'ativos', 'active'].includes(text)) return 'Ativo';
   if (['inativo', 'inativos', 'inactive'].includes(text)) return 'Inativo';
-  if (['pendente', 'pending'].includes(text)) return 'Ativo';
+  if (text.includes('analise') || text.includes('analysis')) return 'Em análise';
+  if (['pendente', 'pending'].includes(text)) return 'Em análise';
   return 'Ativo';
 };
 
@@ -731,10 +731,63 @@ const buildResourceEndpointCandidates = (rawUrl: string, resourceId: string): st
   return buildEndpointCandidates(rawUrl).map((endpoint) => `${endpoint.replace(/\/$/, '')}/${sanitizedId}`);
 };
 
+const isAbsoluteUrl = (value: string): boolean => /^(https?:)?\/\//i.test(value);
+
 const baseHeaders = {
   Accept: 'application/json',
   'ngrok-skip-browser-warning': 'true',
 } as const;
+
+const fetchContractsFromEndpoints = async (
+  endpoints: string[],
+  signal?: AbortSignal
+): Promise<ContractMock[]> => {
+  let lastError: unknown;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: baseHeaders,
+        signal,
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => '');
+        throw new Error(
+          message || `[ContractsContext] Erro ao buscar contratos em ${endpoint} (status ${response.status}).`
+        );
+      }
+
+      const data = await response.json().catch(() => null);
+      const contracts = normalizeContractsFromApi(data);
+      if (!contracts.length) {
+        console.warn('[ContractsContext] API retornou lista vazia de contratos.');
+      }
+      console.info(
+        `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos de ${endpoint}.`
+      );
+      return contracts;
+    } catch (error) {
+      if (signal?.aborted) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+      lastError = error;
+      console.error(
+        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
+        error instanceof Error ? error : new Error(String(error))
+      );
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        console.error(
+          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
+        );
+      }
+      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
+    }
+  }
+
+  throw (lastError instanceof Error ? lastError : new Error('Erro desconhecido ao carregar contratos'));
+};
 
 const contractToApiPayload = (contract: ContractMock): Record<string, unknown> => {
   const findDadosValue = (keywords: string[]): string | undefined => {
@@ -895,18 +948,23 @@ const requestContractApi = async (
 };
 
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
-  try {
-    const created = await createContractService(contractToServicePayload(contract));
-    const normalized = normalizeContractsFromApi(created);
-    if (normalized[0]) {
-      return normalized[0];
+  const writeBaseUrl = resolveWriteApiUrl();
+  const shouldUseService = !isAbsoluteUrl(writeBaseUrl);
+
+  if (shouldUseService) {
+    try {
+      const created = await createContractService(contractToServicePayload(contract));
+      const normalized = normalizeContractsFromApi(created);
+      if (normalized[0]) {
+        return normalized[0];
+      }
+    } catch (serviceError) {
+      console.error('[ContractsContext] Falha ao criar contrato via apiClient.', serviceError);
     }
-  } catch (serviceError) {
-    console.error('[ContractsContext] Falha ao criar contrato via apiClient.', serviceError);
   }
 
   const payload = contractToApiPayload(contract);
-  const endpoints = buildEndpointCandidates(resolveWriteApiUrl());
+  const endpoints = buildEndpointCandidates(writeBaseUrl);
   const response = await requestContractApi(endpoints, 'POST', payload);
   if (!response) {
     return contract;
@@ -916,8 +974,10 @@ const createContractInApi = async (contract: ContractMock): Promise<ContractMock
 };
 
 const updateContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
+  const writeBaseUrl = resolveWriteApiUrl();
+  const shouldUseService = !isAbsoluteUrl(writeBaseUrl);
   const id = normalizeString(contract.id);
-  if (id) {
+  if (shouldUseService && id) {
     try {
       const updated = await updateContractService(id, contractToServicePayload(contract));
       const normalizedFromService = normalizeContractsFromApi(updated);
@@ -934,8 +994,9 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
   }
 
   const payload = contractToApiPayload(contract);
-  const baseUrl = resolveWriteApiUrl();
-  const endpoints = id ? buildResourceEndpointCandidates(baseUrl, id) : buildEndpointCandidates(baseUrl);
+  const endpoints = id
+    ? buildResourceEndpointCandidates(writeBaseUrl, id)
+    : buildEndpointCandidates(writeBaseUrl);
   const response = await requestContractApi(endpoints, 'PUT', payload);
   if (!response) {
     return contract;
@@ -945,8 +1006,10 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
 };
 
 const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
+  const writeBaseUrl = resolveWriteApiUrl();
+  const shouldUseService = !isAbsoluteUrl(writeBaseUrl);
   const id = normalizeString(contract.id);
-  if (id) {
+  if (shouldUseService && id) {
     try {
       await deleteContractService(id);
       return;
@@ -954,15 +1017,22 @@ const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
       console.error('[ContractsContext] Falha ao excluir contrato via apiClient.', serviceError);
     }
   }
-  const baseUrl = resolveWriteApiUrl();
   const endpoints = [
-    ...(id ? buildResourceEndpointCandidates(baseUrl, id) : []),
-    ...buildEndpointCandidates(baseUrl),
+    ...(id ? buildResourceEndpointCandidates(writeBaseUrl, id) : []),
+    ...buildEndpointCandidates(writeBaseUrl),
   ];
   await requestContractApi(endpoints, 'DELETE', buildDeletePayload(contract));
 };
 
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
+  const rawUrl = resolveReadApiUrl();
+  const endpoints = buildEndpointCandidates(rawUrl);
+  const hasAbsoluteEndpoint = endpoints.some((endpoint) => isAbsoluteUrl(endpoint));
+
+  if (hasAbsoluteEndpoint) {
+    return fetchContractsFromEndpoints(endpoints, signal);
+  }
+
   let lastError: unknown;
 
   try {
@@ -984,51 +1054,17 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
     console.error('[ContractsContext] Falha ao buscar contratos via apiClient.', serviceError);
   }
 
-  const rawUrl = resolveReadApiUrl();
-  const endpoints = buildEndpointCandidates(rawUrl);
+  const fallbackEndpoints = Array.from(
+    new Set([...endpoints, ...buildEndpointCandidates(DEFAULT_API_URL)])
+  );
 
-  for (const endpoint of endpoints) {
-    try {
-      console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET (fallback).`);
-
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar contratos erro aqui (${response.status})`);
-      }
-
-      const data = await response.json();
-      const contracts = normalizeContractsFromApi(data);
-      if (!contracts.length) {
-        console.warn('[ContractsContext] API retornou lista vazia de contratos.');
-      }
-      console.info(
-        `[ContractsContext] Contratos carregados com sucesso (fallback): ${contracts.length} itens recebidos.`
-      );
-      return contracts;
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
-      }
-      lastError = error;
-      console.error(
-        `[ContractsContext] Erro ao buscar contratos em ${endpoint} (fallback).`,
-        error instanceof Error ? error : new Error(String(error))
-      );
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        console.error(
-          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
-        );
-      }
-      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
+  try {
+    return await fetchContractsFromEndpoints(fallbackEndpoints, signal);
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error instanceof Error ? error : new Error(String(error));
     }
+    lastError = error;
   }
 
   throw (lastError instanceof Error
@@ -1083,9 +1119,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       } catch (err) {
         if (signal?.aborted) return;
-        console.error('[ContractsProvider] Falha ao buscar contratos da API, utilizando mocks.', err);
+        console.error('[ContractsProvider] Falha ao buscar contratos da API.', err);
         setError(err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos');
-        setContracts(mockContracts.map((contract) => cloneContract(contract)));
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false);

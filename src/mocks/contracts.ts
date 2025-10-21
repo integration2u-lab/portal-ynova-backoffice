@@ -60,7 +60,7 @@ export type ContractMock = {
   cnpj: string;
   segmento: string;
   contato: string;
-  status: 'Ativo' | 'Inativo';
+  status: 'Ativo' | 'Inativo' | 'Em análise';
   fonte: 'Convencional' | 'Incentivada';
   modalidade: string;
   inicioVigencia: string;
