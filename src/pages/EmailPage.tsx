@@ -8,28 +8,28 @@ import type { EmailRow } from '../types/email';
 const SEARCH_DEBOUNCE_MS = 300;
 
 const columns: Array<{ key: keyof EmailRow; label: string; inputType?: string; minWidth?: string }> = [
-  { key: 'id', label: 'id', minWidth: 'min-w-[140px]' },
-  { key: 'clientes', label: 'clientes', minWidth: 'min-w-[200px]' },
-  { key: 'preco', label: 'preco', minWidth: 'min-w-[160px]' },
-  { key: 'dataBase', label: 'dataBase', minWidth: 'min-w-[140px]' },
-  { key: 'reajustado', label: 'reajustado', minWidth: 'min-w-[160px]' },
-  { key: 'fornecedor', label: 'fornecedor', minWidth: 'min-w-[200px]' },
-  { key: 'medidor', label: 'medidor', minWidth: 'min-w-[160px]' },
-  { key: 'consumo', label: 'consumo', minWidth: 'min-w-[160px]' },
-  { key: 'perdas3', label: 'perdas3', minWidth: 'min-w-[140px]' },
-  { key: 'requisito', label: 'requisito', minWidth: 'min-w-[160px]' },
-  { key: 'net', label: 'net', minWidth: 'min-w-[160px]' },
-  { key: 'medicao', label: 'medicao', minWidth: 'min-w-[160px]' },
-  { key: 'proinfa', label: 'proinfa', minWidth: 'min-w-[160px]' },
-  { key: 'contrato', label: 'contrato', minWidth: 'min-w-[160px]' },
-  { key: 'minimo', label: 'minimo', minWidth: 'min-w-[160px]' },
-  { key: 'maximo', label: 'maximo', minWidth: 'min-w-[160px]' },
-  { key: 'faturar', label: 'faturar', minWidth: 'min-w-[140px]' },
-  { key: 'cp', label: 'cp', minWidth: 'min-w-[120px]' },
-  { key: 'email', label: 'email', minWidth: 'min-w-[220px]' },
-  { key: 'envioOk', label: 'envioOk', minWidth: 'min-w-[140px]' },
-  { key: 'disparo', label: 'disparo', minWidth: 'min-w-[180px]' },
-  { key: 'dataVencimentoBoleto', label: 'dataVencimentoBoleto', minWidth: 'min-w-[180px]' },
+  { key: 'id', label: 'ID', minWidth: 'min-w-[120px]' },
+  { key: 'clientes', label: 'CLIENTES', minWidth: 'min-w-[220px]' },
+  { key: 'preco', label: 'PREÇO', minWidth: 'min-w-[150px]' },
+  { key: 'dataBase', label: 'DATA BASE', minWidth: 'min-w-[140px]' },
+  { key: 'reajustado', label: 'REAJUSTADO', minWidth: 'min-w-[150px]' },
+  { key: 'fornecedor', label: 'FORNECEDOR', minWidth: 'min-w-[200px]' },
+  { key: 'medidor', label: 'MEDIDOR', minWidth: 'min-w-[150px]' },
+  { key: 'consumo', label: 'CONSUMO', minWidth: 'min-w-[140px]' },
+  { key: 'perdas3', label: 'PERDAS 3', minWidth: 'min-w-[140px]' },
+  { key: 'requisito', label: 'REQUISITO', minWidth: 'min-w-[150px]' },
+  { key: 'net', label: 'NET', minWidth: 'min-w-[120px]' },
+  { key: 'medicao', label: 'MEDIÇÃO', minWidth: 'min-w-[140px]' },
+  { key: 'proinfa', label: 'PROINFA', minWidth: 'min-w-[140px]' },
+  { key: 'contrato', label: 'CONTRATO', minWidth: 'min-w-[150px]' },
+  { key: 'minimo', label: 'MÍNIMO', minWidth: 'min-w-[140px]' },
+  { key: 'maximo', label: 'MÁXIMO', minWidth: 'min-w-[140px]' },
+  { key: 'faturar', label: 'FATURAR', minWidth: 'min-w-[140px]' },
+  { key: 'cp', label: 'CP', minWidth: 'min-w-[110px]' },
+  { key: 'email', label: 'EMAIL', minWidth: 'min-w-[220px]' },
+  { key: 'envioOk', label: 'ENVIO OK', minWidth: 'min-w-[150px]' },
+  { key: 'disparo', label: 'DISPARO', minWidth: 'min-w-[170px]' },
+  { key: 'dataVencimentoBoleto', label: 'DATA VENCIMENTO BOLETO', minWidth: 'min-w-[200px]' },
 ];
 
 const removeDiacritics = (value: string) =>
@@ -206,9 +206,9 @@ export default function EmailPage() {
     <div className="space-y-6 p-4">
       <header className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Email</h1>
-          <p className="mt-2 max-w-2xl text-sm font-bold text-gray-600 dark:text-white">
-            Gerencie o disparo de comunicações e acompanhe a preparação dos balanços energéticos enviados aos clientes.
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gestão de Emails CCEE</h1>
+          <p className="mt-2 max-w-3xl text-sm font-bold text-gray-600 dark:text-white">
+            Gerencie e envie emails com dados de contratos e medições de energia.
           </p>
         </div>
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -279,21 +279,19 @@ export default function EmailPage() {
 
       {hasRows && (
         <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-100 text-left text-sm">
-            <thead className="bg-gray-50">
+          <table className="min-w-[1200px] w-full table-auto text-left text-xs sm:text-sm">
+            <thead className="bg-yn-orange text-white">
               <tr>
                 {columns.map((column) => (
                   <th
                     key={column.key}
                     scope="col"
-                    className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 ${column.minWidth ?? ''}`}
+                    className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-widest sm:text-xs ${column.minWidth ?? ''}`}
                   >
                     {column.label}
                   </th>
                 ))}
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Ações
-                </th>
+                <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-widest sm:text-xs">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -301,33 +299,33 @@ export default function EmailPage() {
                 const isEditing = editingId === row.id;
                 const draft = draftRows[row.id];
                 return (
-                  <tr key={row.id} className="hover:bg-gray-50">
+                  <tr key={row.id} className="odd:bg-white even:bg-gray-50 hover:bg-yn-orange/10">
                     {columns.map((column) => {
                       const value = isEditing ? draft?.[column.key] ?? row[column.key] : row[column.key];
                       return (
-                        <td key={column.key} className="px-4 py-3 align-top text-sm font-bold text-gray-700">
+                        <td key={column.key} className={`px-4 py-3 align-top font-semibold text-gray-700 ${column.minWidth ?? ''}`}>
                           {isEditing ? (
                             <input
                               type={column.inputType ?? 'text'}
                               value={value}
                               onChange={(event) => handleDraftChange(row.id, column.key, event.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm font-semibold text-gray-700 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30 sm:text-sm"
                               aria-label={`Editar ${column.label} do registro ${row.id}`}
                             />
                           ) : (
-                            <span className="block text-sm font-bold text-gray-700">{row[column.key]}</span>
+                            <span className="block text-xs font-semibold text-gray-700 sm:text-sm">{row[column.key]}</span>
                           )}
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                    <td className="px-4 py-3 text-center">
+                      <div className="inline-flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleConfirmEdit(row.id)}
                           disabled={!isEditing}
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500 text-emerald-600 transition hover:bg-emerald-500 hover:text-white ${
-                            isEditing ? '' : 'cursor-not-allowed opacity-50'
+                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white transition hover:brightness-110 ${
+                            isEditing ? '' : 'cursor-not-allowed opacity-60'
                           }`}
                           aria-label="Confirmar alterações"
                         >
@@ -336,7 +334,7 @@ export default function EmailPage() {
                         <button
                           type="button"
                           onClick={() => (isEditing ? handleCancelEdit(row.id) : handleStartEdit(row))}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500 text-red-600 transition hover:bg-red-500 hover:text-white"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-white transition hover:brightness-110"
                           aria-label={isEditing ? 'Cancelar edição' : 'Editar registro'}
                         >
                           <X size={18} />
