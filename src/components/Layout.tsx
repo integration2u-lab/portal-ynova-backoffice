@@ -14,6 +14,7 @@ import {
   X,
   GraduationCap,
   Handshake,
+  Mail,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
@@ -23,6 +24,7 @@ const navigation = [
   { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
+  { to: '/email', label: 'Email', icon: Mail },
   /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
