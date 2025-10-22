@@ -21,6 +21,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import ContratosPage from './pages/contratos';
 import DetalheContratoPage from './pages/contratos/DetalheContrato';
 import EditarContratoPage from './pages/contratos/EditContractPage';
+import BalancoEnergeticoPage from './pages/contratos/BalancoEnergeticoPage';
 import ContractsLayout from './pages/contratos/ContractsLayout';
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
@@ -59,6 +60,7 @@ function AppRoutes() {
               <Route index element={<ContratosPage />} />
               <Route path=":id" element={<DetalheContratoPage />} />
               <Route path=":id/editar" element={<EditarContratoPage />} />
+              <Route path=":id/balanco-energetico" element={<BalancoEnergeticoPage />} />
             </Route>
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
