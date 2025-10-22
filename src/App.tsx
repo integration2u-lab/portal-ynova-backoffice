@@ -56,6 +56,10 @@ function AppRoutes() {
             <Route path="inteligencia" element={<InteligenciaPage />} />
             <Route path="analise-fatura" element={<InvoiceProcessingPage />} />
             <Route path="simulacao" element={<SimulationPage />} />
+            <Route path="balancos">
+              <Route index element={<EnergyBalanceListPage />} />
+              <Route path=":id" element={<EnergyBalanceDetailPage />} />
+            </Route>
 
             {/* Gestão: Contratos */}
             <Route path="contratos" element={<ContractsLayout />}>

@@ -15,6 +15,7 @@ import {
   X,
   GraduationCap,
   Handshake,
+  Zap,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
