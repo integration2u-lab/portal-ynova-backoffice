@@ -6,6 +6,7 @@ import {
   Calculator,
   FileText,
   PieChart,
+  BarChart3,
   User,
   Bell,
   HelpCircle,
