@@ -1,42 +1,10 @@
-export type NormalizedEnergyBalanceListItem = {
-  id: string;
-  cliente: string;
-  cnpj: string;
-  meterCode: string;
-  impostoPercent: string;
-  consumoKWh: string;
-  geracaoKWh: string;
-  saldoKWh: string;
-  saldoValor?: number | null;
-};
-
-export type NormalizedEnergyBalanceDetail = {
-  header: {
-    titleSuffix: string;
-    razao: string;
-    cnpj: string;
-    contractId?: string;
-    contractCode?: string;
-  };
-  metrics: {
-    consumoTotalMWh: string;
-    custoTotalBRL: string;
-    proinfaTotal: string;
-    economiaPotencialBRL: string;
-  };
-  months: Array<{
-    id: string;
-    mes: string;
-    medidor: string;
-    consumoMWh: string;
-    precoReaisPorMWh: string;
-    custoMesBRL: string;
-    proinfa: string;
-    faixaContratual: string;
-    ajustado: string;
-    actions?: string;
-  }>;
-};
+import type {
+  EnergyBalanceDetail,
+  EnergyBalanceDetailMonthRow,
+  EnergyBalanceEvent,
+  EnergyBalanceListItem,
+} from '../../types/energyBalance';
+import type { EmailRow } from '../../types/email';
 
 const percentFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'percent',
@@ -63,6 +31,20 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', {
   month: 'short',
   year: 'numeric',
+});
+
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
 });
 
 const textFormatter = new Intl.ListFormat('pt-BR', { style: 'short', type: 'conjunction' });
@@ -190,6 +172,41 @@ const normalizeBoolean = (value: unknown): string => {
   return 'Não informado';
 };
 
+const normalizeDate = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return 'Não informado';
+  const text = String(value).trim();
+  if (!text) return 'Não informado';
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    try {
+      return dateFormatter.format(parsed);
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar data', error);
+    }
+  }
+  return text;
+};
+
+const normalizeDateTime = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return 'Não informado';
+  const text = String(value).trim();
+  if (!text) return 'Não informado';
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    try {
+      return dateTimeFormatter.format(parsed).replace('.', '');
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar data/hora', error);
+    }
+  }
+  return text;
+};
+
+const toTitleCase = (value: string): string => {
+  if (!value) return value;
+  return value.replace(/(^|\s)([\p{L}\p{M}])/gu, (match) => match.toUpperCase());
+};
+
 const normalizeMonthLabel = (value: unknown): string => {
   const text = toStringSafe(value);
   if (!text) return 'Não informado';
@@ -247,34 +264,36 @@ export function getSafe(record: unknown, ...keys: Array<string | string[]>): unk
   return undefined;
 }
 
-export function normalizeListItem(row: any): NormalizedEnergyBalanceListItem {
+export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListItem {
+  const record = row && typeof row === 'object' ? (row as Record<string, unknown>) : {};
+
   const idSource =
-    getSafe(row, 'id', 'balanceId', 'balance_id', 'uuid', 'energy_balance_id') ??
-    getSafe(row, 'meta.id', 'metadata.id');
+    getSafe(record, 'id', 'balanceId', 'balance_id', 'uuid', 'energy_balance_id') ??
+    getSafe(record, 'meta.id', 'metadata.id');
   const id = toStringSafe(idSource, fallbackId());
 
   const clientName =
-    getSafe(row, 'clientName', 'client_name', 'cliente', 'client.nome', 'client.name', 'name') ??
-    getSafe(row, 'customerName', 'clienteNome');
+    getSafe(record, 'clientName', 'client_name', 'cliente', 'client.nome', 'client.name', 'name') ??
+    getSafe(record, 'customerName', 'clienteNome');
   const cliente = toStringSafe(clientName, 'Cliente não informado');
 
   const cnpjSource =
-    getSafe(row, 'cnpj', 'clientCnpj', 'client_cnpj', 'cliente.cnpj', 'client.cnpj', 'document') ??
-    getSafe(row, 'customer.document', 'metadata.cnpj');
+    getSafe(record, 'cnpj', 'clientCnpj', 'client_cnpj', 'cliente.cnpj', 'client.cnpj', 'document') ??
+    getSafe(record, 'customer.document', 'metadata.cnpj');
   const cnpj = cnpjSource ? formatCnpj(String(cnpjSource)) : 'Não informado';
 
   const meterSource =
-    getSafe(row, 'meter', 'meterCode', 'meter_code', 'uc', 'uc_code', 'medidor', 'codigoUc') ??
-    getSafe(row, 'client.meter', 'metadata.meter');
+    getSafe(record, 'meter', 'meterCode', 'meter_code', 'uc', 'uc_code', 'medidor', 'codigoUc') ??
+    getSafe(record, 'client.meter', 'metadata.meter');
   const meterCode = toStringSafe(meterSource, 'Não informado');
 
   const impostoPercent = normalizePercent(
-    getSafe(row, 'tax', 'imposto', 'imposto_percent', 'impostoPercent', 'tax_percent', 'aliquota'),
+    getSafe(record, 'tax', 'imposto', 'imposto_percent', 'impostoPercent', 'tax_percent', 'aliquota'),
   );
 
   const consumo = normalizeKwh(
     getSafe(
-      row,
+      record,
       'consumption_kwh',
       'consumo_kwh',
       'consumptionKwh',
@@ -286,11 +305,11 @@ export function normalizeListItem(row: any): NormalizedEnergyBalanceListItem {
   );
 
   const geracao = normalizeKwh(
-    getSafe(row, 'generation_kwh', 'geracao_kwh', 'generationKwh', 'geracao', 'generation', 'metrics.generation_kwh'),
+    getSafe(record, 'generation_kwh', 'geracao_kwh', 'generationKwh', 'geracao', 'generation', 'metrics.generation_kwh'),
   );
 
   const saldo = normalizeKwh(
-    getSafe(row, 'saldo_kwh', 'saldoKwh', 'balance_kwh', 'balanceKwh', 'saldo', 'balance', 'net_balance'),
+    getSafe(record, 'saldo_kwh', 'saldoKwh', 'balance_kwh', 'balanceKwh', 'saldo', 'balance', 'net_balance'),
   );
 
   const saldoDisplay = saldo.numeric === null
@@ -351,7 +370,7 @@ const describeRange = (minValue: unknown, maxValue: unknown): string => {
   }
 };
 
-export function normalizeDetail(row: any): NormalizedEnergyBalanceDetail {
+export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail {
   const record = row && typeof row === 'object' ? (row as Record<string, unknown>) : {};
 
   const contractId = getSafe(record, 'contractId', 'contract_id', 'contract.id', 'contratoId');
@@ -451,7 +470,7 @@ export function normalizeDetail(row: any): NormalizedEnergyBalanceDetail {
       ? ((monthsSource as Record<string, unknown>).items as unknown[])
       : [];
 
-  const months = monthsArray.map((item, index) => {
+  const months = monthsArray.map((item, index): EnergyBalanceDetailMonthRow => {
     const entry = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
     const entryId = toStringSafe(
       getSafe(entry, 'id', 'uuid', 'rowId', 'monthId'),
@@ -517,5 +536,180 @@ export function normalizeDetail(row: any): NormalizedEnergyBalanceDetail {
       economiaPotencialBRL,
     },
     months,
+  };
+}
+
+export function normalizeEnergyBalanceEvent(
+  event: unknown,
+  index = 0,
+): EnergyBalanceEvent {
+  const record = event && typeof event === 'object' ? (event as Record<string, unknown>) : {};
+  const eventId = toStringSafe(
+    getSafe(record, 'id', 'eventId', 'uuid', 'logId'),
+    `event-${index}`,
+  );
+  const message = toStringSafe(
+    getSafe(record, 'message', 'descricao', 'description', 'detail', 'event'),
+    'Atualização registrada',
+  );
+  const type = toStringSafe(getSafe(record, 'type', 'categoria', 'category'), '');
+  const user = toStringSafe(
+    getSafe(record, 'user', 'usuario', 'actor', 'author', 'created_by'),
+    'Sistema',
+  );
+  const createdAt = normalizeDateTime(
+    getSafe(record, 'created_at', 'createdAt', 'data', 'timestamp', 'created_at_utc'),
+  );
+  const titleParts = [type ? toTitleCase(type) : '', message].filter(Boolean);
+
+  return {
+    id: eventId,
+    title: titleParts.length ? titleParts.join(' · ') : message,
+    description: message,
+    user,
+    createdAt,
+  };
+}
+
+export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
+  const record = row && typeof row === 'object' ? (row as Record<string, unknown>) : {};
+
+  const id = toStringSafe(
+    getSafe(record, 'id', 'emailId', 'uuid', 'rowId', 'energy_balance_id', 'balanceId'),
+    `email-${index}`,
+  );
+
+  const clientes = toStringSafe(
+    getSafe(
+      record,
+      'clientes',
+      'cliente',
+      'clienteNome',
+      'client_name',
+      'clientName',
+      'name',
+      'razaoSocial',
+      'client.legalName',
+    ),
+    'Não informado',
+  );
+
+  const preco = normalizeCurrencyAllowZero(
+    getSafe(record, 'preco', 'price', 'valor', 'tarifa', 'price_mwh', 'pricePerMwh'),
+  );
+
+  const dataBase = normalizeMonthLabel(
+    getSafe(
+      record,
+      'dataBase',
+      'data_base',
+      'competencia',
+      'reference',
+      'reference_base',
+      'mesReferencia',
+    ),
+  );
+
+  const reajustado = normalizeBoolean(
+    getSafe(record, 'reajustado', 'ajustado', 'isAdjusted', 'ajuste'),
+  );
+
+  const fornecedor = toStringSafe(
+    getSafe(record, 'fornecedor', 'supplier', 'provider', 'company', 'fornecedor_nome'),
+    'Não informado',
+  );
+
+  const medidor = toStringSafe(
+    getSafe(record, 'medidor', 'meter', 'meter_code', 'meterCode', 'uc', 'ucCode', 'codigoUc'),
+    'Não informado',
+  );
+
+  const consumo = normalizeMwh(
+    getSafe(record, 'consumo', 'consumo_mwh', 'consumption', 'consumption_mwh', 'consumoMwh'),
+  );
+
+  const perdas3 = normalizePercent(
+    getSafe(record, 'perdas3', 'perdas', 'losses', 'losses3', 'perda'),
+  );
+
+  const requisito = toStringSafe(
+    getSafe(record, 'requisito', 'requirement', 'req', 'requisito_cons', 'requisito_minimo'),
+    'Não informado',
+  );
+
+  const net = normalizeCurrencyAllowZero(
+    getSafe(record, 'net', 'net_value', 'valorLiquido', 'valor_liquido'),
+  );
+
+  const medicao = toStringSafe(
+    getSafe(record, 'medicao', 'measurement', 'tipoMedicao', 'tipo_medicao'),
+    'Não informado',
+  );
+
+  const proinfa = normalizeCurrencyAllowZero(
+    getSafe(record, 'proinfa', 'proinfa_total', 'encargoProinfa', 'encargo_proinfa'),
+  );
+
+  const contrato = toStringSafe(
+    getSafe(record, 'contrato', 'contract', 'contractCode', 'codigoContrato', 'contract_code'),
+    'Não informado',
+  );
+
+  const minimo = normalizeMwh(
+    getSafe(record, 'minimo', 'min', 'limite_inferior', 'faixa_min', 'min_mwh'),
+  );
+
+  const maximo = normalizeMwh(
+    getSafe(record, 'maximo', 'max', 'limite_superior', 'faixa_max', 'max_mwh'),
+  );
+
+  const faturar = normalizeBoolean(
+    getSafe(record, 'faturar', 'bill', 'shouldBill', 'faturar_bool'),
+  );
+
+  const cp = normalizeBoolean(
+    getSafe(record, 'cp', 'conta_participacao', 'cp_flag', 'contaParticipacao'),
+  );
+
+  const email = toStringSafe(
+    getSafe(record, 'email', 'destinatario', 'recipient', 'emailDestino'),
+    'Não informado',
+  );
+
+  const envioOk = normalizeBoolean(
+    getSafe(record, 'envioOk', 'envio_ok', 'sent', 'statusEnvio', 'envioStatus'),
+  );
+
+  const disparo = normalizeDateTime(
+    getSafe(record, 'disparo', 'disparo_at', 'enviadoEm', 'sentAt'),
+  );
+
+  const dataVencimentoBoleto = normalizeDate(
+    getSafe(record, 'dataVencimentoBoleto', 'vencimento', 'due_date', 'data_vencimento'),
+  );
+
+  return {
+    id,
+    clientes,
+    preco,
+    dataBase,
+    reajustado,
+    fornecedor,
+    medidor,
+    consumo,
+    perdas3,
+    requisito,
+    net,
+    medicao,
+    proinfa,
+    contrato,
+    minimo,
+    maximo,
+    faturar,
+    cp,
+    email,
+    envioOk,
+    disparo,
+    dataVencimentoBoleto,
   };
 }

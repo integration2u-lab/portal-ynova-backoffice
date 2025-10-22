@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { getById, getEvents } from '../../services/energyBalanceApi';
 import {
-  NormalizedEnergyBalanceDetail,
-  getSafe,
-  normalizeDetail,
+  normalizeEnergyBalanceDetail,
+  normalizeEnergyBalanceEvent,
 } from '../../utils/normalizers/energyBalance';
+import type { EnergyBalanceDetail, EnergyBalanceEvent } from '../../types/energyBalance';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -15,25 +15,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
   minute: '2-digit',
 });
-
-type TimelineEvent = {
-  id: string;
-  title: string;
-  description: string;
-  user: string;
-  createdAt: string;
-};
-
-const toTitleCase = (value: string) => {
-  if (!value) return value;
-  return value.replace(/(^|\s)([\p{L}\p{M}])/gu, (match) => match.toUpperCase());
-};
-
-const toDisplayText = (value: unknown, fallback: string) => {
-  if (value === null || value === undefined) return fallback;
-  const text = String(value).trim();
-  return text || fallback;
-};
 
 const parseEventDate = (value: unknown): string => {
   if (!value) return 'Data não informada';
@@ -51,12 +32,12 @@ const parseEventDate = (value: unknown): string => {
 
 export default function EnergyBalanceDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [detail, setDetail] = React.useState<NormalizedEnergyBalanceDetail | null>(null);
+  const [detail, setDetail] = React.useState<EnergyBalanceDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const detailControllerRef = React.useRef<AbortController | null>(null);
 
-  const [events, setEvents] = React.useState<TimelineEvent[]>([]);
+  const [events, setEvents] = React.useState<EnergyBalanceEvent[]>([]);
   const [eventsLoading, setEventsLoading] = React.useState(true);
   const [eventsError, setEventsError] = React.useState('');
   const eventsControllerRef = React.useRef<AbortController | null>(null);
@@ -70,7 +51,7 @@ export default function EnergyBalanceDetailPage() {
     setError('');
     try {
       const payload = await getById(id, controller.signal);
-      const normalized = normalizeDetail(payload);
+      const normalized = normalizeEnergyBalanceDetail(payload);
       setDetail(normalized);
     } catch (fetchError) {
       if (controller.signal.aborted) {
@@ -104,30 +85,10 @@ export default function EnergyBalanceDetailPage() {
       const payload = await getEvents(id, controller.signal);
       const array = Array.isArray(payload) ? payload : [];
       const normalizedEvents = array.map((item, index) => {
-        const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
-        const eventId = toDisplayText(
-          getSafe(record, 'id', 'eventId', 'uuid', 'logId'),
-          `${index}`,
-        );
-        const message = toDisplayText(
-          getSafe(record, 'message', 'descricao', 'description', 'detail', 'event'),
-          'Atualização registrada',
-        );
-        const type = toDisplayText(getSafe(record, 'type', 'categoria', 'category'), '');
-        const user = toDisplayText(
-          getSafe(record, 'user', 'usuario', 'actor', 'author', 'created_by'),
-          'Sistema',
-        );
-        const createdAt = parseEventDate(
-          getSafe(record, 'created_at', 'createdAt', 'data', 'timestamp', 'created_at_utc'),
-        );
-        const titleParts = [type ? toTitleCase(type) : '', message].filter(Boolean);
+        const normalized = normalizeEnergyBalanceEvent(item, index);
         return {
-          id: eventId,
-          title: titleParts.length ? titleParts.join(' · ') : message,
-          description: message,
-          user,
-          createdAt,
+          ...normalized,
+          createdAt: parseEventDate(normalized.createdAt),
         };
       });
       setEvents(normalizedEvents);

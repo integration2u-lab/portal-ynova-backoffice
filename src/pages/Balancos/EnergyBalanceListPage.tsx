@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Percent, Search, Zap, Leaf } from 'lucide-react';
 import UploadCsvModal from '../../components/balancos/UploadCsvModal';
 import { getList } from '../../services/energyBalanceApi';
-import { NormalizedEnergyBalanceListItem, normalizeListItem } from '../../utils/normalizers/energyBalance';
+import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
+import type { EnergyBalanceListItem } from '../../types/energyBalance';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -14,8 +15,8 @@ type UploadResult = { balanceId?: string; shouldRefresh?: boolean };
 
 export default function EnergyBalanceListPage() {
   const navigate = useNavigate();
-  const [items, setItems] = React.useState<NormalizedEnergyBalanceListItem[]>([]);
-  const itemsRef = React.useRef<NormalizedEnergyBalanceListItem[]>([]);
+  const [items, setItems] = React.useState<EnergyBalanceListItem[]>([]);
+  const itemsRef = React.useRef<EnergyBalanceListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -43,14 +44,14 @@ export default function EnergyBalanceListPage() {
       const normalized = (Array.isArray(payload) ? payload : [])
         .map((row) => {
           try {
-            const normalizedRow = normalizeListItem(row);
+            const normalizedRow = normalizeEnergyBalanceListItem(row);
             return normalizedRow;
           } catch (normalizationError) {
             console.warn('[EnergyBalanceList] falha ao normalizar item', normalizationError, row);
             return null;
           }
         })
-        .filter((row): row is NormalizedEnergyBalanceListItem => row !== null);
+        .filter((row): row is EnergyBalanceListItem => row !== null);
 
       itemsRef.current = normalized;
       setItems(normalized);

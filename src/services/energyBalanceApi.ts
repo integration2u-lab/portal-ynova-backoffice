@@ -330,3 +330,5 @@ export async function pollJob(
 
   throw new Error('Tempo limite ao aguardar o processamento do balanço energético.');
 }
+
+export { request as energyBalanceRequest, HttpError as EnergyBalanceHttpError };
