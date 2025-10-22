@@ -63,6 +63,7 @@ const dedupeWebhookCandidates = (): string[] => {
 };
 
 const WEBHOOK_CANDIDATES = dedupeWebhookCandidates();
+const WEBHOOK_FILE_FIELD_CANDIDATES = ['file', 'csv'] as const;
 
 export type EnergyBalanceJobPollResult = { balanceId: string };
 
@@ -205,65 +206,75 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
 }
 
 export async function createFromCsv(file: File): Promise<{ balanceId?: string; jobId?: string }> {
-  const buildFormData = () => {
+  const buildFormData = (fieldName: (typeof WEBHOOK_FILE_FIELD_CANDIDATES)[number]) => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('csv', file);
+    formData.append(fieldName, file);
     return formData;
   };
 
   let lastError: unknown = null;
 
-  for (const candidate of WEBHOOK_CANDIDATES) {
+  endpointLoop: for (const candidate of WEBHOOK_CANDIDATES) {
     if (!candidate) continue;
 
     const url = candidate;
     const sameOrigin = isSameOriginUrl(url);
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: buildFormData(),
-        credentials: sameOrigin ? 'include' : 'omit',
-        mode: sameOrigin ? 'same-origin' : 'cors',
-      });
+    for (const fieldName of WEBHOOK_FILE_FIELD_CANDIDATES) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          body: buildFormData(fieldName),
+          credentials: sameOrigin ? 'include' : 'omit',
+          mode: sameOrigin ? 'same-origin' : 'cors',
+        });
 
-      if (!response.ok) {
-        const payload = await parseJsonSafely(response);
-        const message =
-          (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string'
-            ? (payload as any).error
-            : undefined) || response.statusText || 'Erro ao enviar planilha';
-        const httpError = new HttpError(message, { status: response.status, body: payload });
-        if (httpError.status && shouldRetryStatus(httpError.status)) {
+        if (!response.ok) {
+          const payload = await parseJsonSafely(response);
+          const message =
+            (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string'
+              ? (payload as any).error
+              : undefined) || response.statusText || 'Erro ao enviar planilha';
+          const httpError = new HttpError(message, { status: response.status, body: payload });
+
+          if (httpError.status && shouldRetryStatus(httpError.status)) {
+            lastError = httpError;
+            continue endpointLoop;
+          }
+
+          if (httpError.status && httpError.status >= 400 && httpError.status < 500) {
+            lastError = httpError;
+            // tenta o próximo nome de campo (ex.: "csv") antes de trocar o endpoint
+            continue;
+          }
+
           lastError = httpError;
-          continue;
+          continue endpointLoop;
         }
-        throw httpError;
-      }
 
-      const data = await parseJsonSafely(response);
-      if (!data || typeof data !== 'object') {
-        return {};
-      }
-      const record = data as Record<string, unknown>;
-      const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
-      const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
+        const data = await parseJsonSafely(response);
+        if (!data || typeof data !== 'object') {
+          return {};
+        }
+        const record = data as Record<string, unknown>;
+        const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
+        const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
 
-      return {
-        balanceId: balanceId == null ? undefined : String(balanceId),
-        jobId: jobId == null ? undefined : String(jobId),
-      };
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      if (shouldRetryError(error)) {
+        return {
+          balanceId: balanceId == null ? undefined : String(balanceId),
+          jobId: jobId == null ? undefined : String(jobId),
+        };
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw error;
+        }
+        if (shouldRetryError(error)) {
+          lastError = error;
+          continue endpointLoop;
+        }
         lastError = error;
-        continue;
+        continue endpointLoop;
       }
-      const message = error instanceof Error ? error.message : 'Falha ao enviar planilha para o webhook';
-      throw new HttpError(message);
     }
   }
 
