@@ -72,6 +72,9 @@ function AppRoutes() {
               <Route path=":id/balanco-energetico" element={<BalancoEnergeticoPage />} />
             </Route>
 
+            <Route path="balancos" element={<EnergyBalanceListPage />} />
+            <Route path="balancos/:id" element={<EnergyBalanceDetailPage />} />
+
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
             <Route path="leads" element={<SimulationClientsPage />} />
             <Route path="leads/:clientId" element={<SimulationClientPage />} />
