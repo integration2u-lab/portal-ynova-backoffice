@@ -1,167 +1,237 @@
 import React from 'react';
-import { X, UploadCloud } from 'lucide-react';
-import { createFromCsv } from '../../services/energyBalanceApi';
+import { Loader2, UploadCloud, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { createFromCsv, pollJob } from '../../services/energyBalanceApi';
 
-export type UploadCsvModalResult = {
-  balanceId?: string;
-  jobId?: string;
-};
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+type UploadResult = { balanceId?: string; shouldRefresh?: boolean };
 
 type UploadCsvModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (result: UploadCsvModalResult) => void;
+  onUploadComplete: (result: UploadResult) => void;
 };
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const ACCEPT_TYPES = ['text/csv', 'application/vnd.ms-excel'];
 
-export function UploadCsvModal({ isOpen, onClose, onComplete }: UploadCsvModalProps) {
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+function isCsvFile(file: File) {
+  if (!file) return false;
+  const nameIsCsv = file.name.toLowerCase().endsWith('.csv');
+  const typeIsCsv = ACCEPT_TYPES.includes(file.type);
+  return nameIsCsv || typeIsCsv;
+}
+
+export default function UploadCsvModal({ isOpen, onClose, onUploadComplete }: UploadCsvModalProps) {
   const [file, setFile] = React.useState<File | null>(null);
-  const [error, setError] = React.useState<string>('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [status, setStatus] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const inputId = React.useId();
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) {
-      setFile(null);
-      return;
-    }
-
-    const extension = selectedFile.name.split('.').pop()?.toLowerCase();
-    if (extension !== 'csv') {
-      setError('Envie um arquivo no formato CSV (.csv).');
-      setFile(null);
-      event.target.value = '';
-      return;
-    }
-
-    if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
-      setError('O arquivo ultrapassa o limite de 10MB.');
-      setFile(null);
-      event.target.value = '';
-      return;
-    }
-
-    setError('');
-    setFile(selectedFile);
-  };
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!file) {
-      setError('Selecione um arquivo CSV para enviar.');
-      fileInputRef.current?.focus();
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError('');
-
-    try {
-      const response = await createFromCsv(file);
-      onComplete({ balanceId: response.balanceId, jobId: response.jobId });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Não foi possível enviar a planilha.';
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleClose = () => {
-    if (isSubmitting) return;
-    setError('');
+  const resetState = React.useCallback(() => {
     setFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    setError(null);
+    setStatus('');
+    setIsSubmitting(false);
+    if (inputRef.current) {
+      inputRef.current.value = '';
     }
-    onClose();
-  };
+  }, []);
 
-  if (!isOpen) return null;
+  const handleClose = React.useCallback(() => {
+    if (isSubmitting) return;
+    resetState();
+    onClose();
+  }, [isSubmitting, onClose, resetState]);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      resetState();
+    }
+  }, [isOpen, resetState]);
+
+  const handleFileChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const selected = event.target.files?.[0];
+    if (!selected) {
+      setFile(null);
+      return;
+    }
+    if (!isCsvFile(selected)) {
+      setError('Envie um arquivo no formato CSV.');
+      setFile(null);
+      return;
+    }
+    if (selected.size > MAX_FILE_SIZE) {
+      setError('O arquivo excede o limite de 10MB.');
+      setFile(null);
+      return;
+    }
+    setFile(selected);
+  }, []);
+
+  const handleUploadSuccess = React.useCallback(
+    (result: UploadResult) => {
+      resetState();
+      onClose();
+      onUploadComplete(result);
+    },
+    [onClose, onUploadComplete, resetState],
+  );
+
+  const handleSubmit = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!file) {
+        setError('Selecione uma planilha CSV para prosseguir.');
+        return;
+      }
+      setError(null);
+      setIsSubmitting(true);
+      setStatus('Enviando planilha...');
+      try {
+        const response = await createFromCsv(file);
+        if (response.balanceId) {
+          toast.success('Balanço energético criado com sucesso!');
+          handleUploadSuccess({ balanceId: response.balanceId });
+          return;
+        }
+        if (response.jobId) {
+          toast.info('Processando planilha. Isso pode levar alguns instantes.');
+          setStatus('Processando planilha...');
+          try {
+            const result = await pollJob(response.jobId, ({ attempt }) => {
+              setStatus(`Processando planilha... tentativa ${attempt}`);
+            });
+            toast.success('Processamento concluído com sucesso!');
+            handleUploadSuccess({ balanceId: result.balanceId });
+            return;
+          } catch (pollError) {
+            const message =
+              pollError instanceof Error
+                ? pollError.message
+                : 'Não foi possível concluir o processamento do balanço energético.';
+            setError(message);
+            toast.error(message);
+            return;
+          }
+        }
+
+        setStatus('Finalizando processamento...');
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        toast.success('Planilha enviada! Atualizando a listagem.');
+        handleUploadSuccess({ shouldRefresh: true });
+      } catch (uploadError) {
+        const message =
+          uploadError instanceof Error ? uploadError.message : 'Não foi possível enviar a planilha selecionada.';
+        setError(message);
+        toast.error(message);
+      } finally {
+        setIsSubmitting(false);
+        setStatus('');
+      }
+    },
+    [file, handleUploadSuccess],
+  );
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 pb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Enviar planilha CSV</h2>
-            <p className="mt-1 text-sm font-bold text-gray-600">
-              Envie a planilha SCDE em CSV para gerar automaticamente o balanço energético.
+            <h2 className="text-lg font-semibold text-gray-900">Enviar planilha CSV</h2>
+            <p className="mt-1 text-sm font-medium text-gray-600">
+              Envie a planilha SCDE em CSV para criar um novo balanço energético automaticamente.
             </p>
           </div>
           <button
             type="button"
             onClick={handleClose}
             className="rounded-full p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
-            aria-label="Fechar modal"
+            aria-label="Fechar modal de envio de planilha"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
           <div>
             <label
-              htmlFor="energy-balance-upload"
-              className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-10 text-center transition hover:border-yn-orange hover:bg-orange-50"
+              htmlFor={inputId}
+              className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center transition hover:border-yn-orange hover:bg-yn-orange/5"
             >
-              <UploadCloud className="h-10 w-10 text-yn-orange" aria-hidden />
-              <span className="mt-3 text-sm font-bold text-gray-700">
-                Arraste e solte o arquivo ou clique para selecionar
-              </span>
-              <span className="mt-1 text-xs font-bold text-gray-500">Formatos aceitos: .csv · Máx. 10MB</span>
+              <UploadCloud className="text-yn-orange" size={32} />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-gray-900">Solte o arquivo aqui ou clique para selecionar</p>
+                <p className="text-xs font-medium text-gray-500">Formatos suportados: CSV até 10MB</p>
+              </div>
               <input
-                ref={fileInputRef}
-                id="energy-balance-upload"
+                ref={inputRef}
+                id={inputId}
+                name="file"
                 type="file"
-                accept=".csv"
+                accept=".csv,text/csv"
                 onChange={handleFileChange}
                 className="sr-only"
               />
             </label>
             {file && (
-              <p className="mt-2 text-sm font-bold text-gray-600" aria-live="polite">
-                Arquivo selecionado: {file.name}
-              </p>
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700">
+                <span className="truncate" title={file.name}>{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFile(null);
+                    if (inputRef.current) {
+                      inputRef.current.value = '';
+                    }
+                  }}
+                  className="text-xs font-semibold text-yn-orange transition hover:text-yn-orange/80"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+            {error && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {error}
+              </div>
+            )}
+            {status && !error && (
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-yn-orange/40 bg-yn-orange/5 px-3 py-2 text-sm font-medium text-yn-orange">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{status}</span>
+              </div>
             )}
           </div>
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700" role="alert">
-              {error}
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
               disabled={isSubmitting}
+              className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-yn-orange hover:text-yn-orange disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-yn-orange px-4 py-2 text-sm font-bold text-white transition hover:bg-yn-orange/90 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !file}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 animate-ping rounded-full bg-white" aria-hidden />
-                  Processando planilha...
-                </span>
-              ) : (
                 <>
-                  <UploadCloud size={18} aria-hidden />
-                  Enviar
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Processando...</span>
                 </>
+              ) : (
+                'Enviar'
               )}
             </button>
           </div>
@@ -170,5 +240,3 @@ export function UploadCsvModal({ isOpen, onClose, onComplete }: UploadCsvModalPr
     </div>
   );
 }
-
-export default UploadCsvModal;

@@ -23,7 +23,7 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
-  { to: '/balancos', label: 'Balanço Energético', icon: BarChart3 },
+  { to: '/balancos', label: 'Balanço Energético', icon: Zap },
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
   /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */

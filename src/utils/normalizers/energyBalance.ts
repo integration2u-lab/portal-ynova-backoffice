@@ -1,22 +1,13 @@
-import { EnergyBalanceUtils } from '../../services/energyBalance';
-import type {
-  EnergyBalanceDetail,
-  EnergyBalanceListItem,
-} from '../../services/energyBalanceApi';
-
 export type NormalizedEnergyBalanceListItem = {
   id: string;
   cliente: string;
+  cnpj: string;
+  meterCode: string;
   impostoPercent: string;
   consumoKWh: string;
   geracaoKWh: string;
   saldoKWh: string;
-  saldoValue?: number;
-  cnpj?: string;
-  cnpjDigits?: string;
-  meterCode?: string;
-  searchIndex: string;
-  raw: EnergyBalanceListItem;
+  saldoValor?: number | null;
 };
 
 export type NormalizedEnergyBalanceDetail = {
@@ -25,6 +16,7 @@ export type NormalizedEnergyBalanceDetail = {
     razao: string;
     cnpj: string;
     contractId?: string;
+    contractCode?: string;
   };
   metrics: {
     consumoTotalMWh: string;
@@ -33,27 +25,31 @@ export type NormalizedEnergyBalanceDetail = {
     economiaPotencialBRL: string;
   };
   months: Array<{
+    id: string;
     mes: string;
     medidor: string;
     consumoMWh: string;
-    precoR$/MWh: string;
+    precoReaisPorMWh: string;
     custoMesBRL: string;
     proinfa: string;
     faixaContratual: string;
     ajustado: string;
     actions?: string;
   }>;
-  canCreateBalance?: boolean;
-  raw: EnergyBalanceDetail;
 };
 
 const percentFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'percent',
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 });
 
-const numberFormatter = new Intl.NumberFormat('pt-BR', {
-  minimumFractionDigits: 0,
+const kwhFormatter = new Intl.NumberFormat('pt-BR', {
+  maximumFractionDigits: 0,
+});
+
+const mwhFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
@@ -61,384 +57,465 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
   minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
-const ensureId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
+const monthFormatter = new Intl.DateTimeFormat('pt-BR', {
+  month: 'short',
+  year: 'numeric',
+});
 
-const sanitizeString = (value: unknown): string | undefined => {
+const textFormatter = new Intl.ListFormat('pt-BR', { style: 'short', type: 'conjunction' });
+
+const sanitizeNumberString = (value: string) => {
+  // Handle formats like 1.234,56 or 1,234.56
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  const commaCount = (trimmed.match(/,/g) || []).length;
+  const dotCount = (trimmed.match(/\./g) || []).length;
+  if (commaCount <= 1 && dotCount > 1 && trimmed.includes(',')) {
+    const lastComma = trimmed.lastIndexOf(',');
+    const normalized = `${trimmed.slice(0, lastComma).replace(/\./g, '')}${trimmed.slice(lastComma).replace(',', '.')}`;
+    return normalized;
+  }
+
+  if (commaCount > 1 && !trimmed.includes('.')) {
+    const parts = trimmed.split(',');
+    const decimals = parts.pop();
+    return `${parts.join('')}.${decimals}`;
+  }
+
+  return trimmed.replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
+};
+
+const toNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  const text = sanitizeNumberString(String(value));
+  if (!text) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const toStringSafe = (value: unknown, fallback = ''): string => {
+  if (value === undefined || value === null) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+};
+
+const fallbackId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `balance-${Date.now()}-${Math.round(Math.random() * 10_000)}`;
+};
+
+const normalizePercent = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return '-';
+  const normalized = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  try {
+    return percentFormatter.format(normalized);
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar percentual', error);
+    return `${(normalized * 100).toFixed(2)}%`;
+  }
+};
+
+const normalizeKwh = (value: unknown): { display: string; numeric: number | null } => {
+  const numeric = toNumber(value);
+  if (numeric === null) {
+    return { display: '-', numeric: null };
+  }
+  try {
+    return { display: `${kwhFormatter.format(Math.abs(numeric))} kWh`, numeric };
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar kWh', error);
+    return { display: `${Math.abs(numeric).toFixed(0)} kWh`, numeric };
+  }
+};
+
+const normalizeMwh = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return '-';
+  try {
+    return `${mwhFormatter.format(numeric)} MWh`;
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar MWh', error);
+    return `${numeric.toFixed(2)} MWh`;
+  }
+};
+
+const normalizeCurrency = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return 'Não informado';
+  try {
+    return currencyFormatter.format(numeric);
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar moeda', error);
+    return `R$ ${numeric.toFixed(2)}`;
+  }
+};
+
+const normalizeCurrencyAllowZero = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return 'Não informado';
+  try {
+    return currencyFormatter.format(numeric);
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar moeda', error);
+    return `R$ ${numeric.toFixed(2)}`;
+  }
+};
+
+const normalizeBoolean = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return 'Não informado';
   if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length ? trimmed : undefined;
+    const text = value.trim().toLowerCase();
+    if (['sim', 's', 'true', '1', 'yes'].includes(text)) return 'Sim';
+    if (['nao', 'não', 'n', 'false', '0', 'no'].includes(text)) return 'Não';
   }
-  return undefined;
-};
-
-const parseNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+  if (typeof value === 'number') {
+    return value > 0 ? 'Sim' : 'Não';
   }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const sanitized = trimmed
-      .replace(/%/g, '')
-      .replace(/\s+/g, '')
-      .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-      .replace(',', '.');
-    const parsed = Number(sanitized);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
-
-const formatPercent = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) {
-    return 'Não informado';
-  }
-  const normalized = Math.abs(value) <= 1 && value !== 0 ? value * 100 : value;
-  return `${percentFormatter.format(normalized)}%`;
-};
-
-const formatKwh = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) {
-    return 'Não informado';
-  }
-  return `${numberFormatter.format(value)} kWh`;
-};
-
-const formatMwhValue = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) {
-    return 'Não informado';
-  }
-  return EnergyBalanceUtils.formatMwh(value);
-};
-
-const formatCurrency = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) {
-    return 'Não informado';
-  }
-  return currencyFormatter.format(value);
-};
-
-const boolToDisplay = (value: unknown): string => {
   if (typeof value === 'boolean') {
     return value ? 'Sim' : 'Não';
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['sim', 'yes', 'true', 'ajustado', 'ajustada'].includes(normalized)) {
-      return 'Sim';
-    }
-    if (['não', 'nao', 'no', 'false', 'nao ajustado'].includes(normalized)) {
-      return 'Não';
-    }
-  }
-  return '-';
-};
-
-const formatMonth = (value: unknown): string => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (/^\d{4}-\d{2}$/.test(trimmed)) {
-      return EnergyBalanceUtils.formatMonthReference(trimmed);
-    }
-    const date = new Date(trimmed);
-    if (!Number.isNaN(date.getTime())) {
-      return date
-        .toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
-        .replace('.', '');
-    }
-    if (trimmed.length) {
-      return trimmed;
-    }
   }
   return 'Não informado';
 };
 
-export function getSafe<T = unknown>(record: unknown, ...keys: Array<string | string[]>): T | undefined {
-  if (!record || typeof record !== 'object') {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    if (Array.isArray(key)) {
-      let current: any = record;
-      let found = true;
-      for (const segment of key) {
-        if (current && typeof current === 'object' && segment in current) {
-          current = (current as Record<string, unknown>)[segment];
-        } else {
-          found = false;
-          break;
-        }
-      }
-      if (found && current !== undefined && current !== null && current !== '') {
-        return current as T;
-      }
-    } else if (key in (record as Record<string, unknown>)) {
-      const value = (record as Record<string, unknown>)[key];
-      if (value !== undefined && value !== null && value !== '') {
-        return value as T;
+const normalizeMonthLabel = (value: unknown): string => {
+  const text = toStringSafe(value);
+  if (!text) return 'Não informado';
+  if (/^\d{4}-\d{2}$/.test(text)) {
+    const [year, month] = text.split('-').map((part) => Number(part));
+    if (Number.isInteger(year) && Number.isInteger(month)) {
+      try {
+        return monthFormatter.format(new Date(year, month - 1, 1)).replace('.', '');
+      } catch (error) {
+        console.warn('[energyBalance] falha ao formatar mês', error);
       }
     }
   }
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    try {
+      return monthFormatter.format(parsed).replace('.', '');
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar mês', error);
+    }
+  }
+  return text;
+};
 
+const formatCnpj = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 14) return value || 'Não informado';
+  return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+};
+
+export function getSafe(record: unknown, ...keys: Array<string | string[]>): unknown {
+  if (!record || typeof record !== 'object') return undefined;
+  const flatKeys = keys.flat();
+  for (const key of flatKeys) {
+    if (!key) continue;
+    const path = key.split('.');
+    let current: unknown = record;
+    let matched = true;
+    for (const segment of path) {
+      if (
+        current &&
+        typeof current === 'object' &&
+        segment in (current as Record<string, unknown>)
+      ) {
+        current = (current as Record<string, unknown>)[segment];
+      } else {
+        matched = false;
+        break;
+      }
+    }
+    if (matched && current !== undefined && current !== null) {
+      return current;
+    }
+  }
   return undefined;
 }
 
-export function normalizeListItem(row: EnergyBalanceListItem): NormalizedEnergyBalanceListItem {
-  const id =
-    sanitizeString(getSafe(row, 'id', 'balanceId', 'balance_id', 'uuid', ['energy_balance', 'id'])) || ensureId();
-  const cliente =
-    sanitizeString(
-      getSafe(row, 'client_name', 'clientName', 'cliente', 'razao_social', 'razaoSocial', ['client', 'name']),
-    ) || 'Cliente não informado';
+export function normalizeListItem(row: any): NormalizedEnergyBalanceListItem {
+  const idSource =
+    getSafe(row, 'id', 'balanceId', 'balance_id', 'uuid', 'energy_balance_id') ??
+    getSafe(row, 'meta.id', 'metadata.id');
+  const id = toStringSafe(idSource, fallbackId());
 
-  const impostoPercentValue =
-    parseNumber(getSafe(row, 'tax_percent', 'taxPercent', 'imposto_percent', 'aliquota', ['taxes', 'percent'])) ?? null;
-  const consumoValueKwh =
-    parseNumber(
-      getSafe(
-        row,
-        'consumption_kwh',
-        'consumo_kwh',
-        'consumptionKwh',
-        'consumption',
-        ['totals', 'consumption_kwh'],
-      ),
-    );
-  const consumoValueMwh =
-    parseNumber(
-      getSafe(row, 'consumption_mwh', 'consumo_mwh', 'consumptionMwh', ['totals', 'consumption_mwh']),
-    );
-  const geracaoValue =
-    parseNumber(
-      getSafe(row, 'generation_kwh', 'geracao_kwh', 'generationKwh', 'geracao', ['generation', 'kwh']),
-    );
-  const saldoValue =
-    parseNumber(
-      getSafe(row, 'balance_kwh', 'saldo_kwh', 'net_kwh', 'saldo', 'balance', ['totals', 'balance_kwh']),
-    );
+  const clientName =
+    getSafe(row, 'clientName', 'client_name', 'cliente', 'client.nome', 'client.name', 'name') ??
+    getSafe(row, 'customerName', 'clienteNome');
+  const cliente = toStringSafe(clientName, 'Cliente não informado');
 
-  const cnpj =
-    sanitizeString(getSafe(row, 'cnpj', 'client_cnpj', 'cnpjNumber', ['client', 'cnpj'], ['company', 'cnpj'])) || undefined;
-  const cnpjDigits = cnpj ? cnpj.replace(/\D/g, '') : undefined;
-  const meterCode =
-    sanitizeString(getSafe(row, 'meter_code', 'meterCode', 'medidor', 'meter', ['meter', 'code'])) || undefined;
+  const cnpjSource =
+    getSafe(row, 'cnpj', 'clientCnpj', 'client_cnpj', 'cliente.cnpj', 'client.cnpj', 'document') ??
+    getSafe(row, 'customer.document', 'metadata.cnpj');
+  const cnpj = cnpjSource ? formatCnpj(String(cnpjSource)) : 'Não informado';
 
-  const consumoFormatted =
-    consumoValueMwh !== null && consumoValueMwh !== undefined
-      ? (() => {
-          const formatted = formatMwhValue(consumoValueMwh);
-          return formatted === 'Não informado' ? formatted : `${formatted} MWh`;
-        })()
-      : formatKwh(consumoValueKwh);
-  const geracaoFormatted = formatKwh(geracaoValue);
+  const meterSource =
+    getSafe(row, 'meter', 'meterCode', 'meter_code', 'uc', 'uc_code', 'medidor', 'codigoUc') ??
+    getSafe(row, 'client.meter', 'metadata.meter');
+  const meterCode = toStringSafe(meterSource, 'Não informado');
 
-  const saldoFormatted = (() => {
-    if (saldoValue === null || saldoValue === undefined) {
-      return 'Não informado';
-    }
-    const abs = Math.abs(saldoValue);
-    const formatted = numberFormatter.format(abs);
-    const prefix = saldoValue > 0 ? '+' : saldoValue < 0 ? '-' : '';
-    return `${prefix}${formatted}`;
-  })();
+  const impostoPercent = normalizePercent(
+    getSafe(row, 'tax', 'imposto', 'imposto_percent', 'impostoPercent', 'tax_percent', 'aliquota'),
+  );
 
-  const searchIndex = [
-    cliente.toLowerCase(),
-    cnpjDigits ?? '',
-    meterCode?.toLowerCase() ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const consumo = normalizeKwh(
+    getSafe(
+      row,
+      'consumption_kwh',
+      'consumo_kwh',
+      'consumptionKwh',
+      'consumoKwh',
+      'consumption',
+      'consumo',
+      'metrics.consumption_kwh',
+    ),
+  );
 
-  const saldoDisplay = saldoFormatted === 'Não informado' ? saldoFormatted : `${saldoFormatted} kWh`;
+  const geracao = normalizeKwh(
+    getSafe(row, 'generation_kwh', 'geracao_kwh', 'generationKwh', 'geracao', 'generation', 'metrics.generation_kwh'),
+  );
+
+  const saldo = normalizeKwh(
+    getSafe(row, 'saldo_kwh', 'saldoKwh', 'balance_kwh', 'balanceKwh', 'saldo', 'balance', 'net_balance'),
+  );
+
+  const saldoDisplay = saldo.numeric === null
+    ? '-'
+    : `${saldo.numeric >= 0 ? '+' : '-'}${kwhFormatter.format(Math.abs(saldo.numeric))} kWh`;
 
   return {
     id,
     cliente,
-    impostoPercent: formatPercent(impostoPercentValue),
-    consumoKWh: consumoFormatted,
-    geracaoKWh: geracaoFormatted,
-    saldoKWh: saldoDisplay,
-    saldoValue: saldoValue ?? undefined,
     cnpj,
-    cnpjDigits,
     meterCode,
-    searchIndex,
-    raw: row,
+    impostoPercent,
+    consumoKWh: consumo.display,
+    geracaoKWh: geracao.display,
+    saldoKWh: saldoDisplay,
+    saldoValor: saldo.numeric,
   };
 }
 
-const normalizeMetric = (
-  value: unknown,
-  options: { type: 'mwh' | 'currency' } = { type: 'mwh' },
-): string => {
-  const numeric = parseNumber(value);
-  if (numeric === null) {
-    return 'Não informado';
+const extractMetrics = (row: Record<string, unknown> | undefined) => {
+  if (!row) return {};
+  if ('metrics' in row && row.metrics && typeof row.metrics === 'object') {
+    return row.metrics as Record<string, unknown>;
   }
-  if (options.type === 'currency') {
-    return formatCurrency(numeric);
+  if ('summary' in row && row.summary && typeof row.summary === 'object') {
+    return row.summary as Record<string, unknown>;
   }
-  const formatted = formatMwhValue(numeric);
-  return formatted === 'Não informado' ? formatted : `${formatted} MWh`;
+  return row;
 };
 
-const extractContractId = (row: EnergyBalanceDetail): string | undefined => {
-  return sanitizeString(
-    getSafe(row, 'contractId', 'contract_id', ['contract', 'id'], ['contract', 'contract_id'], ['metadata', 'contractId']),
-  );
-};
-
-const extractCanCreate = (row: EnergyBalanceDetail): boolean | undefined => {
-  const value = getSafe(row, 'canCreate', 'canCreateBalance', 'allowGenerate', ['permissions', 'canCreateBalance']);
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['sim', 'yes', 'true', '1'].includes(normalized)) return true;
-    if (['não', 'nao', 'no', 'false', '0'].includes(normalized)) return false;
-  }
-  return undefined;
-};
-
-const toArray = <T>(value: unknown): T[] => {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-  if (value && typeof value === 'object') {
-    const values = Object.values(value);
-    if (values.every((item) => typeof item === 'object')) {
-      return values as T[];
+const describeRange = (minValue: unknown, maxValue: unknown): string => {
+  const min = toNumber(minValue);
+  const max = toNumber(maxValue);
+  if (min === null && max === null) return 'Não informado';
+  const values: string[] = [];
+  if (min !== null) {
+    try {
+      values.push(`${mwhFormatter.format(min)} MWh`);
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar faixa mínima', error);
+      values.push(`${min.toFixed(2)} MWh`);
     }
   }
-  return [];
+  if (max !== null) {
+    try {
+      values.push(`${mwhFormatter.format(max)} MWh`);
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar faixa máxima', error);
+      values.push(`${max.toFixed(2)} MWh`);
+    }
+  }
+  if (!values.length) return 'Não informado';
+  if (values.length === 1) return values[0];
+  try {
+    return textFormatter.format(values as [string, string]);
+  } catch {
+    return `${values[0]} – ${values[1]}`;
+  }
 };
 
-export function normalizeDetail(row: EnergyBalanceDetail): NormalizedEnergyBalanceDetail {
-  const titleCode =
-    sanitizeString(
-      getSafe(row, 'code', 'balanceCode', 'codigo', 'identifier', 'id', ['metadata', 'code']),
-    ) || 'Não informado';
-  const titleYear =
-    sanitizeString(getSafe(row, 'year', 'referenceYear', 'ano_referencia', ['metadata', 'year']));
-  const titleSuffix = titleYear && titleCode ? `${titleCode}/${titleYear}` : titleCode;
+export function normalizeDetail(row: any): NormalizedEnergyBalanceDetail {
+  const record = row && typeof row === 'object' ? (row as Record<string, unknown>) : {};
 
-  const razao =
-    sanitizeString(
-      getSafe(row, 'client_name', 'clientName', 'cliente', 'razao_social', 'razaoSocial', ['client', 'name']),
-    ) || 'Não informado';
-  const cnpj =
-    sanitizeString(getSafe(row, 'cnpj', 'client_cnpj', ['client', 'cnpj'], ['company', 'cnpj'])) || 'Não informado';
+  const contractId = getSafe(record, 'contractId', 'contract_id', 'contract.id', 'contratoId');
+  const contractCode = getSafe(record, 'contractCode', 'contract_code', 'contract.codigo', 'codigo');
 
-  const metricsSource = getSafe(row, 'metrics', 'totals', 'summary', ['data', 'metrics']) as Record<string, unknown> | undefined;
+  const headerTitle =
+    getSafe(record, 'code', 'codigo', 'reference', 'referenceCode', 'reference_code') ??
+    getSafe(record, 'year', 'ano', 'referenceYear') ??
+    getSafe(record, 'referenceBase', 'reference_base', 'competencia');
 
-  const metrics = {
-    consumoTotalMWh: normalizeMetric(
-      metricsSource?.consumo_total_mwh ??
-        metricsSource?.total_consumption_mwh ??
-        metricsSource?.consumption_total_mwh ??
-        getSafe(row, 'total_consumption_mwh', 'consumo_total_mwh', ['totals', 'consumption_mwh']),
+  const titleSuffixRaw = toStringSafe(headerTitle);
+  const titleSuffix = titleSuffixRaw
+    ? normalizeMonthLabel(headerTitle)
+    : contractCode
+      ? toStringSafe(contractCode)
+      : '-';
+
+  const razao = toStringSafe(
+    getSafe(
+      record,
+      'razao_social',
+      'razaoSocial',
+      'client.legalName',
+      'client.razao_social',
+      'client.razaoSocial',
+      'cliente.razaoSocial',
+      'clientName',
+      'client_name',
+      'cliente',
     ),
-    custoTotalBRL: normalizeMetric(
-      metricsSource?.custo_total ??
-        metricsSource?.total_cost ??
-        metricsSource?.custo ??
-        getSafe(row, 'total_cost', 'custo_total', ['totals', 'cost']),
-      { type: 'currency' },
+    'Não informado',
+  );
+
+  const cnpjValue =
+    getSafe(record, 'cnpj', 'clientCnpj', 'client_cnpj', 'client.cnpj', 'cliente.cnpj') ??
+    getSafe(record, 'document', 'cliente.documento');
+  const cnpj = cnpjValue ? formatCnpj(String(cnpjValue)) : 'Não informado';
+
+  const metricsSource = extractMetrics(record);
+
+  const consumoTotalMWh = normalizeMwh(
+    getSafe(
+      metricsSource,
+      'total_consumption_mwh',
+      'totalConsumptionMwh',
+      'consumo_total_mwh',
+      'consumptionTotalMwh',
+      'consumption_mwh',
+      'consumptionTotal',
     ),
-    proinfaTotal: normalizeMetric(
-      metricsSource?.proinfa_total ??
-        metricsSource?.total_proinfa ??
-        getSafe(row, 'total_proinfa', 'proinfa_total', ['totals', 'proinfa']),
-      { type: 'currency' },
+  );
+
+  const custoTotalBRL = normalizeCurrencyAllowZero(
+    getSafe(
+      metricsSource,
+      'total_cost',
+      'totalCost',
+      'custo_total',
+      'costTotal',
+      'custo',
+      'totalValue',
     ),
-    economiaPotencialBRL: normalizeMetric(
-      metricsSource?.economia_potencial ??
-        metricsSource?.potential_savings ??
-        getSafe(row, 'potential_savings', 'economia_potencial', ['totals', 'potential_savings']),
-      { type: 'currency' },
+  );
+
+  const proinfaTotal = normalizeCurrencyAllowZero(
+    getSafe(metricsSource, 'total_proinfa', 'proinfaTotal', 'proinfa_total', 'proinfa'),
+  );
+
+  const economiaPotencialBRL = normalizeCurrency(
+    getSafe(
+      metricsSource,
+      'potential_savings',
+      'economiaPotencial',
+      'economia_potencial',
+      'potentialSavings',
     ),
-  };
+  );
 
   const monthsSource =
-    getSafe(row, 'months', 'items', 'entries', ['data', 'months'], ['timeline', 'months']) ?? [];
-  const monthsArray = toArray<Record<string, unknown>>(monthsSource);
+    getSafe(
+      record,
+      'months',
+      'monthly',
+      'entries',
+      'dados',
+      'data',
+      'rows',
+      'items',
+      'detalhes',
+      'monthsData',
+      'result',
+    ) ?? [];
 
-  const months = monthsArray.map((month, index) => {
-    const consumptionMwh =
-      parseNumber(
-        getSafe(month, 'consumption_mwh', 'consumo_mwh', 'consumptionMwh', ['totals', 'consumption_mwh']),
-      ) ??
-      (() => {
-        const kwh = parseNumber(getSafe(month, 'consumption_kwh', 'consumo_kwh', 'consumptionKwh'));
-        return kwh !== null ? kwh / 1000 : null;
-      })();
+  const monthsArray = Array.isArray(monthsSource)
+    ? monthsSource
+    : Array.isArray((monthsSource as Record<string, unknown>)?.items)
+      ? ((monthsSource as Record<string, unknown>).items as unknown[])
+      : [];
 
-    const priceValue = parseNumber(
-      getSafe(month, 'price', 'price_mwh', 'preco', 'preco_mwh', ['values', 'price']),
+  const months = monthsArray.map((item, index) => {
+    const entry = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const entryId = toStringSafe(
+      getSafe(entry, 'id', 'uuid', 'rowId', 'monthId'),
+      `${index}`,
+    );
+    const monthLabel = normalizeMonthLabel(
+      getSafe(entry, 'month', 'mes', 'period', 'reference', 'referencia', 'reference_base', 'referenceBase'),
     );
 
-    const costValue = parseNumber(getSafe(month, 'cost', 'billable', 'custo', 'custo_mes', ['values', 'cost']));
-    const proinfaValue = parseNumber(
-      getSafe(month, 'proinfa', 'proinfa_value', 'proinfa_total', ['values', 'proinfa']),
+    const medidor = toStringSafe(
+      getSafe(entry, 'meter', 'medidor', 'meter_code', 'meterCode', 'uc', 'ucCode'),
+      'Não informado',
     );
-    const faixaMin = parseNumber(getSafe(month, 'min_demand', 'faixa_min', 'contract_min', ['range', 'min']));
-    const faixaMax = parseNumber(getSafe(month, 'max_demand', 'faixa_max', 'contract_max', ['range', 'max']));
 
-    let faixaContratual = 'Não informado';
-    if (faixaMin !== null && faixaMax !== null) {
-      const minDisplay = EnergyBalanceUtils.formatMwh(faixaMin);
-      const maxDisplay = EnergyBalanceUtils.formatMwh(faixaMax);
-      faixaContratual = `${minDisplay} – ${maxDisplay} MWh`;
-    }
+    const consumoMWh = normalizeMwh(
+      getSafe(entry, 'consumption_mwh', 'consumptionMwh', 'consumo_mwh', 'consumo', 'consumption'),
+    );
+    const precoReaisPorMWh = normalizeCurrencyAllowZero(
+      getSafe(entry, 'price', 'preco', 'price_mwh', 'preco_mwh', 'tarifa', 'pricePerMwh'),
+    );
+    const custoMes = normalizeCurrencyAllowZero(
+      getSafe(entry, 'monthCost', 'custo_mes', 'custo', 'cost', 'billable', 'value'),
+    );
+    const proinfa = normalizeCurrencyAllowZero(
+      getSafe(entry, 'proinfa', 'proinfa_total', 'proinfaContribution', 'encargoProinfa'),
+    );
 
-    const consumptionDisplay = (() => {
-      const formatted = formatMwhValue(consumptionMwh);
-      return formatted === 'Não informado' ? formatted : `${formatted} MWh`;
-    })();
+    const faixaContratual = describeRange(
+      getSafe(entry, 'contractRangeMin', 'faixa_min', 'min', 'lowerLimit', 'limite_inferior', 'min_mwh'),
+      getSafe(entry, 'contractRangeMax', 'faixa_max', 'max', 'upperLimit', 'limite_superior', 'max_mwh'),
+    );
+
+    const ajustado = normalizeBoolean(
+      getSafe(entry, 'adjusted', 'ajustado', 'isAdjusted', 'ajustado_bool', 'ajuste'),
+    );
 
     return {
-      mes:
-        formatMonth(
-          getSafe(
-            month,
-            'month',
-            'mes',
-            'competence',
-            'reference',
-            'reference_month',
-            ['period', 'month'],
-          ) ?? index,
-        ),
-      medidor:
-        sanitizeString(getSafe(month, 'meter', 'medidor', 'meter_code', 'meterCode', ['meter', 'code'])) || 'Não informado',
-      consumoMWh: consumptionDisplay,
-      precoR$/MWh: formatCurrency(priceValue),
-      custoMesBRL: formatCurrency(costValue),
-      proinfa: formatCurrency(proinfaValue),
+      id: entryId,
+      mes: monthLabel,
+      medidor,
+      consumoMWh,
+      precoReaisPorMWh,
+      custoMesBRL: custoMes,
+      proinfa,
       faixaContratual,
-      ajustado: boolToDisplay(getSafe(month, 'adjusted', 'ajustado', 'is_adjusted', ['flags', 'adjusted'])),
-      actions: sanitizeString(getSafe(month, 'actionLabel', 'actions', 'acao')),
+      ajustado,
+      actions: '-',
     };
   });
 
   return {
     header: {
-      titleSuffix: titleSuffix || 'Não informado',
+      titleSuffix: titleSuffix || '-',
       razao,
       cnpj,
-      contractId: extractContractId(row),
+      contractId: contractId ? String(contractId) : undefined,
+      contractCode: contractCode ? String(contractCode) : undefined,
     },
-    metrics,
+    metrics: {
+      consumoTotalMWh,
+      custoTotalBRL,
+      proinfaTotal,
+      economiaPotencialBRL,
+    },
     months,
-    canCreateBalance: extractCanCreate(row),
-    raw: row,
   };
 }
