@@ -1,17 +1,68 @@
-const DEFAULT_BASE_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000';
+const DEFAULT_REMOTE_BASE_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000';
 const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
 
-const isDev = import.meta.env.DEV;
-const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
-const runtimeBaseUrl =
-  import.meta.env.VITE_ENERGY_BALANCE_API_URL ||
-  import.meta.env.VITE_ENERGY_BALANCE_BASE_URL ||
-  import.meta.env.VITE_API_BASE_URL;
-const API_BASE_URL = (isDev && useProxy ? '' : runtimeBaseUrl) || DEFAULT_BASE_URL;
-const WEBHOOK_URL =
-  import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK ||
-  import.meta.env.VITE_N8N_BALANCO_WEBHOOK ||
-  DEFAULT_WEBHOOK_URL;
+const sanitizeBaseCandidate = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed === '/') return '';
+  return trimmed;
+};
+
+const unique = <T,>(items: T[]): T[] => items.filter((value, index) => items.indexOf(value) === index);
+
+const rawBaseCandidates = [
+  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_API_URL),
+  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_BASE_URL),
+  sanitizeBaseCandidate(import.meta.env.VITE_API_BASE_URL),
+  '/api',
+  '',
+  DEFAULT_REMOTE_BASE_URL,
+].filter((candidate): candidate is string => candidate !== null && candidate !== undefined);
+
+const API_BASE_CANDIDATES = unique(rawBaseCandidates);
+
+const WEBHOOK_RUNTIME_CANDIDATES = [
+  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK),
+  sanitizeBaseCandidate(import.meta.env.VITE_N8N_BALANCO_WEBHOOK),
+  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK_PROXY),
+]
+  .filter((candidate): candidate is string => candidate !== null && candidate !== undefined)
+  .map((candidate) => candidate || DEFAULT_WEBHOOK_URL);
+
+const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
+
+const joinUrl = (base: string, path: string) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!base) {
+    return normalizedPath;
+  }
+  const normalizedBase = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${normalizedBase}${normalizedPath}`;
+};
+
+const isSameOriginUrl = (url: string) => {
+  if (!isAbsoluteUrl(url)) {
+    return true;
+  }
+  if (typeof window === 'undefined' || !window?.location) {
+    return false;
+  }
+  try {
+    return new URL(url, window.location.origin).origin === window.location.origin;
+  } catch (error) {
+    console.warn('[energyBalanceApi] Falha ao calcular origem do endpoint', error);
+    return false;
+  }
+};
+
+const dedupeWebhookCandidates = (): string[] => {
+  const sameOriginCandidates = API_BASE_CANDIDATES.map((base) => joinUrl(base, '/energy-balance/upload-csv'));
+  const merged = [...sameOriginCandidates, ...WEBHOOK_RUNTIME_CANDIDATES, DEFAULT_WEBHOOK_URL];
+  return unique(merged);
+};
+
+const WEBHOOK_CANDIDATES = dedupeWebhookCandidates();
 
 export type EnergyBalanceJobPollResult = { balanceId: string };
 
@@ -27,16 +78,6 @@ class HttpError extends Error {
   }
 }
 
-const buildUrl = (path: string) => {
-  if (!path.startsWith('/')) {
-    return `${API_BASE_URL}/${path}`;
-  }
-  if (API_BASE_URL.endsWith('/')) {
-    return `${API_BASE_URL.slice(0, -1)}${path}`;
-  }
-  return `${API_BASE_URL}${path}`;
-};
-
 async function parseJsonSafely(response: Response) {
   const text = await response.text();
   if (!text) return undefined;
@@ -48,40 +89,70 @@ async function parseJsonSafely(response: Response) {
   }
 }
 
+const shouldRetryStatus = (status: number) => [404, 405, 502, 503, 504].includes(status);
+
+const shouldRetryError = (error: unknown) => error instanceof TypeError;
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const controller = init.signal instanceof AbortSignal ? undefined : new AbortController();
-  const signal = init.signal ?? controller?.signal;
-  const headers = new Headers(init.headers);
+  let lastError: unknown = null;
 
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    headers,
-    signal,
-    credentials: init.credentials ?? 'include',
-    mode: init.mode ?? 'cors',
-  }).catch((error) => {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
+  for (const base of API_BASE_CANDIDATES) {
+    const url = joinUrl(base, path);
+    const headers = new Headers(init.headers);
+    const sameOrigin = isSameOriginUrl(url);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        headers,
+        signal: init.signal,
+        credentials: init.credentials ?? (sameOrigin ? 'include' : 'omit'),
+        mode: init.mode ?? (sameOrigin ? 'same-origin' : 'cors'),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      if (shouldRetryError(error)) {
+        lastError = error;
+        continue;
+      }
+      const message = error instanceof Error ? error.message : 'Falha inesperada ao acessar a API de balanço energético';
+      throw new HttpError(message);
     }
-    const message = error instanceof Error ? error.message : 'Falha inesperada ao acessar a API de balanço energético';
-    throw new HttpError(message);
-  });
 
-  if (!response.ok) {
-    const body = await parseJsonSafely(response);
-    const errorMessage =
-      (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
-        ? (body as any).error
-        : undefined) || response.statusText || `HTTP ${response.status}`;
-    throw new HttpError(errorMessage, { status: response.status, body });
+    if (!response.ok) {
+      const body = await parseJsonSafely(response);
+      const errorMessage =
+        (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
+          ? (body as any).error
+          : undefined) || response.statusText || `HTTP ${response.status}`;
+      const httpError = new HttpError(errorMessage, { status: response.status, body });
+
+      if (httpError.status && shouldRetryStatus(httpError.status)) {
+        lastError = httpError;
+        continue;
+      }
+
+      throw httpError;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      return (await response.json()) as T;
+    }
+
+    return (await parseJsonSafely(response)) as T;
   }
 
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    return (await response.json()) as T;
+  if (lastError instanceof HttpError) {
+    throw lastError;
   }
-
-  return (await parseJsonSafely(response)) as T;
+  if (lastError instanceof Error) {
+    throw new HttpError(lastError.message);
+  }
+  throw new HttpError('Falha ao acessar a API de balanço energético.');
 }
 
 const toArray = (payload: unknown): any[] => {
@@ -134,43 +205,75 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
 }
 
 export async function createFromCsv(file: File): Promise<{ balanceId?: string; jobId?: string }> {
-  if (!WEBHOOK_URL) {
-    throw new Error('Endpoint de webhook do n8n não configurado');
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('csv', file);
-
-  const response = await fetch(WEBHOOK_URL, {
-    method: 'POST',
-    body: formData,
-  }).catch((error) => {
-    const message = error instanceof Error ? error.message : 'Falha ao enviar planilha para o webhook';
-    throw new HttpError(message);
-  });
-
-  if (!response.ok) {
-    const payload = await parseJsonSafely(response);
-    const message =
-      (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string'
-        ? (payload as any).error
-        : undefined) || response.statusText || 'Erro ao enviar planilha';
-    throw new HttpError(message, { status: response.status, body: payload });
-  }
-
-  const data = await parseJsonSafely(response);
-  if (!data || typeof data !== 'object') {
-    return {};
-  }
-  const record = data as Record<string, unknown>;
-  const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
-  const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
-
-  return {
-    balanceId: balanceId == null ? undefined : String(balanceId),
-    jobId: jobId == null ? undefined : String(jobId),
+  const buildFormData = () => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('csv', file);
+    return formData;
   };
+
+  let lastError: unknown = null;
+
+  for (const candidate of WEBHOOK_CANDIDATES) {
+    if (!candidate) continue;
+
+    const url = candidate;
+    const sameOrigin = isSameOriginUrl(url);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: buildFormData(),
+        credentials: sameOrigin ? 'include' : 'omit',
+        mode: sameOrigin ? 'same-origin' : 'cors',
+      });
+
+      if (!response.ok) {
+        const payload = await parseJsonSafely(response);
+        const message =
+          (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string'
+            ? (payload as any).error
+            : undefined) || response.statusText || 'Erro ao enviar planilha';
+        const httpError = new HttpError(message, { status: response.status, body: payload });
+        if (httpError.status && shouldRetryStatus(httpError.status)) {
+          lastError = httpError;
+          continue;
+        }
+        throw httpError;
+      }
+
+      const data = await parseJsonSafely(response);
+      if (!data || typeof data !== 'object') {
+        return {};
+      }
+      const record = data as Record<string, unknown>;
+      const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
+      const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
+
+      return {
+        balanceId: balanceId == null ? undefined : String(balanceId),
+        jobId: jobId == null ? undefined : String(jobId),
+      };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      if (shouldRetryError(error)) {
+        lastError = error;
+        continue;
+      }
+      const message = error instanceof Error ? error.message : 'Falha ao enviar planilha para o webhook';
+      throw new HttpError(message);
+    }
+  }
+
+  if (lastError instanceof HttpError) {
+    throw lastError;
+  }
+  if (lastError instanceof Error) {
+    throw new HttpError(lastError.message);
+  }
+  throw new HttpError('Não foi possível enviar a planilha para processamento.');
 }
 
 export async function pollJob(
