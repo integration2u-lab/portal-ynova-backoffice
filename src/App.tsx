@@ -23,6 +23,9 @@ import DetalheContratoPage from './pages/contratos/DetalheContrato';
 import EditarContratoPage from './pages/contratos/EditContractPage';
 import BalancoEnergeticoPage from './pages/contratos/BalancoEnergeticoPage';
 import ContractsLayout from './pages/contratos/ContractsLayout';
+import EnergyBalanceListPage from './pages/Balancos/EnergyBalanceListPage';
+import EnergyBalanceDetailPage from './pages/Balancos/EnergyBalanceDetailPage';
+import EmailPage from './pages/EmailPage';
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
 function AppRoutes() {
@@ -54,6 +57,12 @@ function AppRoutes() {
             <Route path="inteligencia" element={<InteligenciaPage />} />
             <Route path="analise-fatura" element={<InvoiceProcessingPage />} />
             <Route path="simulacao" element={<SimulationPage />} />
+            <Route path="balancos">
+              <Route index element={<EnergyBalanceListPage />} />
+              <Route path=":id" element={<EnergyBalanceDetailPage />} />
+            </Route>
+
+            <Route path="email" element={<EmailPage />} />
 
             {/* Gestão: Contratos */}
             <Route path="contratos" element={<ContractsLayout />}>
