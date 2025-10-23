@@ -1,6 +1,6 @@
 const DEFAULT_REMOTE_BASE_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000';
 const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
-
+''
 const sanitizeBaseCandidate = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -22,13 +22,14 @@ const rawBaseCandidates = [
 
 const API_BASE_CANDIDATES = unique(rawBaseCandidates);
 
-const WEBHOOK_RUNTIME_CANDIDATES = [
-  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK),
-  sanitizeBaseCandidate(import.meta.env.VITE_N8N_BALANCO_WEBHOOK),
-  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK_PROXY),
-]
-  .filter((candidate): candidate is string => candidate !== null && candidate !== undefined)
-  .map((candidate) => candidate || DEFAULT_WEBHOOK_URL);
+// const WEBHOOK_RUNTIME_CANDIDATES = [
+//   sanitizeBaseCandidate(import.meta.env.DEFAULT_WEBHOOK_URL),
+//   sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK),
+//   sanitizeBaseCandidate(import.meta.env.VITE_N8N_BALANCO_WEBHOOK),
+//   sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK_PROXY),
+// ]
+//   .filter((candidate): candidate is string => candidate !== null && candidate !== undefined)
+//   .map((candidate) => candidate || DEFAULT_WEBHOOK_URL);
 
 const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
 
@@ -56,13 +57,6 @@ const isSameOriginUrl = (url: string) => {
   }
 };
 
-const dedupeWebhookCandidates = (): string[] => {
-  const sameOriginCandidates = API_BASE_CANDIDATES.map((base) => joinUrl(base, '/energy-balance/upload-csv'));
-  const merged = [...sameOriginCandidates, ...WEBHOOK_RUNTIME_CANDIDATES, DEFAULT_WEBHOOK_URL];
-  return unique(merged);
-};
-
-const WEBHOOK_CANDIDATES = dedupeWebhookCandidates();
 const WEBHOOK_FILE_FIELD_CANDIDATES = ['file', 'csv'] as const;
 
 export type EnergyBalanceJobPollResult = { balanceId: string };
@@ -206,84 +200,94 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
 }
 
 export async function createFromCsv(file: File): Promise<{ balanceId?: string; jobId?: string }> {
-  const buildFormData = (fieldName: (typeof WEBHOOK_FILE_FIELD_CANDIDATES)[number]) => {
-    const formData = new FormData();
-    formData.append(fieldName, file);
-    return formData;
-  };
+  // Read the file as base64 and send JSON payload matching the required model
+  const readFileAsBase64 = (f: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Falha ao ler o arquivo'));
+      reader.onload = () => {
+        const result = reader.result as string | ArrayBuffer | null;
+        if (!result) return resolve('');
+        // result when reading as data URL: data:<mime>;base64,<data>
+        if (typeof result === 'string') {
+          const idx = result.indexOf('base64,');
+          if (idx >= 0) return resolve(result.slice(idx + 7));
+          return resolve(result);
+        }
+        // ArrayBuffer -> convert to base64
+        const bytes = new Uint8Array(result as ArrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        try {
+          // btoa may fail on very large payloads; still we attempt it here
+          return resolve(btoa(binary));
+        } catch (e) {
+          return reject(e);
+        }
+      };
+      reader.readAsDataURL(f);
+    });
 
   let lastError: unknown = null;
 
-  endpointLoop: for (const candidate of WEBHOOK_CANDIDATES) {
-    if (!candidate) continue;
+  const url = DEFAULT_WEBHOOK_URL;
+  const sameOrigin = isSameOriginUrl(url);
 
-    const url = candidate;
-    const sameOrigin = isSameOriginUrl(url);
+  try {
+    const fileDataBase64 = await readFileAsBase64(file);
 
-    for (const fieldName of WEBHOOK_FILE_FIELD_CANDIDATES) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          body: buildFormData(fieldName),
-          credentials: sameOrigin ? 'include' : 'omit',
-          mode: sameOrigin ? 'same-origin' : 'cors',
-        });
+    const payload = {
+      body: {
+        filename: file.name,
+        fileData: fileDataBase64,
+      },
+      webhookUrl: url,
+    };
 
-        if (!response.ok) {
-          const payload = await parseJsonSafely(response);
-          const message =
-            (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string'
-              ? (payload as any).error
-              : undefined) || response.statusText || 'Erro ao enviar planilha';
-          const httpError = new HttpError(message, { status: response.status, body: payload });
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify(payload.body),
+      headers: {
+        'content-type': 'application/json',
+      },
+      credentials: sameOrigin ? 'include' : 'omit',
+      mode: sameOrigin ? 'same-origin' : 'cors',
+    });
 
-          if (httpError.status && shouldRetryStatus(httpError.status)) {
-            lastError = httpError;
-            continue endpointLoop;
-          }
+    if (!response.ok) {
+      const body = await parseJsonSafely(response);
+      const message =
+        (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
+          ? (body as any).error
+          : undefined) || response.statusText || 'Erro ao enviar planilha';
+      const httpError = new HttpError(message, { status: response.status, body });
 
-          if (httpError.status && httpError.status >= 400 && httpError.status < 500) {
-            lastError = httpError;
-            // tenta o próximo nome de campo (ex.: "csv") antes de trocar o endpoint
-            continue;
-          }
-
-          lastError = httpError;
-          continue endpointLoop;
-        }
-
-        const data = await parseJsonSafely(response);
-        if (!data || typeof data !== 'object') {
-          return {};
-        }
-        const record = data as Record<string, unknown>;
-        const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
-        const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
-
-        return {
-          balanceId: balanceId == null ? undefined : String(balanceId),
-          jobId: jobId == null ? undefined : String(jobId),
-        };
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw error;
-        }
-        if (shouldRetryError(error)) {
-          lastError = error;
-          continue endpointLoop;
-        }
-        lastError = error;
-        continue endpointLoop;
+      if (httpError.status && shouldRetryStatus(httpError.status)) {
+        lastError = httpError;
+      } else {
+        // For 4xx errors keep lastError so caller can inspect
+        lastError = httpError;
       }
+    } else {
+      const data = await parseJsonSafely(response);
+      if (!data || typeof data !== 'object') return {};
+      const record = data as Record<string, unknown>;
+      const balanceId = record.balanceId || (record.data as Record<string, unknown> | undefined)?.balanceId;
+      const jobId = record.jobId || (record.data as Record<string, unknown> | undefined)?.jobId;
+
+      return {
+        balanceId: balanceId == null ? undefined : String(balanceId),
+        jobId: jobId == null ? undefined : String(jobId),
+      };
     }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    if (shouldRetryError(error)) lastError = error;
+    else lastError = error;
   }
 
-  if (lastError instanceof HttpError) {
-    throw lastError;
-  }
-  if (lastError instanceof Error) {
-    throw new HttpError(lastError.message);
-  }
+  if (lastError instanceof HttpError) throw lastError;
+  if (lastError instanceof Error) throw new HttpError(lastError.message);
   throw new HttpError('Não foi possível enviar a planilha para processamento.');
 }
 

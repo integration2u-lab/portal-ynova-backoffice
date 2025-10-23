@@ -15,9 +15,6 @@ const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Diverge
 const energySourceOptions = ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%'] as const;
 type EnergySourceOption = (typeof energySourceOptions)[number];
 
-type ManualInvoiceStatus = Extract<ContractInvoiceStatus, 'Em aberto' | 'Paga' | 'Vencida'>;
-const manualInvoiceStatusOptions: ManualInvoiceStatus[] = ['Em aberto', 'Paga', 'Vencida'];
-
 const volumeUnitOptions = [
   { value: 'MWH', label: 'MWh' },
   { value: 'MW_MEDIO', label: 'MW médio' },
@@ -25,21 +22,8 @@ const volumeUnitOptions = [
 
 type VolumeUnit = (typeof volumeUnitOptions)[number]['value'];
 
-type ManualInvoiceFormState = {
-  id: string;
-  competence: string;
-  dueDate: string;
-  amount: string;
-  status: ManualInvoiceStatus;
-};
-
-type ManualInvoiceErrors = Partial<Record<'competence' | 'dueDate' | 'amount', string>>;
-
 type FormErrors = Partial<
-  Record<
-    'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'billingCycle',
-    string
-  >
+  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility', string>
 >;
 
 type FormState = {
@@ -55,13 +39,16 @@ type FormState = {
   proinfa: string;
   startDate: string;
   endDate: string;
-  billingCycleStart: string;
-  billingCycleEnd: string;
   upperLimit: string;
   lowerLimit: string;
   flexibility: string;
+  // Medidor maps to groupName in API
+  medidor: string;
+  // Flat price (applies to all years) and number of years
+  flatPrice: string;
+  flatYears: number;
+  // Price periods (per-month/periods) — optional detailed pricing
   pricePeriods: PricePeriods;
-  manualInvoices: ManualInvoiceFormState[];
   resumoConformidades: ContractMock['resumoConformidades'];
   status: ContractMock['status'];
 };
@@ -152,19 +139,6 @@ const buildAnalises = (): ContractMock['analises'] => [
   },
 ];
 
-const buildInvoiceState = (): ManualInvoiceFormState => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return {
-    id: `invoice-${ensureRandomId()}`,
-    competence: `${year}-${month}`,
-    dueDate: '',
-    amount: '',
-    status: 'Em aberto',
-  };
-};
-
 const buildInitialFormState = (): FormState => ({
   client: '',
   cnpj: '',
@@ -178,13 +152,13 @@ const buildInitialFormState = (): FormState => ({
   proinfa: '',
   startDate: '',
   endDate: '',
-  billingCycleStart: '01',
-  billingCycleEnd: '30',
   upperLimit: '200',
   lowerLimit: '0',
   flexibility: '100',
+  medidor: '',
+  flatPrice: '',
+  flatYears: 1,
   pricePeriods: { periods: [] },
-  manualInvoices: [buildInvoiceState()],
   resumoConformidades: {
     Consumo: 'Em análise',
     NF: 'Em análise',
@@ -210,15 +184,6 @@ const generateFallbackMonths = (total = 6): string[] => {
 };
 
 const deriveReferenceMonths = (formState: FormState): string[] => {
-  const monthSet = new Set<string>();
-  formState.pricePeriods.periods.forEach((period) => {
-    period.months.forEach((month) => {
-      monthSet.add(month.ym);
-    });
-  });
-  if (monthSet.size) {
-    return Array.from(monthSet.values()).sort();
-  }
   const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : null;
   const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : null;
   if (startMonth && endMonth) {
@@ -245,7 +210,7 @@ type CreateContractModalProps = {
 export default function CreateContractModal({ open, onClose, onCreate }: CreateContractModalProps) {
   const [formState, setFormState] = React.useState<FormState>(() => buildInitialFormState());
   const [errors, setErrors] = React.useState<FormErrors>({});
-  const [invoiceErrors, setInvoiceErrors] = React.useState<ManualInvoiceErrors[]>([]);
+  // manual invoices removed
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = React.useState(false);
@@ -254,17 +219,16 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     if (!open) {
       setFormState(buildInitialFormState());
       setErrors({});
-      setInvoiceErrors([]);
       setSubmitError(null);
       setIsSubmitting(false);
-      setIsPriceModalOpen(false);
     }
   }, [open]);
 
+  // using flatPrice instead of price periods
   const priceSummary = React.useMemo(() => summarizePricePeriods(formState.pricePeriods), [formState.pricePeriods]);
 
   const handleInputChange = (
-    field: keyof Pick<FormState, 'client' | 'segment' | 'contact' | 'volume' | 'modality' | 'supplier' | 'proinfa' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility'>
+    field: keyof Pick<FormState, 'client' | 'segment' | 'contact' | 'volume' | 'modality' | 'supplier' | 'proinfa' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const { value } = event.target;
@@ -284,18 +248,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   const handleVolumeUnitChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setFormState((prev) => ({ ...prev, volumeUnit: event.target.value as VolumeUnit }));
   };
-
-  const handleBillingCycleChange = (field: 'billingCycleStart' | 'billingCycleEnd') =>
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const { value } = event.target;
-      setFormState((prev) => ({ ...prev, [field]: value }));
-      setErrors((prev) => {
-        if (!prev.billingCycle) return prev;
-        const next = { ...prev };
-        delete next.billingCycle;
-        return next;
-      });
-    };
 
   const handleCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const masked = formatCnpj(event.target.value);
@@ -320,91 +272,31 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       }));
     };
 
-  const handleInvoiceChange = (index: number, field: keyof ManualInvoiceFormState) =>
-    (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const value = event.target.value;
-      setFormState((prev) => ({
-        ...prev,
-        manualInvoices: prev.manualInvoices.map((invoice, idx) =>
-          idx === index
-            ? {
-                ...invoice,
-                [field]: field === 'status' ? (value as ManualInvoiceStatus) : value,
-              }
-            : invoice
-        ),
-      }));
-      setInvoiceErrors((prev) => {
-        if (!prev.length) return prev;
-        const next = [...prev];
-        if (next[index]) {
-          next[index] = {};
-        }
-        return next;
-      });
-    };
-
-  const handleInvoiceAmountChange = (index: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Flat price handlers
+  const handleFlatPriceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const sanitized = sanitizeCurrencyInput(event.target.value);
-    setFormState((prev) => ({
-      ...prev,
-      manualInvoices: prev.manualInvoices.map((invoice, idx) =>
-        idx === index
-          ? {
-              ...invoice,
-              amount: sanitized,
-            }
-          : invoice
-      ),
-    }));
-    setInvoiceErrors((prev) => {
-      if (!prev.length) return prev;
-      const next = [...prev];
-      if (next[index]) {
-        next[index] = {};
-      }
-      return next;
-    });
+    setFormState((prev) => ({ ...prev, flatPrice: sanitized }));
   };
 
-  const handleInvoiceAmountBlur = (index: number) => () => {
-    setFormState((prev) => ({
-      ...prev,
-      manualInvoices: prev.manualInvoices.map((invoice, idx) =>
-        idx === index
-          ? {
-              ...invoice,
-              amount: invoice.amount ? formatCurrencyInputBlur(invoice.amount) : '',
-            }
-          : invoice
-      ),
-    }));
+  const handleFlatPriceBlur = () => {
+    setFormState((prev) => ({ ...prev, flatPrice: prev.flatPrice ? formatCurrencyInputBlur(prev.flatPrice) : '' }));
   };
 
-  const handleAddInvoice = () => {
-    setFormState((prev) => ({
-      ...prev,
-      manualInvoices: [...prev.manualInvoices, buildInvoiceState()],
-    }));
-    setInvoiceErrors([]);
-  };
-
-  const handleRemoveInvoice = (id: string) => {
-    setFormState((prev) => ({
-      ...prev,
-      manualInvoices: prev.manualInvoices.filter((invoice) => invoice.id !== id),
-    }));
-    setInvoiceErrors([]);
+  const handleFlatYearsChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormState((prev) => ({ ...prev, flatYears: Number(event.target.value) || 1 }));
   };
 
   const handlePricePeriodsSave = (periods: PricePeriods) => {
+    // Persist the full periods payload coming from the modal
     setFormState((prev) => ({ ...prev, pricePeriods: periods }));
     setIsPriceModalOpen(false);
   };
 
+  // removed invoice handlers and price periods handlers — using flat price and no manual invoices
+
   const validate = React.useCallback(() => {
     const nextErrors: FormErrors = {};
-    const nextInvoiceErrors: ManualInvoiceErrors[] = [];
+  // invoices removed
 
     if (!formState.client.trim()) {
       nextErrors.client = 'Informe o cliente';
@@ -463,64 +355,26 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       nextErrors.upperLimit = 'Limite superior deve ser maior ou igual ao inferior';
     }
 
-    const startDay = Number(formState.billingCycleStart);
-    const endDay = Number(formState.billingCycleEnd);
-    if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) {
-      nextErrors.billingCycle = 'Selecione o ciclo de faturamento';
-    } else if (startDay < 1 || startDay > 31 || endDay < 1 || endDay > 31) {
-      nextErrors.billingCycle = 'Dias do ciclo devem estar entre 1 e 31';
-    } else if (startDay > endDay) {
-      nextErrors.billingCycle = 'Dia inicial deve ser menor ou igual ao dia final';
-    }
-
-    formState.manualInvoices.forEach((invoice) => {
-      const errorsForInvoice: ManualInvoiceErrors = {};
-      const amountNumber = parseCurrencyInput(invoice.amount);
-      const hasValue =
-        invoice.competence.trim().length > 0 ||
-        invoice.dueDate.trim().length > 0 ||
-        (amountNumber !== null && amountNumber !== 0);
-
-      if (hasValue) {
-        if (!/^\d{4}-\d{2}$/.test(invoice.competence)) {
-          errorsForInvoice.competence = 'Informe a competência no formato YYYY-MM';
-        }
-
-        const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(invoice.dueDate) || Number.isNaN(dueDate.getTime())) {
-          errorsForInvoice.dueDate = 'Informe um vencimento válido';
-        }
-
-        if (amountNumber === null || amountNumber <= 0) {
-          errorsForInvoice.amount = 'Informe um valor em reais';
-        }
-      }
-
-      nextInvoiceErrors.push(errorsForInvoice);
-    });
+    // billing cycle removed from manual creation
 
     setErrors(nextErrors);
-    setInvoiceErrors(nextInvoiceErrors);
-
-    const hasInvoiceErrors = nextInvoiceErrors.some((entry) => Object.keys(entry).length > 0);
-    return Object.keys(nextErrors).length === 0 && !hasInvoiceErrors;
+    return Object.keys(nextErrors).length === 0;
   }, [formState]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
 
-    const isValid = validate();
+  const isValid = validate();
     if (!isValid) return;
 
     const id = ensureId();
-    const priceAverage = priceSummary.averagePrice ?? 0;
-    const referenceMonths = deriveReferenceMonths(formState);
-    const priceSummaryText = priceSummary.filledMonths
-      ? `${priceSummary.filledMonths} ${
-          priceSummary.filledMonths === 1 ? 'mês preenchido' : 'meses preenchidos'
-        } · ${formatCurrencyBRL(priceAverage)}`
-      : 'Não informado';
+  // prefer detailed periods average when available, otherwise use flat price
+  const periodsAverage = priceSummary.averagePrice ?? 0;
+  const flatAverage = parseCurrencyInput(formState.flatPrice) ?? 0;
+  const priceAverage = priceSummary.filledMonths ? periodsAverage : flatAverage;
+  const referenceMonths = deriveReferenceMonths(formState);
+  const priceSummaryText = priceAverage ? formatCurrencyBRL(priceAverage) : 'Não informado';
 
     const volumeValue = Number(formState.volume);
     const normalizedVolume =
@@ -539,7 +393,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
-    const billingCycleLabel = `${formState.billingCycleStart} de ${formState.billingCycleEnd}`;
 
     const dadosContrato = [
       { label: 'Cliente', value: formState.client.trim() || 'Não informado' },
@@ -556,7 +409,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             ? `${formatMesLabel(startMonth)} - ${formatMesLabel(endMonth)}`
             : 'Não informado',
       },
-      { label: 'Ciclo de faturamento', value: billingCycleLabel },
+  // ciclo de faturamento removed
+      { label: 'Medidor', value: formState.medidor.trim() || 'Não informado' },
       {
         label: 'Flex / Limites',
         value: `${formState.flexibility || '0'}% (${formState.lowerLimit || '0'}% - ${formState.upperLimit || '0'}%)`,
@@ -569,7 +423,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             }`
           : 'Não informado',
       },
-      { label: 'Preços médios', value: priceSummaryText },
+  { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
       { label: 'Responsável', value: formState.contact.trim() || 'Não informado' },
     ];
 
@@ -578,35 +432,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       return acc;
     }, {} as Record<string, StatusResumo>);
 
-    const historicoDemanda = referenceMonths.map((mes, index) => ({
-      mes,
-      ponta: Math.max(0, Math.round((volumeBase / 12) * 0.3 + index * 4)),
-      foraPonta: Math.max(0, Math.round((volumeBase / 12) * 0.2 + index * 3)),
-    }));
+    // Energy balance fields removed from contracts; kept only in Balanço energético page
+    const historicoDemanda: ContractMock['historicoDemanda'] = [];
+    const historicoConsumo: ContractMock['historicoConsumo'] = [];
 
-    const historicoConsumo = referenceMonths.map((mes, index) => ({
-      mes,
-      meta: Math.max(0, volumeBase),
-      realizado: Math.max(0, volumeBase - index * 25),
-    }));
-
-    const invoices = formState.manualInvoices
-      .map((invoice) => {
-        const amountNumber = parseCurrencyInput(invoice.amount);
-        const hasValue =
-          invoice.competence.trim().length > 0 ||
-          invoice.dueDate.trim().length > 0 ||
-          (amountNumber !== null && amountNumber !== 0);
-        if (!hasValue) return null;
-        return {
-          id: invoice.id,
-          competencia: invoice.competence,
-          vencimento: invoice.dueDate,
-          valor: amountNumber ?? 0,
-          status: invoice.status,
-        };
-      })
-      .filter((invoice): invoice is ContractMock['faturas'][number] => invoice !== null);
+    const invoices: ContractMock['faturas'] = [];
 
     const newContract: ContractMock = {
       id,
@@ -626,7 +456,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       precoMedio: priceAverage,
       fornecedor: supplierValue,
       proinfa: proinfaNumber,
-      cicloFaturamento: billingCycleLabel,
+  cicloFaturamento: '',
       periodos: referenceMonths,
       resumoConformidades: { ...formState.resumoConformidades },
       kpis: [
@@ -650,9 +480,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     setIsSubmitting(true);
     try {
       await onCreate(newContract);
-      setFormState(buildInitialFormState());
-      setErrors({});
-      setInvoiceErrors([]);
+  setFormState(buildInitialFormState());
+  setErrors({});
     } catch (error) {
       console.error('[CreateContractModal] Falha ao criar contrato.', error);
       const message =
@@ -665,11 +494,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
   if (!open) return null;
 
-  const priceSummaryText = priceSummary.filledMonths
-    ? `${priceSummary.filledMonths === 1 ? '1 mês preenchido' : `${priceSummary.filledMonths} meses preenchidos`} · ${formatCurrencyBRL(
-        priceSummary.averagePrice ?? 0
-      )}`
-    : 'Nenhum preço cadastrado';
+  // price summary removed; using flatPrice field
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8">
@@ -832,6 +657,17 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Medidor
+                  <input
+                    type="text"
+                    value={formState.medidor}
+                    onChange={handleInputChange('medidor')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                    placeholder="Nome do medidor / grupo"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Proinfa (R$/MWh)
                   <input
                     type="text"
@@ -869,37 +705,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   {errors.endDate && <span className="text-xs font-medium text-red-500">{errors.endDate}</span>}
                 </label>
 
-                <div className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  <span>Ciclo de faturamento</span>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={formState.billingCycleStart}
-                      onChange={handleBillingCycleChange('billingCycleStart')}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    >
-                      {dayOptions.map((day) => (
-                        <option key={day} value={day}>
-                          {day}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">de</span>
-                    <select
-                      value={formState.billingCycleEnd}
-                      onChange={handleBillingCycleChange('billingCycleEnd')}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    >
-                      {dayOptions.map((day) => (
-                        <option key={day} value={day}>
-                          {day}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {errors.billingCycle && (
-                    <span className="text-xs font-medium text-red-500">{errors.billingCycle}</span>
-                  )}
-                </div>
+                {/* billing cycle removed from manual contract creation */}
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Limite superior (%)
@@ -953,16 +759,38 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <div className="flex flex-col gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-                  <span>Preços médios (R$/MWh)</span>
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsPriceModalOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
-                    >
-                      <PencilLine size={16} /> Editar
-                    </button>
-                    <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{priceSummaryText}</span>
+                  <div className="grid md:grid-cols-3 gap-2 items-center">
+                    <label className="flex flex-col gap-1 md:col-span-2">
+                      Preço flat (R$/MWh)
+                      <div className="flex gap-2 items-center">
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">R$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={formState.flatPrice}
+                            onChange={handleFlatPriceChange}
+                            onBlur={handleFlatPriceBlur}
+                            placeholder="0,00"
+                            className="w-full rounded-lg border px-3 py-2 pl-7 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                          />
+                        </div>
+                        <select value={String(formState.flatYears)} onChange={handleFlatYearsChange} className="min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm">
+                          {[1,2,3,4,5,6,7,8,9,10].map((y) => <option key={y} value={String(y)}>{y} ano{y>1?'s':''}</option>)}
+                        </select>
+                      </div>
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsPriceModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
+                      >
+                        <PencilLine size={16} /> Editar preços por período
+                      </button>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -999,125 +827,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
               </div>
             </section>
 
-            <section aria-labelledby="faturas-manual" className="space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 id="faturas-manual" className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    Faturas enviadas manualmente
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Registre faturas já recebidas para acompanhar competência, vencimento e status.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddInvoice}
-                  className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
-                >
-                  <Plus size={16} /> Adicionar fatura
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {formState.manualInvoices.map((invoice, index) => {
-                  const competenceLabel = invoice.competence
-                    ? competenceFormatter.format(new Date(`${invoice.competence}-01T00:00:00`))
-                    : '';
-                  const errorsForInvoice = invoiceErrors[index] ?? {};
-
-                  return (
-                    <div key={invoice.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2">
-                          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                            Competência (YYYY-MM)
-                            <input
-                              type="month"
-                              value={invoice.competence}
-                              onChange={handleInvoiceChange(index, 'competence')}
-                              className={`rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                                errorsForInvoice.competence ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                              }`}
-                            />
-                            {competenceLabel && (
-                              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                                {competenceLabel}
-                              </span>
-                            )}
-                            {errorsForInvoice.competence && (
-                              <span className="text-[11px] font-medium text-red-500">{errorsForInvoice.competence}</span>
-                            )}
-                          </label>
-
-                          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                            Vencimento
-                            <input
-                              type="date"
-                              value={invoice.dueDate}
-                              onChange={handleInvoiceChange(index, 'dueDate')}
-                              className={`rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                                errorsForInvoice.dueDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                              }`}
-                            />
-                            {errorsForInvoice.dueDate && (
-                              <span className="text-[11px] font-medium text-red-500">{errorsForInvoice.dueDate}</span>
-                            )}
-                          </label>
-
-                          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                            Valor (R$)
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                R$
-                              </span>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={invoice.amount}
-                                onChange={handleInvoiceAmountChange(index)}
-                                onBlur={handleInvoiceAmountBlur(index)}
-                                placeholder="0,00"
-                                className={`w-full rounded-lg border px-3 py-2 pl-7 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                                  errorsForInvoice.amount ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                                }`}
-                              />
-                            </div>
-                            {errorsForInvoice.amount && (
-                              <span className="text-[11px] font-medium text-red-500">{errorsForInvoice.amount}</span>
-                            )}
-                          </label>
-
-                          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
-                            Status
-                            <select
-                              value={invoice.status}
-                              onChange={handleInvoiceChange(index, 'status')}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                            >
-                              {manualInvoiceStatusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-
-                        {formState.manualInvoices.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveInvoice(invoice.id)}
-                            className="inline-flex items-center gap-2 self-start rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-red-600 shadow-sm transition hover:bg-red-50 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
-                          >
-                            <Trash2 size={16} /> Remover
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+            {/* manual invoices removed from contracts page; kept in energy balance */}
           </div>
 
           <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">

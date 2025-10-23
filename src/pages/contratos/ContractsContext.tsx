@@ -800,7 +800,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   };
 
   const supplier = findDadosValue(['fornecedor', 'supplier']);
-  const groupName = findDadosValue(['grupo', 'group']);
+  // also accept 'medidor' label as groupName
+  const groupName = findDadosValue(['grupo', 'group', 'medidor', 'meter']);
   const volumeField =
     contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
   const contractedVolume = parseNumericInput(volumeField);
