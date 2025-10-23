@@ -55,35 +55,36 @@ const unregisterMockServiceWorker = async (): Promise<void> => {
 
 export const worker = setupWorker(...handlers);
 
-async function clearMockServiceWorkers() {
+const deregisterMockServiceWorkers = async () => {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return;
   }
 
   try {
     const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(
-      registrations
-        .filter((registration) => registration.active?.scriptURL.includes('mockServiceWorker.js'))
-        .map((registration) => registration.unregister()),
+    const mockRegistrations = registrations.filter((registration) =>
+      registration.active?.scriptURL.includes('mockServiceWorker.js'),
     );
+
+    await Promise.all(mockRegistrations.map((registration) => registration.unregister()));
   } catch (error) {
     console.warn('[msw] Falha ao remover service worker de mock', error);
   }
-}
+};
 
-export async function startWorker() {
+export const startWorker = async () => {
   await worker.start({
     serviceWorker: { url: '/mockServiceWorker.js' },
     onUnhandledRequest: 'bypass',
   });
-}
+};
 
-export async function stopWorker() {
+export const stopWorker = async () => {
   try {
     worker.stop();
   } catch (error) {
     console.warn('[msw] Falha ao parar worker de mock', error);
   }
-  await clearMockServiceWorkers();
-}
+
+  await deregisterMockServiceWorkers();
+};
