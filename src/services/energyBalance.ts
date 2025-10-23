@@ -60,6 +60,26 @@ const joinEnergyBalanceUrl = (baseUrl: string, path: string): string => {
   return `${baseUrl}${normalizedPath}`;
 };
 
+const isAbsoluteUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+
+const isSameOriginUrl = (url: string): boolean => {
+  if (!isAbsoluteUrl(url)) {
+    return true;
+  }
+
+  if (typeof window === 'undefined' || !window?.location) {
+    return false;
+  }
+
+  try {
+    const requestOrigin = new URL(url, window.location.origin).origin;
+    return requestOrigin === window.location.origin;
+  } catch (error) {
+    console.warn('[EnergyBalanceAPI] Falha ao verificar origem do endpoint', error);
+    return false;
+  }
+};
+
 const previewEnergyBalance = (payload: unknown) => {
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>;
@@ -303,13 +323,15 @@ export const EnergyBalanceAPI = {
 
     let response: Response;
     try {
+      const sameOrigin = isSameOriginUrl(targetUrl);
       response = await fetch(targetUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
           'ngrok-skip-browser-warning': 'true',
         },
-        credentials: 'include',
+        credentials: sameOrigin ? 'include' : 'omit',
+        mode: sameOrigin ? 'same-origin' : 'cors',
         signal: options.signal,
       });
     } catch (requestError) {

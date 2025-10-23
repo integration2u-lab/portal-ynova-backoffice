@@ -34,11 +34,6 @@ const SHOULD_ENABLE_MSW = (() => {
     return normalized === '1' || normalized === 'true'
   }
 
-  const legacyMock = import.meta.env.VITE_API_MOCK
-  if (typeof legacyMock === 'string') {
-    return legacyMock.trim().toLowerCase() === 'true'
-  }
-
   return false
 })()
 
@@ -48,6 +43,7 @@ async function bootstrap() {
   if (typeof window !== 'undefined') {
     window.MSW_ENABLED = mswEnabled
     ;(globalThis as typeof globalThis & { MSW_ENABLED?: boolean }).MSW_ENABLED = mswEnabled
+    console.info('[bootstrap] MSW enabled:', mswEnabled)
   }
 
   if (mswEnabled) {
