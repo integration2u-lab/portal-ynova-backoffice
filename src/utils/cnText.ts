@@ -3,12 +3,12 @@ export type TextVariant = 'title' | 'subtitle' | 'tableCell' | 'tableHeader';
 export function cnText(variant: TextVariant = 'title') {
   switch (variant) {
     case 'subtitle':
-      return 'text-gray-700 dark:text-gray-300';
+      return 'text-gray-700 dark:text-white dark:font-bold';
     case 'tableCell':
-      return 'text-gray-900 dark:text-gray-200';
+      return 'text-gray-900 dark:text-white dark:font-bold';
     case 'tableHeader':
-      return 'text-gray-600 dark:text-gray-300';
+      return 'text-gray-600 dark:text-white dark:font-bold';
     default:
-      return 'text-gray-900 dark:text-gray-100';
+      return 'text-gray-900 dark:text-white dark:font-bold';
   }
 }
