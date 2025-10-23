@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -17,17 +17,14 @@ const ALLOW_ANY_LOGIN = (() => {
   return import.meta.env.DEV
 })()
 
-const SHOULD_USE_MOCK_API = (() => {
-  const flag = import.meta.env.VITE_API_MOCK
-  if (typeof flag === 'string') return flag === 'true'
-  return false
-})()
-
 async function bootstrap() {
-  // Enable MSW only when mock API mode is explicitly requesteddd
-  if (SHOULD_USE_MOCK_API) {
-    const { worker } = await import('./mocks/browser')
-    await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
+  if (typeof window !== 'undefined') {
+    const { ensureMockServiceWorker, stopMockServiceWorker, mswShouldEnable } = await import('./mocks/browser')
+    if (mswShouldEnable()) {
+      await ensureMockServiceWorker()
+    } else {
+      await stopMockServiceWorker()
+    }
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
