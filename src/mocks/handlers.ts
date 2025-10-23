@@ -1,4 +1,31 @@
-﻿import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, passthrough } from 'msw';
+
+type MswGlobalScope = typeof globalThis & { MSW_ENABLED?: boolean };
+
+const isEnergyBalanceMockDisabled = (): boolean => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_USE_MSW_REAL === '1') {
+      return true;
+    }
+  } catch {
+    // ignore env lookup errors
+  }
+
+  try {
+    const scope = globalThis as MswGlobalScope;
+    if (typeof scope.MSW_ENABLED === 'boolean') {
+      return scope.MSW_ENABLED === false;
+    }
+  } catch {
+    // ignore global lookup errors
+  }
+
+  if (typeof window !== 'undefined' && typeof window.MSW_ENABLED === 'boolean') {
+    return window.MSW_ENABLED === false;
+  }
+
+  return false;
+};
 
 export type Contrato = {
   id: string;
@@ -65,6 +92,34 @@ function gerarSerie24Meses(seedStr: string, base: number, amplitude: number) {
 }
 
 export const handlers = [
+  http.get('*/energy-balance/:id', ({ params }) => {
+    if (isEnergyBalanceMockDisabled()) {
+      return passthrough();
+    }
+
+    const { id } = params as { id?: string };
+    const resolvedId = typeof id === 'string' && id.length > 0 ? id : '224';
+
+    return HttpResponse.json({
+      id: resolvedId,
+      clientName: 'THOR GRANITOS E MARMORES',
+      price: 195,
+      referenceBase: '2025-07-01T00:00:00.000Z',
+      supplier: 'Boven',
+      meter: 'CENSSQENTR101 (L)',
+      consumptionKwh: '338.92971',
+      proinfaContribution: '0',
+      contract: '16.378',
+      minDemand: 0,
+      maxDemand: 32.757,
+      cpCode: null,
+      createdAt: '2025-07-01T00:00:00.000Z',
+      updatedAt: '2025-10-23T00:01:46.559Z',
+      clientId: '2311c10a-3c76-4fe9-ad59-28a0b26b2600',
+      contractId: 'mock-contract',
+      contactActive: true,
+    });
+  }),
   http.get('/api/contracts', () => {
     const contracts = allContratos.map((contrato) => ({
       id: contrato.id,
