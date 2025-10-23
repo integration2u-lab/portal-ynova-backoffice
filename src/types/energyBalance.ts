@@ -35,6 +35,12 @@ export interface EnergyBalanceDetailMonthRow {
   proinfa: string;
   faixaContratual: string;
   ajustado: string;
+  fornecedor: string;
+  contrato: string;
+  codigoCP: string;
+  dataCriacao: string;
+  dataAtualizacao: string;
+  contatoAtivo: string;
   actions?: string;
 }
 

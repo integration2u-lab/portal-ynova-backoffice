@@ -409,117 +409,91 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     getSafe(record, 'document', 'cliente.documento');
   const cnpj = cnpjValue ? formatCnpj(String(cnpjValue)) : 'Não informado';
 
-  const metricsSource = extractMetrics(record);
+  // Calculate metrics from the single record data
+  const consumptionKwh = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo'));
+  const consumptionMwh = consumptionKwh !== null ? consumptionKwh / 1000 : null;
+  const price = toNumber(getSafe(record, 'price', 'preco', 'tarifa'));
+  const billable = toNumber(getSafe(record, 'billable', 'custo', 'cost', 'value'));
+  const proinfaContribution = toNumber(getSafe(record, 'proinfaContribution', 'proinfa_contribution', 'proinfa'));
 
-  const consumoTotalMWh = normalizeMwh(
-    getSafe(
-      metricsSource,
-      'total_consumption_mwh',
-      'totalConsumptionMwh',
-      'consumo_total_mwh',
-      'consumptionTotalMwh',
-      'consumption_mwh',
-      'consumptionTotal',
-    ),
+  const consumoTotalMWh = consumptionMwh !== null ? normalizeMwh(consumptionMwh) : '-';
+  const custoTotalBRL = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
+  const proinfaTotal = proinfaContribution !== null ? normalizeCurrencyAllowZero(proinfaContribution) : 'Não informado';
+  
+  // Calculate potential savings (simplified calculation)
+  const currentCost = billable || (price && consumptionMwh ? price * consumptionMwh : 0);
+  const expectedCost = price && consumptionMwh ? price * consumptionMwh : 0;
+  const potentialSavings = Math.max(0, currentCost - expectedCost);
+  const economiaPotencialBRL = potentialSavings > 0 ? normalizeCurrency(potentialSavings) : 'Não informado';
+
+  // Create a single month entry from the record data
+  const monthLabel = normalizeMonthLabel(
+    getSafe(record, 'referenceBase', 'reference_base', 'competencia', 'month', 'mes')
   );
 
-  const custoTotalBRL = normalizeCurrencyAllowZero(
-    getSafe(
-      metricsSource,
-      'total_cost',
-      'totalCost',
-      'custo_total',
-      'costTotal',
-      'custo',
-      'totalValue',
-    ),
+  const medidor = toStringSafe(
+    getSafe(record, 'meter', 'medidor', 'meter_code', 'meterCode', 'uc', 'ucCode'),
+    'Não informado',
   );
 
-  const proinfaTotal = normalizeCurrencyAllowZero(
-    getSafe(metricsSource, 'total_proinfa', 'proinfaTotal', 'proinfa_total', 'proinfa'),
+  const consumoMWh = normalizeMwh(consumptionMwh);
+  const precoReaisPorMWh = price !== null ? normalizeCurrencyAllowZero(price) : 'Não informado';
+  const custoMes = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
+  const proinfa = proinfaContribution !== null ? normalizeCurrencyAllowZero(proinfaContribution) : 'Não informado';
+
+  const minDemand = toNumber(getSafe(record, 'minDemand', 'min_demand', 'min'));
+  const maxDemand = toNumber(getSafe(record, 'maxDemand', 'max_demand', 'max'));
+  const faixaContratual = describeRange(minDemand, maxDemand);
+
+  const ajustado = normalizeBoolean(
+    getSafe(record, 'adjusted', 'ajustado', 'isAdjusted', 'ajustado_bool', 'ajuste'),
   );
 
-  const economiaPotencialBRL = normalizeCurrency(
-    getSafe(
-      metricsSource,
-      'potential_savings',
-      'economiaPotencial',
-      'economia_potencial',
-      'potentialSavings',
-    ),
+  const fornecedor = toStringSafe(
+    getSafe(record, 'supplier', 'fornecedor', 'provider', 'company'),
+    'Não informado'
   );
 
-  const monthsSource =
-    getSafe(
-      record,
-      'months',
-      'monthly',
-      'entries',
-      'dados',
-      'data',
-      'rows',
-      'items',
-      'detalhes',
-      'monthsData',
-      'result',
-    ) ?? [];
+  const contrato = toStringSafe(
+    getSafe(record, 'contract', 'contrato', 'contractCode', 'codigoContrato'),
+    'Não informado'
+  );
 
-  const monthsArray = Array.isArray(monthsSource)
-    ? monthsSource
-    : Array.isArray((monthsSource as Record<string, unknown>)?.items)
-      ? ((monthsSource as Record<string, unknown>).items as unknown[])
-      : [];
+  const codigoCP = toStringSafe(
+    getSafe(record, 'cpCode', 'cp_code', 'codigoCP', 'contaParticipacao'),
+    'Não informado'
+  );
 
-  const months = monthsArray.map((item, index): EnergyBalanceDetailMonthRow => {
-    const entry = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
-    const entryId = toStringSafe(
-      getSafe(entry, 'id', 'uuid', 'rowId', 'monthId'),
-      `${index}`,
-    );
-    const monthLabel = normalizeMonthLabel(
-      getSafe(entry, 'month', 'mes', 'period', 'reference', 'referencia', 'reference_base', 'referenceBase'),
-    );
+  const dataCriacao = normalizeDateTime(
+    getSafe(record, 'createdAt', 'created_at', 'dataCriacao', 'criadoEm')
+  );
 
-    const medidor = toStringSafe(
-      getSafe(entry, 'meter', 'medidor', 'meter_code', 'meterCode', 'uc', 'ucCode'),
-      'Não informado',
-    );
+  const dataAtualizacao = normalizeDateTime(
+    getSafe(record, 'updatedAt', 'updated_at', 'dataAtualizacao', 'atualizadoEm')
+  );
 
-    const consumoMWh = normalizeMwh(
-      getSafe(entry, 'consumption_mwh', 'consumptionMwh', 'consumo_mwh', 'consumo', 'consumption'),
-    );
-    const precoReaisPorMWh = normalizeCurrencyAllowZero(
-      getSafe(entry, 'price', 'preco', 'price_mwh', 'preco_mwh', 'tarifa', 'pricePerMwh'),
-    );
-    const custoMes = normalizeCurrencyAllowZero(
-      getSafe(entry, 'monthCost', 'custo_mes', 'custo', 'cost', 'billable', 'value'),
-    );
-    const proinfa = normalizeCurrencyAllowZero(
-      getSafe(entry, 'proinfa', 'proinfa_total', 'proinfaContribution', 'encargoProinfa'),
-    );
+  const contatoAtivo = normalizeBoolean(
+    getSafe(record, 'contactActive', 'contact_active', 'contatoAtivo', 'ativo')
+  );
 
-    const faixaContratual = describeRange(
-      getSafe(entry, 'contractRangeMin', 'faixa_min', 'min', 'lowerLimit', 'limite_inferior', 'min_mwh'),
-      getSafe(entry, 'contractRangeMax', 'faixa_max', 'max', 'upperLimit', 'limite_superior', 'max_mwh'),
-    );
-
-    const ajustado = normalizeBoolean(
-      getSafe(entry, 'adjusted', 'ajustado', 'isAdjusted', 'ajustado_bool', 'ajuste'),
-    );
-
-    return {
-      id: entryId,
-      mes: monthLabel,
-      medidor,
-      consumoMWh,
-      precoReaisPorMWh,
-      custoMesBRL: custoMes,
-      proinfa,
-      faixaContratual,
-      ajustado,
-      actions: '-',
-    };
-  });
+  const months: EnergyBalanceDetailMonthRow[] = [{
+    id: toStringSafe(getSafe(record, 'id', 'uuid'), '1'),
+    mes: monthLabel,
+    medidor,
+    consumoMWh,
+    precoReaisPorMWh,
+    custoMesBRL: custoMes,
+    proinfa,
+    faixaContratual,
+    ajustado,
+    fornecedor,
+    contrato,
+    codigoCP,
+    dataCriacao,
+    dataAtualizacao,
+    contatoAtivo,
+    actions: '-',
+  }];
 
   return {
     header: {

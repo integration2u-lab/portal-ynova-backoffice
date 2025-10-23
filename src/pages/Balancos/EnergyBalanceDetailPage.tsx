@@ -233,7 +233,7 @@ export default function EnergyBalanceDetailPage() {
 
       <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-auto">
-          <table className="min-w-[960px] w-full table-auto text-sm">
+          <table className="min-w-[1400px] w-full table-auto text-sm">
             <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-3 text-left">Mês</th>
@@ -244,13 +244,19 @@ export default function EnergyBalanceDetailPage() {
                 <th className="px-4 py-3 text-left">Proinfa</th>
                 <th className="px-4 py-3 text-left">Faixa contratual</th>
                 <th className="px-4 py-3 text-left">Ajustado</th>
+                <th className="px-4 py-3 text-left">Fornecedor</th>
+                <th className="px-4 py-3 text-left">Contrato</th>
+                <th className="px-4 py-3 text-left">Código CP</th>
+                <th className="px-4 py-3 text-left">Data Criação</th>
+                <th className="px-4 py-3 text-left">Data Atualização</th>
+                <th className="px-4 py-3 text-left">Contato Ativo</th>
                 <th className="px-4 py-3 text-left">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {detail.months.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
+                  <td colSpan={15} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
                     Nenhum dado mensal disponível para este balanço.
                   </td>
                 </tr>
@@ -265,6 +271,12 @@ export default function EnergyBalanceDetailPage() {
                     <td className="px-4 py-3 font-bold text-gray-900">{month.proinfa}</td>
                     <td className="px-4 py-3 font-bold text-gray-900">{month.faixaContratual}</td>
                     <td className="px-4 py-3 font-bold text-gray-900">{month.ajustado}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.fornecedor}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.contrato}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.codigoCP}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.dataCriacao}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.dataAtualizacao}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{month.contatoAtivo}</td>
                     <td className="px-4 py-3 font-bold text-gray-900">{month.actions ?? '-'}</td>
                   </tr>
                 ))
