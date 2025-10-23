@@ -1,15 +1,16 @@
 import { apiFetch } from './api';
 
-// Energy Balance API types - matching actual API response
-export type EnergyBalanceApiResponse = {
+const ENERGY_BALANCE_ENDPOINT = '/energy-balance';
+
+export interface EnergyBalance {
   id: string;
   clientName: string;
   price: number | null;
-  referenceBase: string; // ISO date string
+  referenceBase: string;
   supplier: string | null;
-  meter: string;
-  consumptionKwh: string; // API returns as string
-  proinfaContribution: string; // API returns as string
+  meter: string | null;
+  consumptionKwh: string;
+  proinfaContribution: string;
   contract: string | null;
   minDemand: number | null;
   maxDemand: number | null;
@@ -19,9 +20,203 @@ export type EnergyBalanceApiResponse = {
   clientId: string;
   contractId: string | null;
   contactActive: boolean | null;
-  billable: number | null;
-  adjusted: boolean | null;
+}
+
+// Energy Balance API types - matching actual API response
+export type EnergyBalanceApiResponse = EnergyBalance & {
+  billable?: number | null;
+  adjusted?: boolean | null;
 };
+
+const expectedEnergyBalanceKeys: Array<keyof EnergyBalance> = [
+  'id',
+  'clientName',
+  'price',
+  'referenceBase',
+  'supplier',
+  'meter',
+  'consumptionKwh',
+  'proinfaContribution',
+  'contract',
+  'minDemand',
+  'maxDemand',
+  'cpCode',
+  'createdAt',
+  'updatedAt',
+  'clientId',
+  'contractId',
+  'contactActive',
+];
+
+const ensureStringField = (record: Record<string, unknown>, key: keyof EnergyBalance): string => {
+  const value = record[key as string];
+  if (typeof value !== 'string') {
+    throw new Error(
+      `[EnergyBalanceAPI] Campo "${String(key)}" ausente ou inválido na resposta do balanço energético.`,
+    );
+  }
+  return value;
+};
+
+const ensureNullableStringField = (record: Record<string, unknown>, key: keyof EnergyBalance): string | null => {
+  const value = record[key as string];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  throw new Error(
+    `[EnergyBalanceAPI] Campo "${String(key)}" ausente ou inválido na resposta do balanço energético.`,
+  );
+};
+
+const ensureNullableNumberField = (record: Record<string, unknown>, key: keyof EnergyBalance): number | null => {
+  const value = record[key as string];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  throw new Error(
+    `[EnergyBalanceAPI] Campo "${String(key)}" ausente ou inválido na resposta do balanço energético.`,
+  );
+};
+
+const ensureNullableBooleanField = (record: Record<string, unknown>, key: keyof EnergyBalance): boolean | null => {
+  const value = record[key as string];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  throw new Error(
+    `[EnergyBalanceAPI] Campo "${String(key)}" ausente ou inválido na resposta do balanço energético.`,
+  );
+};
+
+const assertEnergyBalancePayload = (payload: unknown): EnergyBalance => {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('[EnergyBalanceAPI] Resposta inválida ao carregar balanço energético.');
+  }
+
+  const record = payload as Record<string, unknown>;
+
+  const missingKeys = expectedEnergyBalanceKeys.filter(
+    key => !Object.prototype.hasOwnProperty.call(record, key),
+  );
+
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `[EnergyBalanceAPI] Resposta do balanço energético não contém os campos esperados: ${missingKeys.join(', ')}`,
+    );
+  }
+
+  return {
+    id: ensureStringField(record, 'id'),
+    clientName: ensureStringField(record, 'clientName'),
+    price: ensureNullableNumberField(record, 'price'),
+    referenceBase: ensureStringField(record, 'referenceBase'),
+    supplier: ensureNullableStringField(record, 'supplier'),
+    meter: ensureNullableStringField(record, 'meter'),
+    consumptionKwh: ensureStringField(record, 'consumptionKwh'),
+    proinfaContribution: ensureStringField(record, 'proinfaContribution'),
+    contract: ensureNullableStringField(record, 'contract'),
+    minDemand: ensureNullableNumberField(record, 'minDemand'),
+    maxDemand: ensureNullableNumberField(record, 'maxDemand'),
+    cpCode: ensureNullableStringField(record, 'cpCode'),
+    createdAt: ensureStringField(record, 'createdAt'),
+    updatedAt: ensureStringField(record, 'updatedAt'),
+    clientId: ensureStringField(record, 'clientId'),
+    contractId: ensureNullableStringField(record, 'contractId'),
+    contactActive: ensureNullableBooleanField(record, 'contactActive'),
+  };
+};
+
+const resolveApiBaseUrl = (): string => {
+  const raw = import.meta.env?.VITE_API_BASE_URL;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed) {
+      return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+    }
+  }
+  return '';
+};
+
+const buildEnergyBalanceUrl = (base: string, path: string): string => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!base) {
+    return normalizedPath;
+  }
+  return `${base}${normalizedPath}`;
+};
+
+export type GetEnergyBalanceByIdOptions = {
+  signal?: AbortSignal;
+};
+
+export async function getById(
+  id: string,
+  options: GetEnergyBalanceByIdOptions = {},
+): Promise<EnergyBalance> {
+  if (!id) {
+    throw new Error('ID do balanço energético é obrigatório.');
+  }
+
+  const baseUrl = resolveApiBaseUrl();
+  const path = `${ENERGY_BALANCE_ENDPOINT}/${encodeURIComponent(id)}`;
+  const url = buildEnergyBalanceUrl(baseUrl, path);
+
+  console.info('[EnergyBalanceAPI] baseURL resolvido:', baseUrl || '(same-origin)');
+  console.info('[EnergyBalanceAPI] GET', url);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      credentials: 'include',
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+    console.error('[EnergyBalanceAPI] Falha ao acessar endpoint de balanço energético', error);
+    throw new Error('Falha ao acessar o balanço energético solicitado.');
+  }
+
+  console.info('[EnergyBalanceAPI] status da resposta:', response.status);
+
+  let payload: unknown = null;
+  const text = await response.text();
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (error) {
+      console.error('[EnergyBalanceAPI] Resposta JSON inválida recebida', error);
+      throw new Error('Resposta inválida da API de balanço energético.');
+    }
+  }
+
+  console.info('[EnergyBalanceAPI] exemplo de payload recebido:', payload);
+
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === 'object' && 'message' in (payload as Record<string, unknown>)
+        ? String((payload as Record<string, unknown>).message)
+        : `Falha ao carregar balanço energético ${id}: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return assertEnergyBalancePayload(payload);
+}
 
 // Normalized Energy Balance Row for internal use
 export type EnergyBalanceRow = {
@@ -104,18 +299,18 @@ export function normalizeEnergyBalanceData(apiData: EnergyBalanceApiResponse): E
   
   return {
     id: apiData.id,
-    meter: apiData.meter,
+    meter: apiData.meter ?? 'Não informado',
     client_id: apiData.clientId,
-    contract_id: apiData.contractId || undefined,
+    contract_id: apiData.contractId ?? undefined,
     reference_base: referenceBase,
     consumption_kwh: consumptionKwh,
-    price: apiData.price || 0,
-    billable: apiData.billable || undefined,
+    price: apiData.price ?? 0,
+    billable: apiData.billable ?? undefined,
     proinfa_contribution: proinfaContribution,
-    min_demand: apiData.minDemand || undefined,
-    max_demand: apiData.maxDemand || undefined,
-    adjusted: apiData.adjusted || false,
-    contact_active: apiData.contactActive || false,
+    min_demand: apiData.minDemand ?? undefined,
+    max_demand: apiData.maxDemand ?? undefined,
+    adjusted: apiData.adjusted ?? false,
+    contact_active: apiData.contactActive ?? false,
     created_at: apiData.createdAt,
     updated_at: apiData.updatedAt,
   };
@@ -157,6 +352,11 @@ export const EnergyBalanceAPI = {
       pageSize,
     };
   },
+
+  getById: async (
+    id: string,
+    options: GetEnergyBalanceByIdOptions = {},
+  ): Promise<EnergyBalance> => getById(id, options),
 
   // Get energy balance for a specific contract
   getByContract: async (contractId: string, query: Omit<EnergyBalanceQuery, 'contract_id'> = {}): Promise<PagedEnergyBalance> => {
