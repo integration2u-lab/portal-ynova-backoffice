@@ -94,6 +94,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   for (const base of API_BASE_CANDIDATES) {
     const url = joinUrl(base, path);
     const headers = new Headers(init.headers);
+    // Ensure ngrok warning header is sent for energy-balance endpoints
+    try {
+      if (typeof path === 'string' && path.includes('/energy-balance')) {
+        headers.set('ngrok-skip-browser-warning', 'true');
+      }
+    } catch (e) {
+      // ignore header setting errors
+    }
     const sameOrigin = isSameOriginUrl(url);
 
     let response: Response;
@@ -183,6 +191,7 @@ export async function getById(id: string, signal?: AbortSignal): Promise<any> {
     throw new Error('ID do balanço energético é obrigatório');
   }
   const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  console.log('getBalanceDetails payload', payload);
   return toObject(payload) ?? { id: String(id) };
 }
 
@@ -190,6 +199,7 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
   if (!id) return [];
   try {
     const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}/events`, { method: 'GET', signal });
+    console.log('getEvents payload', payload);
     return toArray(payload);
   } catch (error) {
     if (error instanceof HttpError && (error.status === 404 || error.status === 405)) {

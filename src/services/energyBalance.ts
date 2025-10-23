@@ -140,7 +140,7 @@ export const EnergyBalanceAPI = {
     const endpoint = `/energy-balance${queryString ? `?${queryString}` : ''}`;
     
     // The API returns an array directly, not a paged response
-    const apiData = await apiFetch<EnergyBalanceApiResponse[]>(endpoint, { method: 'GET' });
+  const apiData = await apiFetch<EnergyBalanceApiResponse[]>(endpoint, { method: 'GET', headers: { 'ngrok-skip-browser-warning': 'true' } });
     
     // Normalize the data
     const normalizedItems = apiData.map(normalizeEnergyBalanceData);
@@ -204,6 +204,7 @@ export const EnergyBalanceAPI = {
   create: async (data: Omit<EnergyBalanceRow, 'id' | 'created_at' | 'updated_at'>): Promise<EnergyBalanceRow> => {
     const apiData = await apiFetch<EnergyBalanceApiResponse>('/energy-balance', {
       method: 'POST',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify(data),
     });
     return normalizeEnergyBalanceData(apiData);
@@ -213,6 +214,7 @@ export const EnergyBalanceAPI = {
   update: async (id: string, data: Partial<EnergyBalanceRow>): Promise<EnergyBalanceRow> => {
     const apiData = await apiFetch<EnergyBalanceApiResponse>(`/energy-balance/${id}`, {
       method: 'PUT',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify(data),
     });
     return normalizeEnergyBalanceData(apiData);
@@ -222,6 +224,7 @@ export const EnergyBalanceAPI = {
   delete: async (id: string): Promise<void> => {
     return apiFetch<void>(`/energy-balance/${id}`, {
       method: 'DELETE',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
     });
   },
 
@@ -231,6 +234,7 @@ export const EnergyBalanceAPI = {
   ): Promise<EnergyBalanceGenerationResponse> => {
     return apiFetch<EnergyBalanceGenerationResponse>('/energy-balance/generate', {
       method: 'POST',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify(payload),
     });
   },
