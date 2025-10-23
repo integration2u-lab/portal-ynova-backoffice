@@ -55,7 +55,7 @@ const unregisterMockServiceWorker = async (): Promise<void> => {
 
 export const worker = setupWorker(...handlers);
 
-async function unregisterMockServiceWorker() {
+async function clearMockServiceWorkers() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return;
   }
@@ -85,5 +85,5 @@ export async function stopWorker() {
   } catch (error) {
     console.warn('[msw] Falha ao parar worker de mock', error);
   }
-  await unregisterMockServiceWorker();
+  await clearMockServiceWorkers();
 }
