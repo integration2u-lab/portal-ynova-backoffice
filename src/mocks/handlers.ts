@@ -291,6 +291,61 @@ export const handlers = [
     });
   }),
 
+  http.get('*/energy-balance/:id', ({ params }) => {
+    if (shouldBypassMocking()) {
+      return passthrough();
+    }
+
+    const id = typeof params.id === 'string' ? params.id : '224';
+
+    return HttpResponse.json({
+      id,
+      clientName: 'THOR GRANITOS E MARMORES',
+      price: 312.5,
+      referenceBase: '2025-07-01T00:00:00.000Z',
+      supplier: 'Ynova Energia',
+      meter: 'CENSSQENTR101 (L)',
+      consumptionKwh: '338929.71',
+      proinfaContribution: '15000.42',
+      contract: 'Contrato Demonstrativo',
+      minDemand: 300,
+      maxDemand: 420,
+      cpCode: 'CP-9988',
+      createdAt: '2025-07-01T00:00:00.000Z',
+      updatedAt: '2025-10-23T00:01:46.559Z',
+      clientId: '2311c10a-3c76-4fe9-ad59-28a0b26b26xx',
+      contractId: '9f2c3da9-1d2e-4f56-9f90-12abc34def56',
+      contactActive: true,
+      billable: 105915.53,
+      adjusted: false,
+    });
+  }),
+
+  http.get('*/energy-balance/:id/events', ({ params }) => {
+    if (shouldBypassMocking()) {
+      return passthrough();
+    }
+
+    const id = typeof params.id === 'string' ? params.id : '224';
+
+    return HttpResponse.json([
+      {
+        id: `${id}-evt-1`,
+        title: 'Arquivo importado',
+        description: 'Planilha CSV enviada para processamento.',
+        user: 'MSW Bot',
+        createdAt: '2025-10-20T12:03:00.000Z',
+      },
+      {
+        id: `${id}-evt-2`,
+        title: 'Balanço consolidado',
+        description: 'Dados do balanço calculados com sucesso.',
+        user: 'MSW Bot',
+        createdAt: '2025-10-21T09:15:00.000Z',
+      },
+    ]);
+  }),
+
   // Dashboard overview agregada por mês
   http.get('/api/dashboard/overview', ({ request }) => {
     const url = new URL(request.url);

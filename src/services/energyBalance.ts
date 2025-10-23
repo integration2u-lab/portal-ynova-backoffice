@@ -258,7 +258,7 @@ export function normalizeEnergyBalanceData(apiData: EnergyBalanceApiResponse): E
     id: apiData.id,
     meter: apiData.meter ?? '',
     client_id: apiData.clientId,
-    contract_id: apiData.contractId || undefined,
+    contract_id: apiData.contractId ?? undefined,
     reference_base: referenceBase,
     consumption_kwh: consumptionKwh,
     price: apiData.price ?? 0,
