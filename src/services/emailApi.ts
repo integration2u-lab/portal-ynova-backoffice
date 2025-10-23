@@ -1,0 +1,65 @@
+import { EnergyBalanceHttpError, energyBalanceRequest, getList } from './energyBalanceApi';
+
+const EMAIL_ENDPOINT_CANDIDATES = [
+  '/email',
+  '/emails',
+  '/energy-balance/email',
+  '/energy-balance/emails',
+];
+
+const toArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const directCandidates = ['data', 'items', 'result', 'rows', 'list'];
+    for (const key of directCandidates) {
+      const value = record[key];
+      if (Array.isArray(value)) return value;
+      if (value && typeof value === 'object') {
+        const nested = (value as Record<string, unknown>).items;
+        if (Array.isArray(nested)) return nested;
+      }
+    }
+  }
+  return [];
+};
+
+export async function getEmailRows(signal?: AbortSignal): Promise<unknown[]> {
+  let lastError: unknown = null;
+
+  for (const path of EMAIL_ENDPOINT_CANDIDATES) {
+    try {
+      const payload = await energyBalanceRequest(path, { method: 'GET', signal });
+      const array = toArray(payload);
+      if (array.length > 0) {
+        return array;
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      if (
+        error instanceof EnergyBalanceHttpError &&
+        (error.status === 404 || error.status === 405)
+      ) {
+        lastError = error;
+        continue;
+      }
+      lastError = error;
+      break;
+    }
+  }
+
+  try {
+    const fallback = await getList(signal);
+    return Array.isArray(fallback) ? fallback : [];
+  } catch (fallbackError) {
+    if (fallbackError instanceof Error && fallbackError.name === 'AbortError') {
+      throw fallbackError;
+    }
+    if (lastError instanceof Error) {
+      throw lastError;
+    }
+    throw fallbackError;
+  }
+}
