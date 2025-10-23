@@ -1,6 +1,9 @@
-﻿// Optional explicit start wrapper (used if imported elsewhere)
-import { worker } from './browser';
+import { startWorker, stopWorker } from './browser'
 
 export async function startMsw() {
-  await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } });
+  await startWorker()
+}
+
+export async function stopMsw() {
+  await stopWorker()
 }
