@@ -55,28 +55,35 @@ const unregisterMockServiceWorker = async (): Promise<void> => {
 
 export const worker = setupWorker(...handlers);
 
-export const ensureMockServiceWorker = async (forceEnable?: boolean): Promise<boolean> => {
-  const shouldEnable = typeof forceEnable === 'boolean' ? forceEnable : shouldEnableMocking();
-
-  if (!shouldEnable) {
-    setGlobalMswFlag(false);
-    await worker.stop();
-    await unregisterMockServiceWorker();
-    return false;
+async function unregisterMockServiceWorker() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
   }
 
-  setGlobalMswFlag(true);
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(
+      registrations
+        .filter((registration) => registration.active?.scriptURL.includes('mockServiceWorker.js'))
+        .map((registration) => registration.unregister()),
+    );
+  } catch (error) {
+    console.warn('[msw] Falha ao remover service worker de mock', error);
+  }
+}
+
+export async function startWorker() {
   await worker.start({
-    onUnhandledRequest: 'bypass',
     serviceWorker: { url: '/mockServiceWorker.js' },
+    onUnhandledRequest: 'bypass',
   });
-  return true;
-};
+}
 
-export const stopMockServiceWorker = async (): Promise<void> => {
-  setGlobalMswFlag(false);
-  await worker.stop();
+export async function stopWorker() {
+  try {
+    worker.stop();
+  } catch (error) {
+    console.warn('[msw] Falha ao parar worker de mock', error);
+  }
   await unregisterMockServiceWorker();
-};
-
-export const mswShouldEnable = shouldEnableMocking;
+}
