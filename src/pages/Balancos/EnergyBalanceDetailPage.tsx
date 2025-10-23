@@ -379,6 +379,15 @@ export default function EnergyBalanceDetailPage() {
         </div>
       </header>
 
+      <section className="grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-3">
+        {metadataItems.map(item => (
+          <div key={item.label}>
+            <div className="text-xs font-bold uppercase tracking-wide text-gray-500">{item.label}</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{item.value}</div>
+          </div>
+        ))}
+      </section>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
           <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Consumo total (MWh)</div>
