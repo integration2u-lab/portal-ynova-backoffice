@@ -1,10 +1,17 @@
 import { createServer } from 'http';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 const allowedOriginPatterns = [/^https?:\/\/localhost:\d+$/, /\.ynovamarketplace\.com$/];
+
+const N8N_WEBHOOK_URL =
+  process.env.N8N_BALANCO_WEBHOOK ||
+  process.env.VITE_N8N_BALANCO_WEBHOOK ||
+  process.env.N8N_WEBHOOK_URL ||
+  '';
+const N8N_SHARED_SECRET = process.env.N8N_SHARED_SECRET || process.env.VITE_N8N_SHARED_SECRET || '';
 
 const contracts = [
   {
@@ -82,6 +89,10 @@ function sendJson(res, statusCode, payload, origin) {
   res.end(body);
 }
 
+function isValidMonth(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}$/.test(value);
+}
+
 const requiredFields = [
   'contract_code',
   'client_name',
@@ -137,6 +148,103 @@ const server = createServer(async (req, res) => {
       sendJson(res, 201, contract, origin);
     } catch (error) {
       sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid request' }, origin);
+    }
+    return;
+  }
+
+  if (url.pathname === '/energy-balance/generate' && req.method === 'POST') {
+    if (!N8N_WEBHOOK_URL) {
+      sendJson(res, 500, { error: 'N8N webhook URL is not configured' }, origin);
+      return;
+    }
+
+    let payload;
+    try {
+      payload = await parseBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid JSON body' }, origin);
+      return;
+    }
+
+    const { startMonth, endMonth, contract, file, triggerSource, requestedAt } = payload ?? {};
+
+    if (!isValidMonth(startMonth) || !isValidMonth(endMonth)) {
+      sendJson(res, 400, { error: 'startMonth and endMonth must follow the YYYY-MM format' }, origin);
+      return;
+    }
+
+    if (startMonth > endMonth) {
+      sendJson(res, 400, { error: 'startMonth must be earlier than or equal to endMonth' }, origin);
+      return;
+    }
+
+    if (!contract || typeof contract !== 'object') {
+      sendJson(res, 400, { error: 'Contract metadata is required' }, origin);
+      return;
+    }
+
+    if (!file || typeof file !== 'object' || !file.name || !file.data) {
+      sendJson(res, 400, { error: 'CSV file payload is required' }, origin);
+      return;
+    }
+
+    const n8nPayload = {
+      contract,
+      period: {
+        startMonth,
+        endMonth,
+      },
+      file,
+      triggerSource: triggerSource || 'portal-backoffice',
+      requestedAt: requestedAt || new Date().toISOString(),
+    };
+
+    const body = JSON.stringify(n8nPayload);
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (N8N_SHARED_SECRET) {
+      const signature = createHmac('sha256', N8N_SHARED_SECRET).update(body).digest('hex');
+      headers['X-Signature'] = `sha256=${signature}`;
+    }
+
+    try {
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers,
+        body,
+      });
+
+      const text = await response.text();
+      let responseData;
+      try {
+        responseData = text ? JSON.parse(text) : undefined;
+      } catch (error) {
+        responseData = text;
+      }
+
+      if (!response.ok) {
+        const message =
+          (responseData && typeof responseData === 'object' && responseData.error) ||
+          (typeof responseData === 'string' ? responseData : 'Failed to trigger energy balance workflow');
+        sendJson(res, response.status >= 400 ? response.status : 502, { error: message }, origin);
+        return;
+      }
+
+      sendJson(
+        res,
+        200,
+        {
+          status: (responseData && responseData.status) || 'queued',
+          message: responseData && responseData.message ? responseData.message : 'Energy balance generation triggered successfully',
+          data: responseData?.data ?? responseData,
+        },
+        origin,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error while calling n8n webhook';
+      sendJson(res, 502, { error: message }, origin);
     }
     return;
   }
