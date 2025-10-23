@@ -65,6 +65,40 @@ function gerarSerie24Meses(seedStr: string, base: number, amplitude: number) {
 }
 
 export const handlers = [
+  http.get('/api/contracts', () => {
+    const contracts = allContratos.map((contrato) => ({
+      id: contrato.id,
+      contract_code: contrato.numero,
+      client_name: contrato.cliente,
+      cnpj: contrato.cnpj ?? '',
+      segment: contrato.segmento ?? 'Indefinido',
+      contact_responsible: contrato.contato ?? '',
+      contracted_volume_mwh: contrato.volume_contratado_mwh,
+      status: contrato.status === 'ATIVO' ? 'Ativo' : 'Inativo',
+      energy_source: contrato.fonte,
+      contracted_modality: 'Livre',
+      start_date: `${contrato.ciclo_faturamento}-01T00:00:00.000Z`,
+      end_date: `${contrato.ciclo_faturamento}-28T00:00:00.000Z`,
+      billing_cycle: contrato.ciclo_faturamento,
+      upper_limit_percent: contrato.flexibilidade_pct ?? null,
+      lower_limit_percent: contrato.flexibilidade_pct ? -contrato.flexibilidade_pct : null,
+      flexibility_percent: contrato.flexibilidade_pct ?? null,
+      average_price_mwh: contrato.preco_r_mwh,
+      supplier: null,
+      proinfa_contribution: null,
+      spot_price_ref_mwh: null,
+      compliance_consumption: 'Em análise',
+      compliance_nf: 'Em análise',
+      compliance_invoice: 'Em análise',
+      compliance_charges: 'Em análise',
+      compliance_overall: 'Em análise',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      groupName: 'default',
+    }));
+
+    return HttpResponse.json({ contracts });
+  }),
   // Listagem de contratos com paginação
   http.get('/api/contratos', ({ request }) => {
     const url = new URL(request.url);

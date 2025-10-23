@@ -21,6 +21,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
+  headers.set("ngrok-skip-browser-warning", 'true');
   const csrf = getCsrfToken();
   if (csrf) headers.set('X-CSRF-Token', csrf);
 

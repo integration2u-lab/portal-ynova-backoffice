@@ -42,7 +42,7 @@ export type AnaliseArea = {
   }>;
 };
 
-export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise';
+export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise' | 'Vencida';
 
 export type ContractInvoice = {
   id: string;
@@ -60,7 +60,7 @@ export type ContractMock = {
   cnpj: string;
   segmento: string;
   contato: string;
-  status: 'Ativo' | 'Inativo';
+  status: 'Ativo' | 'Inativo' | 'Em análise';
   fonte: 'Convencional' | 'Incentivada';
   modalidade: string;
   inicioVigencia: string;
