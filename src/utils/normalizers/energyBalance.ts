@@ -156,6 +156,17 @@ const normalizeCurrencyAllowZero = (value: unknown): string => {
   }
 };
 
+const normalizeNumber = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return 'Não informado';
+  try {
+    return numeric.toFixed(2);
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar número', error);
+    return numeric.toFixed(2);
+  }
+};
+
 const normalizeBoolean = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   if (typeof value === 'string') {
@@ -418,7 +429,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
 
   const consumoTotalMWh = consumptionMwh !== null ? normalizeMwh(consumptionMwh) : '-';
   const custoTotalBRL = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
-  const proinfaTotal = proinfaContribution !== null ? normalizeCurrencyAllowZero(proinfaContribution) : 'Não informado';
+  const proinfaTotal = proinfaContribution !== null ? normalizeNumber(proinfaContribution) : 'Não informado';
   
   // Calculate potential savings (simplified calculation)
   const currentCost = billable || (price && consumptionMwh ? price * consumptionMwh : 0);
@@ -439,7 +450,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const consumoMWh = normalizeMwh(consumptionMwh);
   const precoReaisPorMWh = price !== null ? normalizeCurrencyAllowZero(price) : 'Não informado';
   const custoMes = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
-  const proinfa = proinfaContribution !== null ? normalizeCurrencyAllowZero(proinfaContribution) : 'Não informado';
+  const proinfa = proinfaContribution !== null ? normalizeNumber(proinfaContribution) : 'Não informado';
 
   const minDemand = toNumber(getSafe(record, 'minDemand', 'min_demand', 'min'));
   const maxDemand = toNumber(getSafe(record, 'maxDemand', 'max_demand', 'max'));
@@ -510,6 +521,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
       economiaPotencialBRL,
     },
     months,
+    cliente: razao,
   };
 }
 
@@ -620,7 +632,7 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
     'Não informado',
   );
 
-  const proinfa = normalizeCurrencyAllowZero(
+  const proinfa = normalizeNumber(
     getSafe(record, 'proinfa', 'proinfa_total', 'encargoProinfa', 'encargo_proinfa'),
   );
 

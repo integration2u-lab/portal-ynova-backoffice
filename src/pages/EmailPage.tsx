@@ -1,7 +1,7 @@
 import React from 'react';
-import { Check, Loader2, Search, X } from 'lucide-react';
+import { Check, Loader2, RefreshCw, Search, X, Calendar, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { getEmailRows } from '../services/emailApi';
+import { getEmailRows, updateEmailRow } from '../services/emailApi';
 import { normalizeEmailRow } from '../utils/normalizers/energyBalance';
 import type { EmailRow } from '../types/email';
 
@@ -35,6 +35,60 @@ const columns: Array<{ key: keyof EmailRow; label: string; inputType?: string; m
 const removeDiacritics = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+const formatDate = (dateStr: string): string => {
+  if (!dateStr || dateStr === 'Não informado') return 'Não informado';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateStr;
+  }
+};
+
+const groupEmailsByMonth = (emails: EmailRow[]) => {
+  const groups: Record<string, EmailRow[]> = {};
+  
+  emails.forEach((email) => {
+    // Extrair mês e ano da data de vencimento do boleto
+    const dateStr = email.dataVencimentoBoleto;
+    let monthKey = 'Sem data';
+    
+    if (dateStr && dateStr !== 'Não informado') {
+      try {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          const monthYear = date.toLocaleDateString('pt-BR', { 
+            month: 'long', 
+            year: 'numeric' 
+          });
+          monthKey = monthYear.charAt(0).toUpperCase() + monthYear.slice(1);
+        }
+      } catch (error) {
+        console.warn('[EmailPage] Erro ao processar data:', dateStr, error);
+      }
+    }
+    
+    if (!groups[monthKey]) {
+      groups[monthKey] = [];
+    }
+    groups[monthKey].push(email);
+  });
+  
+  // Ordenar os grupos por data (mais recente primeiro)
+  const sortedGroups = Object.entries(groups).sort(([a], [b]) => {
+    if (a === 'Sem data') return 1;
+    if (b === 'Sem data') return -1;
+    return b.localeCompare(a, 'pt-BR');
+  });
+  
+  return sortedGroups;
+};
+
 export default function EmailPage() {
   const [rows, setRows] = React.useState<EmailRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -49,6 +103,8 @@ export default function EmailPage() {
 
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [draftRows, setDraftRows] = React.useState<Record<string, EmailRow>>({});
+  const [updatingIds, setUpdatingIds] = React.useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = React.useState<string>('');
 
   const fetchEmails = React.useCallback(async () => {
     controllerRef.current?.abort();
@@ -78,6 +134,9 @@ export default function EmailPage() {
 
       setRows(normalized);
       setDraftRows({});
+      if (rows.length > 0) {
+        toast.success('Dados atualizados com sucesso!');
+      }
     } catch (fetchError) {
       if (controller.signal.aborted) {
         return;
@@ -154,21 +213,56 @@ export default function EmailPage() {
   }, []);
 
   const handleConfirmEdit = React.useCallback(
-    (rowId: string) => {
-      setRows((prev) => {
-        const draft = draftRows[rowId];
-        if (!draft) {
-          return prev;
+    async (rowId: string) => {
+      const draft = draftRows[rowId];
+      if (!draft) {
+        return;
+      }
+
+      setUpdatingIds((prev) => new Set(prev).add(rowId));
+
+      try {
+        // Prepare the data for API update (exclude id from the payload)
+        const { id, ...updateData } = draft;
+        await updateEmailRow(rowId, updateData);
+
+        // Update local state only after successful API call
+        setRows((prev) => {
+          return prev.map((item) => (item.id === rowId ? { ...item, ...draft } : item));
+        });
+        
+        setDraftRows((prev) => {
+          const next = { ...prev };
+          delete next[rowId];
+          return next;
+        });
+        
+        setEditingId((current) => (current === rowId ? null : current));
+        toast.success('Email atualizado com sucesso!');
+      } catch (error) {
+        console.error('[EmailPage] Erro ao atualizar email:', error);
+        let message = 'Erro ao atualizar email';
+        
+        if (error instanceof Error) {
+          if (error.message.includes('fetch')) {
+            message = 'Erro de conexão. Verifique sua internet e tente novamente.';
+          } else if (error.message.includes('404')) {
+            message = 'Registro não encontrado no servidor.';
+          } else if (error.message.includes('500')) {
+            message = 'Erro interno do servidor. Tente novamente mais tarde.';
+          } else {
+            message = error.message;
+          }
         }
-        return prev.map((item) => (item.id === rowId ? { ...item, ...draft } : item));
-      });
-      setDraftRows((prev) => {
-        const next = { ...prev };
-        delete next[rowId];
-        return next;
-      });
-      setEditingId((current) => (current === rowId ? null : current));
-      toast.success('Balanço alterado com sucesso!');
+        
+        toast.error(`Falha ao atualizar: ${message}`);
+      } finally {
+        setUpdatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
+      }
     },
     [draftRows],
   );
@@ -198,6 +292,17 @@ export default function EmailPage() {
       );
     });
   }, [rows, normalizedQueryText, numericQuery]);
+
+  const groupedEmails = React.useMemo(() => {
+    return groupEmailsByMonth(filteredRows);
+  }, [filteredRows]);
+
+  // Definir a primeira aba como ativa quando os dados carregarem
+  React.useEffect(() => {
+    if (groupedEmails.length > 0 && !activeTab) {
+      setActiveTab(groupedEmails[0][0]);
+    }
+  }, [groupedEmails, activeTab]);
 
   const showLoadingState = loading && rows.length === 0;
   const hasRows = filteredRows.length > 0;
@@ -248,11 +353,23 @@ export default function EmailPage() {
                 </div>
               </div>
             </div>
-            {isRefreshing && (
-              <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">
-                Atualizando...
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={fetchEmails}
+                disabled={isRefreshing}
+                className="inline-flex items-center gap-2 rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                aria-label="Atualizar dados"
+              >
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+              </button>
+              {isRefreshing && (
+                <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">
+                  Atualizando...
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -278,74 +395,130 @@ export default function EmailPage() {
       )}
 
       {hasRows && (
-        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <table className="min-w-[1200px] w-full table-auto text-left text-xs sm:text-sm">
-            <thead className="bg-yn-orange text-white">
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-widest sm:text-xs ${column.minWidth ?? ''}`}
-                  >
-                    {column.label}
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-widest sm:text-xs">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredRows.map((row) => {
-                const isEditing = editingId === row.id;
-                const draft = draftRows[row.id];
-                return (
-                  <tr key={row.id} className="odd:bg-white even:bg-gray-50 hover:bg-yn-orange/10">
-                    {columns.map((column) => {
-                      const value = isEditing ? draft?.[column.key] ?? row[column.key] : row[column.key];
-                      return (
-                        <td key={column.key} className={`px-4 py-3 align-top font-semibold text-gray-700 ${column.minWidth ?? ''}`}>
-                          {isEditing ? (
-                            <input
-                              type={column.inputType ?? 'text'}
-                              value={value}
-                              onChange={(event) => handleDraftChange(row.id, column.key, event.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30 sm:text-sm"
-                              aria-label={`Editar ${column.label} do registro ${row.id}`}
-                            />
-                          ) : (
-                            <span className="block text-xs font-semibold text-gray-700 sm:text-sm">{row[column.key]}</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className="px-4 py-3 text-center">
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleConfirmEdit(row.id)}
-                          disabled={!isEditing}
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white transition hover:brightness-110 ${
-                            isEditing ? '' : 'cursor-not-allowed opacity-60'
-                          }`}
-                          aria-label="Confirmar alterações"
-                        >
-                          <Check size={18} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => (isEditing ? handleCancelEdit(row.id) : handleStartEdit(row))}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-white transition hover:brightness-110"
-                          aria-label={isEditing ? 'Cancelar edição' : 'Editar registro'}
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {/* Abas dos meses */}
+          <div className="flex flex-wrap gap-2 border-b border-gray-200">
+            {groupedEmails.map(([monthName, monthEmails]) => (
+              <button
+                key={monthName}
+                onClick={() => setActiveTab(monthName)}
+                className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition ${
+                  activeTab === monthName
+                    ? 'bg-yn-orange text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Calendar className="h-4 w-4" />
+                <span>{monthName}</span>
+                <span className={`rounded-full px-2 py-1 text-xs ${
+                  activeTab === monthName
+                    ? 'bg-white/20 text-white'
+                    : 'bg-yn-orange text-white'
+                }`}>
+                  {monthEmails.length}
+                </span>
+                {activeTab === monthName && <ChevronRight className="h-4 w-4" />}
+              </button>
+            ))}
+          </div>
+
+          {/* Conteúdo da aba ativa */}
+          {groupedEmails.map(([monthName, monthEmails]) => {
+            if (activeTab !== monthName) return null;
+            
+            return (
+              <div key={monthName} className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+                {/* Cabeçalho do mês ativo */}
+                <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+                  <Calendar className="h-5 w-5 text-yn-orange" />
+                  <h3 className="text-lg font-bold text-gray-900">{monthName}</h3>
+                  <span className="rounded-full bg-yn-orange px-3 py-1 text-xs font-bold text-white">
+                    {monthEmails.length} {monthEmails.length === 1 ? 'email' : 'emails'}
+                  </span>
+                </div>
+                
+                {/* Tabela de emails do mês */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-[1200px] w-full table-auto text-left text-xs sm:text-sm">
+                    <thead className="bg-yn-orange text-white">
+                      <tr>
+                        {columns.map((column) => (
+                          <th
+                            key={column.key}
+                            scope="col"
+                            className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-widest sm:text-xs ${column.minWidth ?? ''}`}
+                          >
+                            {column.label}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-widest sm:text-xs">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {monthEmails.map((row) => {
+                        const isEditing = editingId === row.id;
+                        const draft = draftRows[row.id];
+                        const isUpdating = updatingIds.has(row.id);
+                        return (
+                          <tr key={row.id} className="odd:bg-white even:bg-gray-50 hover:bg-yn-orange/10">
+                            {columns.map((column) => {
+                              const value = isEditing ? draft?.[column.key] ?? row[column.key] : row[column.key];
+                              return (
+                                <td key={column.key} className={`px-4 py-3 align-top font-semibold text-gray-700 ${column.minWidth ?? ''}`}>
+                                  {isEditing ? (
+                                    <input
+                                      type={column.inputType ?? 'text'}
+                                      value={value}
+                                      onChange={(event) => handleDraftChange(row.id, column.key, event.target.value)}
+                                      className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30 sm:text-sm"
+                                      aria-label={`Editar ${column.label} do registro ${row.id}`}
+                                    />
+                                  ) : (
+                                    <span className="block text-xs font-semibold text-gray-700 sm:text-sm">
+                                      {column.key === 'dataVencimentoBoleto' || column.key === 'disparo' 
+                                        ? formatDate(row[column.key]) 
+                                        : row[column.key]
+                                      }
+                                    </span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className="px-4 py-3 text-center">
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmEdit(row.id)}
+                                  disabled={!isEditing || isUpdating}
+                                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white transition hover:brightness-110 ${
+                                    isEditing && !isUpdating ? '' : 'cursor-not-allowed opacity-60'
+                                  }`}
+                                  aria-label="Confirmar alterações"
+                                >
+                                  {isUpdating ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => (isEditing ? handleCancelEdit(row.id) : handleStartEdit(row))}
+                                  disabled={isUpdating}
+                                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-500 text-white transition hover:brightness-110 ${
+                                    isUpdating ? 'cursor-not-allowed opacity-60' : ''
+                                  }`}
+                                  aria-label={isEditing ? 'Cancelar edição' : 'Editar registro'}
+                                >
+                                  <X size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

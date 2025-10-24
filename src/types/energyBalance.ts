@@ -42,12 +42,25 @@ export interface EnergyBalanceDetailMonthRow {
   dataAtualizacao: string;
   contatoAtivo: string;
   actions?: string;
+  // Novos campos para compatibilidade com a tabela de emails
+  perdas3?: string;
+  requisito?: string;
+  net?: string;
+  medicao?: string;
+  minimo?: string;
+  maximo?: string;
+  faturar?: string;
+  email?: string;
+  envioOk?: string;
+  disparo?: string;
+  dataVencimentoBoleto?: string;
 }
 
 export interface EnergyBalanceDetail {
   header: EnergyBalanceDetailHeader;
   metrics: EnergyBalanceDetailMetrics;
   months: EnergyBalanceDetailMonthRow[];
+  cliente: string;
 }
 
 export interface EnergyBalanceEvent {

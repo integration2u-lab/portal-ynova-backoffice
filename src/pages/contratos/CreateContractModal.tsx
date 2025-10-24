@@ -23,7 +23,7 @@ const volumeUnitOptions = [
 type VolumeUnit = (typeof volumeUnitOptions)[number]['value'];
 
 type FormErrors = Partial<
-  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility', string>
+  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'email', string>
 >;
 
 type FormState = {
@@ -31,6 +31,7 @@ type FormState = {
   cnpj: string;
   segment: string;
   contact: string;
+  email: string; // Novo campo para emails múltiplos
   volume: string;
   volumeUnit: VolumeUnit;
   energySource: EnergySourceOption;
@@ -144,6 +145,7 @@ const buildInitialFormState = (): FormState => ({
   cnpj: '',
   segment: '',
   contact: '',
+  email: '', // Novo campo para emails múltiplos
   volume: '',
   volumeUnit: 'MWH',
   energySource: 'Incentivada 0%',
@@ -228,7 +230,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   const priceSummary = React.useMemo(() => summarizePricePeriods(formState.pricePeriods), [formState.pricePeriods]);
 
   const handleInputChange = (
-    field: keyof Pick<FormState, 'client' | 'segment' | 'contact' | 'volume' | 'modality' | 'supplier' | 'proinfa' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
+    field: keyof Pick<FormState, 'client' | 'segment' | 'contact' | 'email' | 'volume' | 'modality' | 'supplier' | 'proinfa' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const { value } = event.target;
@@ -668,7 +670,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Proinfa (R$/MWh)
+                  Proinfa (MWh)
                   <input
                     type="text"
                     inputMode="decimal"
@@ -680,29 +682,46 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Início da vigência
+                  Email
                   <input
-                    type="date"
-                    value={formState.startDate}
-                    onChange={handleInputChange('startDate')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.startDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
+                    type="email"
+                    value={formState.email}
+                    onChange={handleInputChange('email')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                    placeholder="email1@exemplo.com, email2@exemplo.com"
+                    multiple
                   />
-                  {errors.startDate && <span className="text-xs font-medium text-red-500">{errors.startDate}</span>}
+                  <span className="text-xs text-slate-500">Separe múltiplos emails com vírgula</span>
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Fim da vigência
-                  <input
-                    type="date"
-                    value={formState.endDate}
-                    onChange={handleInputChange('endDate')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.endDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                  />
-                  {errors.endDate && <span className="text-xs font-medium text-red-500">{errors.endDate}</span>}
+                  Ciclo de vigência
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={formState.startDate}
+                      onChange={handleInputChange('startDate')}
+                      className={`flex-1 rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                        errors.startDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                      }`}
+                      placeholder="Data início"
+                    />
+                    <span className="flex items-center text-slate-500">até</span>
+                    <input
+                      type="date"
+                      value={formState.endDate}
+                      onChange={handleInputChange('endDate')}
+                      className={`flex-1 rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                        errors.endDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                      }`}
+                      placeholder="Data fim"
+                    />
+                  </div>
+                  {(errors.startDate || errors.endDate) && (
+                    <span className="text-xs font-medium text-red-500">
+                      {errors.startDate || errors.endDate}
+                    </span>
+                  )}
                 </label>
 
                 {/* billing cycle removed from manual contract creation */}

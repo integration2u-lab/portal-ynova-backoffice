@@ -63,3 +63,48 @@ export async function getEmailRows(signal?: AbortSignal): Promise<unknown[]> {
     throw fallbackError;
   }
 }
+
+export async function updateEmailRow(id: string, data: Partial<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
+  const UPDATE_ENDPOINT_CANDIDATES = [
+    `/email/${id}`,
+    `/emails/${id}`,
+    `/energy-balance/email/${id}`,
+    `/energy-balance/emails/${id}`,
+    `/energy-balance/${id}`,
+  ];
+
+  let lastError: unknown = null;
+
+  for (const path of UPDATE_ENDPOINT_CANDIDATES) {
+    try {
+      const payload = await energyBalanceRequest(path, { 
+        method: 'PUT', 
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(data)
+      });
+      return payload;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      if (
+        error instanceof EnergyBalanceHttpError &&
+        (error.status === 404 || error.status === 405)
+      ) {
+        lastError = error;
+        continue;
+      }
+      lastError = error;
+      break;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error('Não foi possível atualizar o registro de email.');
+}

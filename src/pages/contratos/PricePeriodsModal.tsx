@@ -115,15 +115,21 @@ function normalizeDrafts(value: PricePeriods): PeriodDraft[] {
 
 const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onClose, onSave }) => {
   const [drafts, setDrafts] = React.useState<PeriodDraft[]>(() => normalizeDrafts(value));
+  const [isSaved, setIsSaved] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
       setDrafts(normalizeDrafts(value));
+      setIsSaved(false);
     }
   }, [open, value]);
 
   const isSaveDisabled = React.useMemo(
-    () => drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0),
+    () => {
+      const disabled = drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0);
+      console.log('isSaveDisabled:', disabled, { drafts });
+      return disabled;
+    },
     [drafts]
   );
 
@@ -236,21 +242,45 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   const handleSubmit = React.useCallback(
     (event: React.FormEvent) => {
       event.preventDefault();
-      const periods = drafts.map((draft) => {
-        const months = draft.months
-          .map((month) => ({ ym: month.ym, price: parseCurrencyInput(month.value) }))
-          .filter((month): month is { ym: string; price: number } => month.price !== null);
-        return {
-          id: draft.id,
-          start: draft.start,
-          end: draft.end,
-          defaultPrice: parseCurrencyInput(draft.defaultPrice) ?? undefined,
-          months,
-        };
-      });
-      onSave({ periods });
+      console.log('Iniciando salvamento...', { drafts });
+      
+      try {
+        const periods = drafts.map((draft) => {
+          const months = draft.months
+            .map((month) => ({ ym: month.ym, price: parseCurrencyInput(month.value) }))
+            .filter((month): month is { ym: string; price: number } => month.price !== null);
+          return {
+            id: draft.id,
+            start: draft.start,
+            end: draft.end,
+            defaultPrice: parseCurrencyInput(draft.defaultPrice) ?? undefined,
+            months,
+          };
+        });
+        
+        console.log('Períodos processados:', periods);
+        
+        // Calculate average price from the first period with data
+        const firstPeriodWithData = periods.find(period => period.months.length > 0);
+        const averagePrice = firstPeriodWithData?.months.length 
+          ? firstPeriodWithData.months.reduce((sum, month) => sum + month.price, 0) / firstPeriodWithData.months.length
+          : firstPeriodWithData?.defaultPrice || 0;
+        
+        console.log('Preço médio calculado:', averagePrice);
+        
+        onSave({ periods });
+        setIsSaved(true);
+        
+        // Auto-close after 2 seconds
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } catch (error) {
+        console.error('Erro ao salvar preços:', error);
+        alert('Erro ao salvar os preços. Verifique o console para mais detalhes.');
+      }
     },
-    [drafts, onSave]
+    [drafts, onSave, onClose]
   );
 
   if (!open) return null;
@@ -276,6 +306,15 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4">
+          {isSaved && (
+            <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                <span className="font-semibold">Preços salvos com sucesso!</span>
+              </div>
+              <p className="mt-1 text-xs">Os dados foram salvos e o preço médio foi calculado automaticamente.</p>
+            </div>
+          )}
           <div className="space-y-5">
             {drafts.map((draft, index) => {
               const months = monthsBetween(draft.start, draft.end);
@@ -434,10 +473,18 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
           </button>
           <button
             type="submit"
-            disabled={isSaveDisabled}
+            disabled={isSaveDisabled || isSaved}
+            onClick={(e) => {
+              console.log('Botão clicado', { isSaveDisabled, isSaved });
+              if (isSaveDisabled) {
+                e.preventDefault();
+                console.log('Botão desabilitado - não pode salvar');
+                return;
+              }
+            }}
             className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Salvar
+            {isSaved ? 'Salvo!' : 'Salvar'}
           </button>
         </div>
       </div>

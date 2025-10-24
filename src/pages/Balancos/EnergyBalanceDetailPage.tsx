@@ -16,6 +16,21 @@ const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   minute: '2-digit',
 });
 
+const formatDate = (dateStr: string): string => {
+  if (!dateStr || dateStr === 'Não informado') return 'Não informado';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateStr;
+  }
+};
+
 const parseEventDate = (value: unknown): string => {
   if (!value) return 'Data não informada';
   const text = String(value);
@@ -225,59 +240,65 @@ export default function EnergyBalanceDetailPage() {
           <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA total</div>
           <div className="mt-2 text-2xl font-bold text-gray-900">{detail.metrics.proinfaTotal}</div>
         </div>
-        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Economia potencial (R$)</div>
-          <div className="mt-2 text-2xl font-bold text-gray-900">{detail.metrics.economiaPotencialBRL}</div>
-        </div>
       </div>
 
       <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-auto">
-          <table className="min-w-[1400px] w-full table-auto text-sm">
-            <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
+          <table className="min-w-[2000px] w-full table-auto text-xs">
+            <thead className="bg-yn-orange text-white text-xs font-bold uppercase tracking-wide">
               <tr>
-                <th className="px-4 py-3 text-left">Mês</th>
-                <th className="px-4 py-3 text-left">Medidor</th>
-                <th className="px-4 py-3 text-left">Consumo (MWh)</th>
-                <th className="px-4 py-3 text-left">Preço (R$/MWh)</th>
-                <th className="px-4 py-3 text-left">Custo do mês</th>
-                <th className="px-4 py-3 text-left">Proinfa</th>
-                <th className="px-4 py-3 text-left">Faixa contratual</th>
-                <th className="px-4 py-3 text-left">Ajustado</th>
-                <th className="px-4 py-3 text-left">Fornecedor</th>
-                <th className="px-4 py-3 text-left">Contrato</th>
-                <th className="px-4 py-3 text-left">Código CP</th>
-                <th className="px-4 py-3 text-left">Data Criação</th>
-                <th className="px-4 py-3 text-left">Data Atualização</th>
-                <th className="px-4 py-3 text-left">Contato Ativo</th>
-                <th className="px-4 py-3 text-left">Ações</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Preço</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Data-base</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Reajustado</th>
+                <th className="px-2 py-3 text-left min-w-[120px]">Fornecedor</th>
+                <th className="px-2 py-3 text-left min-w-[120px]">Medidor</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Consumo</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Perdas (3%)</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Requisito</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">NET</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Medição</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Proinfa</th>
+                <th className="px-2 py-3 text-left min-w-[120px]">Contrato</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Mínimo</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Máximo</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Faturar</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">CP</th>
+                <th className="px-2 py-3 text-left min-w-[150px]">Email</th>
+                <th className="px-2 py-3 text-left min-w-[100px]">Envio ok</th>
+                <th className="px-2 py-3 text-left min-w-[120px]">Disparo</th>
+                <th className="px-2 py-3 text-left min-w-[150px]">Data vencimento boleto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {detail.months.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
+                  <td colSpan={20} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
                     Nenhum dado mensal disponível para este balanço.
                   </td>
                 </tr>
               ) : (
                 detail.months.map((month) => (
                   <tr key={month.id} className="bg-white hover:bg-gray-50">
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.mes}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.medidor}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.consumoMWh}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.precoReaisPorMWh}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.custoMesBRL}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.proinfa}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.faixaContratual}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.ajustado}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.fornecedor}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.contrato}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.codigoCP}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.dataCriacao}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.dataAtualizacao}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.contatoAtivo}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{month.actions ?? '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.precoReaisPorMWh}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.mes}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.ajustado}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.fornecedor}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.medidor}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.consumoMWh}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.perdas3 || '3%'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.requisito || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.net || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.medicao || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.proinfa}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.contrato}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.minimo || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.maximo || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.faturar || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.codigoCP}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.email || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.envioOk || '-'}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{formatDate(month.disparo || '')}</td>
+                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{formatDate(month.dataVencimentoBoleto || '')}</td>
                   </tr>
                 ))
               )}
