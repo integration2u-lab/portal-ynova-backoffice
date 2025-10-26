@@ -8,7 +8,7 @@ import {
   type CreateContractPayload,
 } from '../../services/contracts';
 
-const DEFAULT_API_URL = 'https://6f1e05675bfb.ngrok-free.app/contracts';
+const DEFAULT_API_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000/';
 
 const runtimeEnv: Record<string, string | undefined> =
   ((typeof import.meta !== 'undefined'
@@ -494,7 +494,9 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { client_name?: unknown }).client_name ??
       'Cliente não informado';
     const rawSegmento =
-      (item as { segmento?: unknown }).segmento ?? (item as { segment?: unknown }).segment ?? 'Não informado';
+      (item as { segmento?: unknown }).segmento ?? 
+      (item as { segment?: unknown }).segment ?? 
+      'Não informado';
     const rawContato =
       (item as { contato?: unknown }).contato ??
       (item as { responsavel?: unknown }).responsavel ??
@@ -526,12 +528,22 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { contribuicaoProinfa?: unknown }).contribuicaoProinfa ??
         (item as { contribuicao_proinfa?: unknown }).contribuicao_proinfa
     );
-    const meter = normalizeString((item as { meter?: unknown }).meter ?? (item as { medidor?: unknown }).medidor);
+    const meter = normalizeString(
+      (item as { meter?: unknown }).meter ?? 
+      (item as { medidor?: unknown }).medidor ??
+      (item as { groupName?: unknown }).groupName
+    );
     const clientId = normalizeString(
       (item as { client_id?: unknown }).client_id ??
         (item as { clienteId?: unknown }).clienteId ??
         (item as { clientId?: unknown }).clientId
     );
+    
+    // Add status field mapping
+    const statusRaw = 
+      (item as { status?: unknown }).status ??
+      (item as { contract_status?: unknown }).contract_status;
+    const status = normalizeString(statusRaw) || 'Não informado';
 
     const rawPrice =
       (item as { price?: unknown }).price ??
@@ -636,6 +648,20 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         .join(' · ')
     );
     ensureField('Ciclo de faturamento', normalizeString(ciclo) || 'Não informado');
+    ensureField('Status', status);
+    ensureField('Segmento', normalizeString(rawSegmento));
+    ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
+    ensureField('Fonte de energia', normalizeString((item as { energy_source?: unknown }).energy_source) || 'Não informado');
+    ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
+    ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
+    
+    // Add compliance fields
+    ensureField('Conformidade consumo', normalizeString((item as { compliance_consumption?: unknown }).compliance_consumption) || 'Não informado');
+    ensureField('Conformidade NF', normalizeString((item as { compliance_nf?: unknown }).compliance_nf) || 'Não informado');
+    ensureField('Conformidade fatura', normalizeString((item as { compliance_invoice?: unknown }).compliance_invoice) || 'Não informado');
+    ensureField('Conformidade encargos', normalizeString((item as { compliance_charges?: unknown }).compliance_charges) || 'Não informado');
+    ensureField('Conformidade geral', normalizeString((item as { compliance_overall?: unknown }).compliance_overall) || 'Não informado');
+    
     if (adjusted !== undefined) {
       ensureField('Ajustado', adjusted ? 'Sim' : 'Não');
     }
@@ -664,12 +690,9 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       normalizeString(rawContato) ||
       (typeof contatoAtivo === 'boolean' ? (contatoAtivo ? 'Contato ativo' : 'Contato inativo') : 'Não informado');
 
-    const statusValor =
-      typeof contatoAtivo === 'boolean'
-        ? contatoAtivo
-          ? 'Ativo'
-          : 'Inativo'
-        : normalizeContratoStatus((item as { status?: unknown }).status);
+    const statusValor = (status === 'Ativo' || status === 'Inativo' || status === 'Em análise') 
+      ? status 
+      : normalizeContratoStatus((item as { status?: unknown }).status);
 
     return {
       id,

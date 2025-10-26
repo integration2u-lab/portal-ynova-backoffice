@@ -167,6 +167,18 @@ const normalizeNumber = (value: unknown): string => {
   }
 };
 
+const normalizeProinfa = (value: unknown): string => {
+  const numeric = toNumber(value);
+  if (numeric === null) return 'Não informado';
+  try {
+    // Format with 3 decimal places to preserve precision like "0.219"
+    return numeric.toFixed(3);
+  } catch (error) {
+    console.warn('[energyBalance] falha ao formatar PROINFA', error);
+    return numeric.toFixed(3);
+  }
+};
+
 const normalizeBoolean = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   if (typeof value === 'string') {
@@ -429,7 +441,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
 
   const consumoTotalMWh = consumptionMwh !== null ? normalizeMwh(consumptionMwh) : '-';
   const custoTotalBRL = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
-  const proinfaTotal = proinfaContribution !== null ? normalizeNumber(proinfaContribution) : 'Não informado';
+  const proinfaTotal = proinfaContribution !== null ? normalizeProinfa(proinfaContribution) : 'Não informado';
   
   // Calculate potential savings (simplified calculation)
   const currentCost = billable || (price && consumptionMwh ? price * consumptionMwh : 0);
@@ -450,7 +462,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const consumoMWh = normalizeMwh(consumptionMwh);
   const precoReaisPorMWh = price !== null ? normalizeCurrencyAllowZero(price) : 'Não informado';
   const custoMes = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
-  const proinfa = proinfaContribution !== null ? normalizeNumber(proinfaContribution) : 'Não informado';
+  const proinfa = proinfaContribution !== null ? normalizeProinfa(proinfaContribution) : 'Não informado';
 
   const minDemand = toNumber(getSafe(record, 'minDemand', 'min_demand', 'min'));
   const maxDemand = toNumber(getSafe(record, 'maxDemand', 'max_demand', 'max'));
@@ -632,7 +644,7 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
     'Não informado',
   );
 
-  const proinfa = normalizeNumber(
+  const proinfa = normalizeProinfa(
     getSafe(record, 'proinfa', 'proinfa_total', 'encargoProinfa', 'encargo_proinfa'),
   );
 

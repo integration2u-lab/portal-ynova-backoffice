@@ -98,9 +98,13 @@ export function normalizeEnergyBalanceData(apiData: EnergyBalanceApiResponse): E
   // Convert ISO date to YYYY-MM format
   const referenceBase = new Date(apiData.referenceBase).toISOString().slice(0, 7);
   
-  // Convert string numbers to actual numbers
-  const consumptionKwh = parseFloat(apiData.consumptionKwh) || 0;
-  const proinfaContribution = parseFloat(apiData.proinfaContribution) || 0;
+  // Convert string numbers to actual numbers, handle empty/null values properly
+  const consumptionKwh = apiData.consumptionKwh && apiData.consumptionKwh.trim() !== '' 
+    ? parseFloat(apiData.consumptionKwh) 
+    : 0;
+  const proinfaContribution = apiData.proinfaContribution && apiData.proinfaContribution.trim() !== '' 
+    ? parseFloat(apiData.proinfaContribution) 
+    : 0;
   
   return {
     id: apiData.id,
