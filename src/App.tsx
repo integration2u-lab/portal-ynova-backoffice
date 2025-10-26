@@ -21,7 +21,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import ContratosPage from './pages/contratos';
 import DetalheContratoPage from './pages/contratos/DetalheContrato';
 import EditarContratoPage from './pages/contratos/EditContractPage';
-import BalancoEnergeticoPage from './pages/contratos/BalancoEnergeticoPage';
 import ContractsLayout from './pages/contratos/ContractsLayout';
 import EnergyBalanceListPage from './pages/Balancos/EnergyBalanceListPage';
 import EnergyBalanceDetailPage from './pages/Balancos/EnergyBalanceDetailPage';
@@ -69,7 +68,6 @@ function AppRoutes() {
               <Route index element={<ContratosPage />} />
               <Route path=":id" element={<DetalheContratoPage />} />
               <Route path=":id/editar" element={<EditarContratoPage />} />
-              <Route path=":id/balanco-energetico" element={<BalancoEnergeticoPage />} />
             </Route>
 
             <Route path="balancos" element={<EnergyBalanceListPage />} />
