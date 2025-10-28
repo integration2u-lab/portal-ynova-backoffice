@@ -599,6 +599,7 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
   const dataBase = normalizeMonthLabel(
     getSafe(
       record,
+      'referenceBase',
       'dataBase',
       'data_base',
       'competencia',
@@ -675,15 +676,15 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
   );
 
   const envioOk = normalizeBoolean(
-    getSafe(record, 'envioOk', 'envio_ok', 'sent', 'statusEnvio', 'envioStatus'),
+    getSafe(record, 'sentOk', 'envioOk', 'envio_ok', 'sent', 'statusEnvio', 'envioStatus', 'sent_ok'),
   );
 
   const disparo = normalizeDateTime(
-    getSafe(record, 'disparo', 'disparo_at', 'enviadoEm', 'sentAt'),
+    getSafe(record, 'sendDate', 'disparo', 'disparo_at', 'enviadoEm', 'sentAt', 'sent_at', 'send_date'),
   );
 
   const dataVencimentoBoleto = normalizeDate(
-    getSafe(record, 'dataVencimentoBoleto', 'vencimento', 'due_date', 'data_vencimento'),
+    getSafe(record, 'billsDate', 'dataVencimentoBoleto', 'vencimento', 'due_date', 'data_vencimento', 'bills_date', 'data_vencimento_boleto'),
   );
 
   return {

@@ -1,10 +1,7 @@
 import { EnergyBalanceHttpError, energyBalanceRequest, getList } from './energyBalanceApi';
 
 const EMAIL_ENDPOINT_CANDIDATES = [
-  '/email',
-  '/emails',
-  '/energy-balance/email',
-  '/energy-balance/emails',
+  '/energy-balance/email'
 ];
 
 const toArray = (payload: unknown): unknown[] => {
@@ -65,46 +62,25 @@ export async function getEmailRows(signal?: AbortSignal): Promise<unknown[]> {
 }
 
 export async function updateEmailRow(id: string, data: Partial<Record<string, unknown>>, signal?: AbortSignal): Promise<unknown> {
-  const UPDATE_ENDPOINT_CANDIDATES = [
-    `/email/${id}`,
-    `/emails/${id}`,
-    `/energy-balance/email/${id}`,
-    `/energy-balance/emails/${id}`,
-    `/energy-balance/${id}`,
-  ];
+  // Use the correct endpoint based on the API specification
+  const path = `/energy-balance/${id}`;
 
-  let lastError: unknown = null;
-
-  for (const path of UPDATE_ENDPOINT_CANDIDATES) {
-    try {
-      const payload = await energyBalanceRequest(path, { 
-        method: 'PUT', 
-        signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: JSON.stringify(data)
-      });
-      return payload;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      if (
-        error instanceof EnergyBalanceHttpError &&
-        (error.status === 404 || error.status === 405)
-      ) {
-        lastError = error;
-        continue;
-      }
-      lastError = error;
-      break;
+  try {
+    const payload = await energyBalanceRequest(path, { 
+      method: 'PUT', 
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      },
+      body: JSON.stringify(data)
+    });
+    return payload;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
     }
+    const message = error instanceof Error ? error.message : 'Erro ao atualizar o registro';
+    throw new Error(message);
   }
-
-  if (lastError instanceof Error) {
-    throw lastError;
-  }
-  throw new Error('Não foi possível atualizar o registro de email.');
 }
