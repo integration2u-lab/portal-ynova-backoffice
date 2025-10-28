@@ -1,4 +1,5 @@
 import { AuthUser, Contract } from './api';
+import { EnergyBalanceApiResponse } from './energyBalance';
 
 let fakeUser: AuthUser | null = null;
 
@@ -44,6 +45,73 @@ const mockContracts: Contract[] = Array.from({ length: 20 }).map((_, i) => {
   };
 });
 
+// Mock Energy Balance data
+const mockEnergyBalance: EnergyBalanceApiResponse[] = [
+  {
+    id: "351",
+    clientName: "UPB UNIAO MUNICIPIOS BAHIA",
+    price: 195.00,
+    referenceBase: "2025-07-01T00:00:00.000Z",
+    supplier: "Boven",
+    meter: "BAHMERENTR101 (L)",
+    consumptionKwh: "8.707591",
+    proinfaContribution: "0",
+    contract: "16.378",
+    minDemand: 0.000,
+    maxDemand: 32.757,
+    cpCode: null,
+    createdAt: "2025-07-01T00:00:00.000Z",
+    updatedAt: "2025-10-10T17:22:57.685Z",
+    clientId: "798d6fed-a4cd-4687-8407-3bd318868ef1",
+    contractId: "1",
+    contactActive: true,
+    billable: 1698.00,
+    adjusted: false
+  },
+  {
+    id: "352",
+    clientName: "UPB UNIAO MUNICIPIOS BAHIA",
+    price: 207.73,
+    referenceBase: "2025-06-01T00:00:00.000Z",
+    supplier: "Boven",
+    meter: "BAHMERENTR101 (L)",
+    consumptionKwh: "6.112000",
+    proinfaContribution: "0.219",
+    contract: "16.378",
+    minDemand: 0.000,
+    maxDemand: 32.757,
+    cpCode: null,
+    createdAt: "2025-06-01T00:00:00.000Z",
+    updatedAt: "2025-10-10T17:22:57.685Z",
+    clientId: "798d6fed-a4cd-4687-8407-3bd318868ef1",
+    contractId: "1",
+    contactActive: true,
+    billable: 1269.00,
+    adjusted: false
+  },
+  {
+    id: "353",
+    clientName: "UPB UNIAO MUNICIPIOS BAHIA",
+    price: 210.50,
+    referenceBase: "2025-05-01T00:00:00.000Z",
+    supplier: "Boven",
+    meter: "BAHMERENTR101 (L)",
+    consumptionKwh: "5.890000",
+    proinfaContribution: "0.200",
+    contract: "16.378",
+    minDemand: 0.000,
+    maxDemand: 32.757,
+    cpCode: null,
+    createdAt: "2025-05-01T00:00:00.000Z",
+    updatedAt: "2025-10-10T17:22:57.685Z",
+    clientId: "798d6fed-a4cd-4687-8407-3bd318868ef1",
+    contractId: "1",
+    contactActive: true,
+    billable: 1240.00,
+    adjusted: true
+  }
+];
+
 export async function mockFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   await new Promise((r) => setTimeout(r, 150));
   // Very naive router
@@ -83,6 +151,79 @@ export async function mockFetch<T>(path: string, options: RequestInit = {}): Pro
   }
   if (path.startsWith('/contracts')) {
     return mockContracts as unknown as T;
+  }
+  if (path.startsWith('/energy-balance')) {
+    // Filter by contract_id if provided
+    const url = new URL(path, 'http://localhost');
+    const contractId = url.searchParams.get('contract_id');
+    
+    if (contractId) {
+      const filteredData = mockEnergyBalance.filter(item => item.contractId === contractId);
+      return filteredData as unknown as T;
+    }
+    
+    return mockEnergyBalance as unknown as T;
+  }
+  if (path.startsWith('/api/dashboard/overview')) {
+    return {
+      totalContratosAtivos: 15,
+      distribuicaoConformidade: {
+        Subutilizado: 3,
+        Conforme: 8,
+        Excedente: 2,
+        Indefinido: 2
+      },
+      totalOportunidades: 5,
+      totalDivergenciasNF: 2,
+      totalDivergenciasFatura: 1
+    } as unknown as T;
+  }
+  if (path.startsWith('/api/dashboard/inteligencia')) {
+    return {
+      demanda: { verde: 8, amarelo: 3, vermelho: 2 },
+      modalidade_tarifaria: { verde: 10, amarelo: 2, vermelho: 1 },
+      energia_reativa: { verde: 7, amarelo: 4, vermelho: 2 },
+      contrato: { verde: 9, amarelo: 3, vermelho: 1 }
+    } as unknown as T;
+  }
+  if (path.startsWith('/api/dashboard/conformidades')) {
+    return {
+      nf_divergentes: [
+        {
+          id: "nf1",
+          numero: "NF-001",
+          cliente: "Cliente A",
+          status_nf: { energia: "Divergente", icms: "Conforme" },
+          valores_nf: { valor_energia: 1500.50, valor_icms: 300.10 },
+          observacao: "Divergência na energia"
+        }
+      ],
+      fatura_divergentes: [
+        {
+          id: "fat1",
+          numero: "FAT-001",
+          cliente: "Cliente B",
+          status_fatura: { demanda: "Divergente", tusd: "Conforme", icms: "Conforme" },
+          regra_tolerancia_demanda: 1.05,
+          observacao: "Divergência na demanda"
+        }
+      ]
+    } as unknown as T;
+  }
+  if (path.startsWith('/api/contratos')) {
+    // Return mock contracts data for dashboard
+    return {
+      contratos: mockContracts.slice(0, 10).map(contract => ({
+        ...contract,
+        consumo_contrato: {
+          consumo_acumulado: Math.random() * 1000,
+          limite_superior: 800,
+          diferenca_percentual_vs_limite: Math.random() * 20 - 10
+        },
+        observacao_oportunidade: "Oportunidade de otimização identificada"
+      })),
+      paginacao: { total: 10, page: 1, pageSize: 10 }
+    } as unknown as T;
   }
   throw new Error(`No mock for ${path}`);
 }

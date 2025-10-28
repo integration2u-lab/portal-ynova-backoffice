@@ -6,7 +6,7 @@ param(
     [string]$AccountId = "646057971790",
     [string]$RepositoryName = "ynova-portal-backoffice",
     [string]$ImageTag = "latest",
-    [string]$ApiBaseUrl = "https://api.ynovamarketplace.com.br/api"
+    [string]$ApiBaseUrl = "https://api-balanco.ynovamarketplace.com/"
 )
 
 # Colors for output

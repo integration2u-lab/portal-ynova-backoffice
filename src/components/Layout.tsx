@@ -6,6 +6,7 @@ import {
   Calculator,
   FileText,
   PieChart,
+  BarChart3,
   User,
   Bell,
   HelpCircle,
@@ -14,6 +15,8 @@ import {
   X,
   GraduationCap,
   Handshake,
+  Zap,
+  Mail,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
@@ -21,9 +24,11 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
+  { to: '/balancos', label: 'Balanço Energético', icon: Zap },
+  { to: '/email', label: 'Email', icon: Mail },
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
-  { to: '/leads', label: 'Balanço Energético', icon: FileText },
+  /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
   { to: '/profile', label: 'Perfil', icon: User },
@@ -171,8 +176,8 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                     className={({ isActive }) =>
                       `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                         isActive
-                          ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
+                          ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40 dark:font-bold'
+                          : 'text-gray-600 dark:text-white hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#1f252b] dark:font-bold'
                       }`
                     }
                     title={isSidebarCollapsed ? item.label : undefined}
@@ -186,7 +191,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
             <div className="p-4 border-t border-gray-200 dark:border-[#2b3238]">
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                className="w-full flex items-center px-3 py-2 text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900 rounded-lg transition-colors"
                 title={isSidebarCollapsed ? 'Sair' : undefined}
               >
                 <LogOut size={28} className={isSidebarCollapsed ? '' : 'mr-3'} />
@@ -216,8 +221,8 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
                     className={({ isActive }) =>
                         `w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                           isActive
-                            ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40'
-                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1f252b]'
+                            ? 'bg-yn-orange/10 text-yn-orange border border-yn-orange/40 dark:bg-yn-orange/20 dark:text-yn-orange dark:border-yn-orange/40 dark:font-bold'
+                            : 'text-gray-600 dark:text-white hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#1f252b] dark:font-bold'
                         }`
                     }
                   >
@@ -230,7 +235,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-[#2b3238]">
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
+                  className="w-full flex items-center px-3 py-2 text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900 rounded-lg transition-colors"
                 >
                   <LogOut size={20} className="mr-3" />
                   Sair

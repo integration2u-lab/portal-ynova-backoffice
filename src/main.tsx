@@ -17,10 +17,15 @@ const ALLOW_ANY_LOGIN = (() => {
   return import.meta.env.DEV
 })()
 
+const SHOULD_USE_MOCK_API = (() => {
+  const flag = import.meta.env.VITE_API_MOCK
+  if (typeof flag === 'string') return flag === 'true'
+  return false
+})()
+
 async function bootstrap() {
-  // Enable MSW only during local dev or when VITE_API_MOCK=true 
-  const enableMSW = import.meta.env.DEV || import.meta.env.VITE_API_MOCK === 'true' || ALLOW_ANY_LOGIN
-  if (enableMSW) {
+  // Enable MSW only when mock API mode is explicitly requestedd
+  if (SHOULD_USE_MOCK_API) {
     const { worker } = await import('./mocks/browser')
     await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
   }
