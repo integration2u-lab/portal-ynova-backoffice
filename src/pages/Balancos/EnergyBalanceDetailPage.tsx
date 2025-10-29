@@ -437,12 +437,12 @@ export default function EnergyBalanceDetailPage() {
 
   const handleEmailDispatchSuccess = React.useCallback(
     (updatedRow: DisplayEnergyBalanceRow, response?: Record<string, unknown>) => {
-      if (!detail || detail.months.length === 0) {
+      const rowId = updatedRow.id ?? detail?.months[0]?.id;
+      if (!rowId) {
         return;
       }
 
-      const month = detail.months[0];
-      const rowId = month.id;
+      const monthForRow = detail?.months.find((item) => item.id === rowId);
       const partial: Partial<EmailRow> = {
         envioOk: updatedRow.envioOk,
         disparo: updatedRow.disparo,
@@ -451,7 +451,7 @@ export default function EnergyBalanceDetailPage() {
       setEditableRows((prev) => ({
         ...prev,
         [rowId]: {
-          ...(prev[rowId] ?? createEditableRow(detail, month)),
+          ...(prev[rowId] ?? (monthForRow && detail ? createEditableRow(detail, monthForRow) : ({} as EmailRow))),
           ...partial,
         },
       }));
@@ -711,7 +711,7 @@ export default function EnergyBalanceDetailPage() {
 
       {primaryMonth ? (
         <EmailDispatchApprovalCard
-          balanceId={primaryMonth.id}
+          balanceId={id ?? null}
           row={primaryMonthRow}
           rawData={primaryMonthRaw ?? null}
           onSuccess={handleEmailDispatchSuccess}

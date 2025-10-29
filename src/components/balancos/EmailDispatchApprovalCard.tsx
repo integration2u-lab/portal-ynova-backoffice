@@ -8,7 +8,7 @@ import {
 } from '../../utils/energyBalancePayload';
 
 export type EmailDispatchApprovalCardProps = {
-  balanceId: string;
+  balanceId?: string | null;
   row?: DisplayEnergyBalanceRow | null;
   rawData?: Record<string, unknown> | null;
   onSuccess?: (updatedRow: DisplayEnergyBalanceRow, response?: Record<string, unknown>) => void;
@@ -31,7 +31,7 @@ export default function EmailDispatchApprovalCard({
   const alreadySent = isEmailSent(row?.envioOk);
 
   const handleSubmit = async () => {
-    if (!row) {
+    if (!row || !balanceId) {
       toast.error('Não foi possível identificar o registro para envio.');
       return;
     }
@@ -90,7 +90,7 @@ export default function EmailDispatchApprovalCard({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={alreadySent || isSubmitting || !row}
+          disabled={alreadySent || isSubmitting || !row || !balanceId}
           className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${alreadySent
             ? 'cursor-not-allowed bg-gray-200 text-gray-500'
             : 'bg-yn-orange text-white hover:bg-yn-orange/90'
