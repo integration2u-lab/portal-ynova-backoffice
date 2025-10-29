@@ -5,8 +5,15 @@ import type {
   ContractInvoiceStatus,
   StatusResumo,
 } from '../../types/contracts';
-import { formatMesLabel, obrigacaoColunas } from '../../types/contracts';
-import PricePeriodsModal, { PricePeriods, summarizePricePeriods } from './PricePeriodsModal';
+import {
+  formatMesLabel,
+  obrigacaoColunas,
+  summarizePricePeriods,
+  normalizeAnnualPricePeriods,
+  calculateAdjustedPriceDifference,
+  type ContractPricePeriods,
+} from '../../types/contracts';
+import PricePeriodsModal from './PricePeriodsModal';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 import { monthsBetween } from '../../utils/dateRange';
 
@@ -79,9 +86,10 @@ type FormState = {
   flatPrice: string;
   flatYears: number;
   // Price periods (per-month/periods) â€” optional detailed pricing
-  pricePeriods: PricePeriods;
+  pricePeriods: ContractPricePeriods;
   resumoConformidades: ContractMock['resumoConformidades'];
   status: ContractMock['status'];
+  vigenciaStatus: 'Vigente' | 'Encerrado';
 };
 
 const HOURS_IN_MONTH = 730;
@@ -202,6 +210,7 @@ const buildInitialFormState = (): FormState => ({
     Conformidade: 'Em anÃ¡lise',
   },
   status: 'Ativo',
+  vigenciaStatus: 'Vigente',
 });
 
 const generateFallbackMonths = (total = 6): string[] => {
@@ -255,6 +264,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
   // using flatPrice instead of price periods
   const priceSummary = React.useMemo(() => summarizePricePeriods(formState.pricePeriods), [formState.pricePeriods]);
+  const flatPriceValue = React.useMemo(() => parseCurrencyInput(formState.flatPrice) ?? 0, [formState.flatPrice]);
+  const priceDifference = React.useMemo(
+    () => calculateAdjustedPriceDifference(formState.pricePeriods, flatPriceValue),
+    [formState.pricePeriods, flatPriceValue]
+  );
 
   const handleInputChange = (
     field: keyof Pick<
@@ -372,9 +386,9 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     setFormState((prev) => ({ ...prev, flatYears: Number(event.target.value) || 1 }));
   };
 
-  const handlePricePeriodsSave = (periods: PricePeriods) => {
-    // Persist the full periods payload coming from the modal
-    setFormState((prev) => ({ ...prev, pricePeriods: periods }));
+  const handlePricePeriodsSave = (periods: ContractPricePeriods) => {
+    const normalized = normalizeAnnualPricePeriods(periods);
+    setFormState((prev) => ({ ...prev, pricePeriods: normalized }));
     setIsPriceModalOpen(false);
   };
 
@@ -481,11 +495,15 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
         ? formState.customSupplier.trim()
         : formState.supplier.trim();
 
-    const periodsAverage = priceSummary.averagePrice ?? 0;
-    const flatAverage = parseCurrencyInput(formState.flatPrice) ?? 0;
-    const priceAverage = priceSummary.filledMonths ? periodsAverage : flatAverage;
+    const normalizedPricePeriods = normalizeAnnualPricePeriods(formState.pricePeriods);
+    const submissionSummary = summarizePricePeriods(normalizedPricePeriods);
+    const priceAverage =
+      submissionSummary.filledMonths && submissionSummary.averagePrice !== null
+        ? submissionSummary.averagePrice
+        : flatPriceValue;
     const referenceMonths = deriveReferenceMonths(formState);
     const priceSummaryText = priceAverage ? formatCurrencyBRL(priceAverage) : 'Não informado';
+    const adjustedDifference = calculateAdjustedPriceDifference(normalizedPricePeriods, flatPriceValue);
 
     const volumeValue = Number(formState.volume);
 
@@ -508,6 +526,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             ? `${formatMesLabel(startMonth)} - ${formatMesLabel(endMonth)}`
             : 'Não informado',
       },
+      { label: 'Situação da vigência', value: formState.vigenciaStatus },
       { label: 'Medidor', value: formState.medidor.trim() || 'Não informado' },
       {
         label: 'Flex / Limites',
@@ -522,6 +541,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
           : 'Não informado',
       },
       { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
+      { label: 'Preço reajustado (diferença)', value: formatCurrencyBRL(adjustedDifference) },
       { label: 'Responsável', value: formState.contact.trim() || 'Não informado' },
     ];
 
@@ -554,6 +574,9 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       proinfa: null,
       cicloFaturamento: '',
       periodos: referenceMonths,
+      pricePeriods: normalizedPricePeriods,
+      precoReajustado: adjustedDifference,
+      situacaoVigencia: formState.vigenciaStatus,
       resumoConformidades: { ...formState.resumoConformidades },
       kpis: [
         { label: 'Consumo acumulado', value: `${volumeFormatter.format(0)} MWh`, helper: 'Contrato recém-criado' },
@@ -868,6 +891,18 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   )}
                 </label>
 
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Situação da vigência
+                  <select
+                    value={formState.vigenciaStatus}
+                    onChange={handleInputChange('vigenciaStatus')}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="Vigente">Vigente</option>
+                    <option value="Encerrado">Encerrado</option>
+                  </select>
+                </label>
+
                 {/* billing cycle removed from manual contract creation */}
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -950,10 +985,14 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                         onClick={() => setIsPriceModalOpen(true)}
                         className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
                       >
-                        <PencilLine size={16} /> Editar preÃ§os por perÃ­odo
+                        <PencilLine size={16} /> Valor por Período
                       </button>
-                      <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses Â· ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preÃ§o por perÃ­odo'}</div>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses Â· ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum valor por período'}</div>
                     </div>
+                  </div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Preço reajustado (diferença):{' '}
+                    <span className="text-slate-700 dark:text-slate-200">{formatCurrencyBRL(priceDifference)}</span>
                   </div>
                 </div>
               </div>

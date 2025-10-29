@@ -11,6 +11,10 @@ import type {
   ObrigacaoRow,
   StatusResumo,
 } from '../mocks/contracts';
+import type { ContractPriceMonth, ContractPricePeriod, ContractPricePeriods } from './pricePeriods';
+import type { PricePeriodsSummary } from '../utils/contractPricing';
+
+export { summarizePricePeriods, normalizeAnnualPricePeriods, calculateAdjustedPriceDifference } from '../utils/contractPricing';
 
 export type ContractDetails = ContractMock;
 
@@ -25,6 +29,10 @@ export type {
   KPIItem,
   ObrigacaoRow,
   StatusResumo,
+  ContractPriceMonth,
+  ContractPricePeriod,
+  ContractPricePeriods,
+  PricePeriodsSummary,
 };
 
 export { formatMesLabel, obrigacaoColunas } from '../mocks/contracts';
