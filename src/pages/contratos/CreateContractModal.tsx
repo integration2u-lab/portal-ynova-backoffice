@@ -68,7 +68,6 @@ type FormState = {
   supplier: string;
   supplierSelection: string;
   customSupplier: string;
-  proinfa: string;
   startDate: string;
   endDate: string;
   upperLimit: string;
@@ -186,7 +185,6 @@ const buildInitialFormState = (): FormState => ({
   supplier: '',
   supplierSelection: '',
   customSupplier: '',
-  proinfa: '',
   startDate: '',
   endDate: '',
   upperLimit: '200',
@@ -232,12 +230,6 @@ const deriveReferenceMonths = (formState: FormState): string[] => {
 
 const ensureId = (value?: string) => (value && value.trim().length ? value.trim() : `CT-${Date.now()}`);
 
-const parseProinfa = (value: string): number | null => {
-  if (!value.trim()) return null;
-  const parsed = Number(value.replace('.', '').replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
 type CreateContractModalProps = {
   open: boolean;
   onClose: () => void;
@@ -275,7 +267,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       | 'email'
       | 'volume'
       | 'modality'
-      | 'proinfa'
       | 'startDate'
       | 'endDate'
       | 'upperLimit'
@@ -498,15 +489,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const volumeValue = Number(formState.volume);
 
-    const proinfaNumber = parseProinfa(formState.proinfa);
-    const proinfaDisplay =
-      proinfaNumber === null
-        ? 'Não informado'
-        : proinfaNumber.toLocaleString('pt-BR', {
-            minimumFractionDigits: 3,
-            maximumFractionDigits: 3,
-          });
-
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
 
@@ -519,7 +501,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       { label: 'Modalidade', value: formState.modality.trim() || 'Não informado' },
       { label: 'Fonte de energia', value: formState.energySource },
       { label: 'Fornecedor', value: supplierValue || 'Não informado' },
-      { label: 'Proinfa', value: proinfaDisplay },
       {
         label: 'Vigência',
         value:
@@ -570,7 +551,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       flex: `${formState.flexibility || '0'}%`,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
-      proinfa: proinfaNumber,
+      proinfa: null,
       cicloFaturamento: '',
       periodos: referenceMonths,
       resumoConformidades: { ...formState.resumoConformidades },
@@ -841,18 +822,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                     onChange={handleInputChange('medidor')}
                     className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
                     placeholder="Nome do medidor / grupo"
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Proinfa (MWh)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={formState.proinfa}
-                    onChange={handleInputChange('proinfa')}
-                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="0,000"
                   />
                 </label>
 
