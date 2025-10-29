@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Plus } from 'lucide-react';
 import { ContractDetail, StatusBadge } from './ContractDetail';
@@ -8,7 +8,7 @@ import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
 
 const pageSize = 20;
-const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
+const statusOrder: StatusResumo[] = ['Conforme', 'Em anÃ¡lise', 'Divergente'];
 
 function formatMonthLabel(periodo: string) {
   return formatMesLabel(periodo).replace('.', '');
@@ -19,7 +19,7 @@ type StatusSummaryItem = { status: StatusResumo; total: number };
 function summarizeResumo(resumo: ContractMock['resumoConformidades']): StatusSummaryItem[] {
   const counts: Record<StatusResumo, number> = {
     Conforme: 0,
-    'Em análise': 0,
+    'Em anÃ¡lise': 0,
     Divergente: 0,
   };
 
@@ -95,10 +95,12 @@ export default function ContratosPage() {
 
       const codigo = contrato.codigo.toLowerCase();
       const cliente = contrato.cliente.toLowerCase();
+      const razao = contrato.razaoSocial ? contrato.razaoSocial.toLowerCase() : '';
       const cnpjDigits = contrato.cnpj.replace(/\D/g, '');
 
       return (
         codigo.includes(normalizedSearch) ||
+        (razao && razao.includes(normalizedSearch)) ||
         cliente.includes(normalizedSearch) ||
         (!!numericSearch && cnpjDigits.includes(numericSearch))
       );
@@ -131,7 +133,7 @@ export default function ContratosPage() {
   const statusResumoGeral = React.useMemo(() => {
     const counts: Record<StatusResumo, number> = {
       Conforme: 0,
-      'Em análise': 0,
+      'Em anÃ¡lise': 0,
       Divergente: 0,
     };
 
@@ -163,7 +165,7 @@ export default function ContratosPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Contratos</h1>
           <p className="mt-2 max-w-2xl text-sm font-bold text-gray-600 dark:text-white">
-            Visualize contratos ativos, acompanhe indicadores e status das análises com filtros inteligentes.
+            Visualize contratos ativos, acompanhe indicadores e status das anÃ¡lises com filtros inteligentes.
           </p>
         </div>
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -179,8 +181,6 @@ export default function ContratosPage() {
                   <input
                     type="search"
                     value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Buscar por código, cliente ou CNPJ"
                     aria-label="Buscar contratos"
                     className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm font-bold text-gray-900 placeholder-gray-500 shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
                   />
@@ -188,7 +188,7 @@ export default function ContratosPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">Período de referência</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">PerÃ­odo de referÃªncia</span>
               <select
                 className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900 shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
                 value={referencePeriod}
@@ -204,7 +204,7 @@ export default function ContratosPage() {
                 disabled={isUpdating}
                 className="inline-flex items-center rounded-md bg-yn-orange px-4 py-2 font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isUpdating ? 'Atualizando…' : 'Atualizar'}
+                {isUpdating ? 'Atualizandoâ€¦' : 'Atualizar'}
               </button>
             </div>
             <button
@@ -240,7 +240,7 @@ export default function ContratosPage() {
         {error && (
           <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4 text-sm text-red-700 dark:text-red-300 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="font-bold">Não foi possível carregar os contratos da API.</p>
+              <p className="font-bold">NÃ£o foi possÃ­vel carregar os contratos da API.</p>
               <p className="font-bold text-red-600/80 dark:text-red-400">{error}</p>
               <p className="font-bold text-red-600/80 dark:text-red-400">Os dados exibidos podem estar desatualizados.</p>
             </div>
@@ -250,7 +250,7 @@ export default function ContratosPage() {
               disabled={isUpdating}
               className="inline-flex items-center justify-center rounded-lg border border-red-300 dark:border-red-700 px-4 py-2 text-sm font-bold text-red-700 dark:text-red-300 transition hover:border-red-400 dark:hover:border-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isUpdating ? 'Atualizando…' : 'Tentar novamente'}
+              {isUpdating ? 'Atualizandoâ€¦' : 'Tentar novamente'}
             </button>
           </div>
         )}
@@ -270,13 +270,13 @@ export default function ContratosPage() {
                 <thead className="bg-gray-50 dark:bg-[#3E3E3E] text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">
                   <tr>
                     <th className="px-4 py-3 text-left">Contrato</th>
-                    <th className="px-4 py-3 text-left">Cliente</th>
+                    <th className="px-4 py-3 text-left">Razão social</th>
                     <th className="px-4 py-3 text-left">Segmento</th>
                     <th className="px-4 py-3 text-left">Ciclo</th>
-                    <th className="px-4 py-3 text-left">Preço Médio</th>
+                    <th className="px-4 py-3 text-left">PreÃ§o MÃ©dio</th>
                     <th className="px-4 py-3 text-left">Fonte</th>
                     <th className="px-4 py-3 text-left">Resumo</th>
-                    <th className="px-4 py-3 text-left">Ações</th>
+                    <th className="px-4 py-3 text-left">AÃ§Ãµes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -290,7 +290,10 @@ export default function ContratosPage() {
                     >
                       <td className="px-4 py-3 font-bold text-gray-900">{contrato.codigo}</td>
                       <td className="px-4 py-3">
-                        <div className="font-bold text-gray-900">{contrato.cliente}</div>
+                        <div className="font-bold text-gray-900">{contrato.razaoSocial || contrato.cliente}</div>
+                        {contrato.razaoSocial && contrato.cliente && contrato.razaoSocial !== contrato.cliente && (
+                          <div className="text-xs font-bold text-gray-500">Nome fantasia: {contrato.cliente}</div>
+                        )}
                         <div className="text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
                       </td>
                       <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento}</td>
@@ -341,7 +344,10 @@ export default function ContratosPage() {
                       <span>{contrato.codigo}</span>
                       <span className="text-xs font-bold text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
                     </div>
-                    <div className="mt-1 text-sm font-bold text-gray-700">{contrato.cliente}</div>
+                    <div className="mt-1 text-sm font-bold text-gray-700">{contrato.razaoSocial || contrato.cliente}</div>
+                    {contrato.razaoSocial && contrato.cliente && contrato.razaoSocial !== contrato.cliente && (
+                      <div className="text-xs font-bold text-gray-500">Nome fantasia: {contrato.cliente}</div>
+                    )}
                     <div className="mt-2">
                       <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
                     </div>
@@ -366,7 +372,7 @@ export default function ContratosPage() {
 
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-gray-500 dark:text-white">
-                Página {paginaAtual} de {totalPaginas}
+                PÃ¡gina {paginaAtual} de {totalPaginas}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -383,7 +389,7 @@ export default function ContratosPage() {
                   disabled={paginaAtual === totalPaginas}
                   className="rounded-lg border border-gray-200 dark:border-gray-600 px-3 py-1 text-sm font-bold text-gray-600 dark:text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Próxima
+                  PrÃ³xima
                 </button>
               </div>
             </div>
@@ -396,9 +402,19 @@ export default function ContratosPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 id="detalhes-contrato" className="text-lg font-bold text-gray-900 dark:text-white">
-                Detalhe do Contrato · {contratoDetalhado.codigo}
+                Detalhe do Contrato Â· {contratoDetalhado.codigo}
               </h2>
-              <p className="text-sm font-bold text-gray-500 dark:text-white">{contratoDetalhado.cliente} · CNPJ {contratoDetalhado.cnpj}</p>
+              <p className="text-sm font-bold text-gray-500 dark:text-white">
+                {contratoDetalhado.razaoSocial || contratoDetalhado.cliente}
+                {contratoDetalhado.razaoSocial &&
+                  contratoDetalhado.cliente &&
+                  contratoDetalhado.razaoSocial !== contratoDetalhado.cliente && (
+                    <span className="ml-1 text-xs font-semibold text-gray-400 dark:text-gray-300">
+                      (Nome fantasia: {contratoDetalhado.cliente})
+                    </span>
+                  )}
+                �� CNPJ {contratoDetalhado.cnpj}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPills summary={summarizeResumo(contratoDetalhado.resumoConformidades)} />

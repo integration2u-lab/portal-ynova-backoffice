@@ -3,6 +3,7 @@ import { deleteRequest, getJson, patchJson, postJson, putJson } from '../lib/api
 export type Contract = {
   id: string;
   contract_code: string;
+  corporate_name?: string;
   client_name: string;
   client_id?: string;
   groupName?: string;
@@ -79,9 +80,14 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const corporateName = toStringSafe(
+    item?.corporate_name ?? item?.corporateName ?? item?.razao_social ?? item?.razaoSocial ?? item?.razao
+  );
+
   return {
     id: toStringSafe(idSource, `contract-${index}`),
     contract_code: toStringSafe(item?.contract_code),
+    corporate_name: corporateName || undefined,
     client_name: toStringSafe(item?.client_name),
     client_id: item?.client_id == null ? undefined : toStringSafe(item?.client_id),
     groupName: item?.groupName == null ? undefined : toStringSafe(item?.groupName),
@@ -149,6 +155,8 @@ export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'update
 
 const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;
+  const corporateNameValue =
+    typeof payload.corporate_name === 'string' ? payload.corporate_name.trim() : payload.corporate_name;
   const proinfaRaw = payload.proinfa_contribution;
   let proinfa: number | null | undefined = undefined;
   if (proinfaRaw === undefined) {
@@ -164,6 +172,8 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
 
   return {
     ...payload,
+    corporate_name:
+      corporateNameValue === undefined ? undefined : corporateNameValue === '' ? null : corporateNameValue,
     supplier: supplierValue === undefined ? undefined : supplierValue === '' ? null : supplierValue,
     proinfa_contribution: proinfa,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',

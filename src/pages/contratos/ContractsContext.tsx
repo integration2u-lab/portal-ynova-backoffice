@@ -195,11 +195,29 @@ const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
 };
 
 const normalizeFonte = (value: unknown): ContractMock['fonte'] => {
-  const text = removeDiacritics(normalizeString(value));
-  if (['incentivada', 'incentivadao', 'incentivada50', 'subsidized'].includes(text)) return 'Incentivada';
-  if (['convencional', 'conventional'].includes(text)) return 'Convencional';
-  if (['renovavel', 'renewable'].includes(text)) return 'Incentivada';
-  return 'Convencional';
+  const original = normalizeString(value);
+  if (!original) {
+    return 'Convencional';
+  }
+
+  const normalized = removeDiacritics(original).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!normalized) {
+    return 'Convencional';
+  }
+
+  const matches = [
+    { key: 'convencional', value: 'Convencional' as ContractMock['fonte'] },
+    { key: 'incentivada50', value: 'Incentivada 50%' as ContractMock['fonte'] },
+    { key: 'incentivada100', value: 'Incentivada 100%' as ContractMock['fonte'] },
+  ];
+
+  for (const { key, value: mapped } of matches) {
+    if (normalized === key || normalized.includes(key)) {
+      return mapped;
+    }
+  }
+
+  return original;
 };
 
 const normalizeResumo = (value: unknown): ContractMock['resumoConformidades'] => {
@@ -493,6 +511,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { nomeCliente?: unknown }).nomeCliente ??
       (item as { client_name?: unknown }).client_name ??
       'Cliente não informado';
+    const rawRazao =
+      (item as { razao_social?: unknown }).razao_social ??
+      (item as { razaoSocial?: unknown }).razaoSocial ??
+      (item as { corporate_name?: unknown }).corporate_name ??
+      (item as { corporateName?: unknown }).corporateName ??
+      (item as { razao?: unknown }).razao ??
+      rawCliente;
+    const razaoSocial = normalizeString(rawRazao) || normalizeString(rawCliente);
     const rawSegmento =
       (item as { segmento?: unknown }).segmento ?? 
       (item as { segment?: unknown }).segment ?? 
@@ -634,11 +660,12 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { lower_limit_percent?: unknown }).lower_limit_percent;
 
     const supplierDisplay = supplier || 'Não informado';
+    ensureField('Razão social', razaoSocial || normalizeString(rawCliente));
     ensureField('Fornecedor', supplierDisplay);
     ensureField('Proinfa', formatProinfa(proinfa));
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
-    ensureField('Contrato', normalizeString(rawCodigo));
+    ensureField('Código do contrato', normalizeString(rawCodigo));
     ensureField('Cliente ID', clientId || 'Não informado');
     ensureField('Volume contratado', formatMwhValue(contractedVolume));
     ensureField(
@@ -651,7 +678,10 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ensureField('Status', status);
     ensureField('Segmento', normalizeString(rawSegmento));
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
-    ensureField('Fonte de energia', normalizeString((item as { energy_source?: unknown }).energy_source) || 'Não informado');
+    const fonteValue = normalizeFonte(
+      (item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source
+    );
+    ensureField('Fonte de energia', fonteValue || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
     ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
     
@@ -697,6 +727,7 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     return {
       id,
       codigo: normalizeString(rawCodigo),
+      razaoSocial: razaoSocial,
       cliente: normalizeString(rawCliente),
       cnpj: normalizeString((item as { cnpj?: unknown }).cnpj),
       segmento: normalizeString(rawSegmento),
@@ -825,11 +856,13 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const supplier = findDadosValue(['fornecedor', 'supplier']);
   // also accept 'medidor' label as groupName
   const groupName = findDadosValue(['grupo', 'group', 'medidor', 'meter']);
+  const razaoFromDados = findDadosValue(['razao', 'razão', 'corporate']);
   const volumeField =
     contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
   const contractedVolume = parseNumericInput(volumeField);
   const supplierFromContract = normalizeString(contract.fornecedor);
   const supplierValue = supplierFromContract || supplier || '';
+  const corporateNameValue = normalizeString(contract.razaoSocial || razaoFromDados || contract.cliente);
   const proinfaField = findDadosValue(['proinfa']);
   const proinfaFromDados = parseNumericInput(proinfaField);
   const proinfaValue =
@@ -839,6 +872,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
+    corporate_name: corporateNameValue || undefined,
     client_name: normalizeString(contract.cliente),
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
@@ -898,6 +932,7 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
 
   return {
     contract_code: pickString('contract_code', contract.codigo || contract.id),
+    corporate_name: pickString('corporate_name', contract.razaoSocial || contract.cliente),
     client_name: pickString('client_name', contract.cliente),
     cnpj: pickString('cnpj', contract.cnpj),
     segment: pickString('segment', contract.segmento),
