@@ -2,44 +2,13 @@ import React from 'react';
 import { Plus, Trash2, X, Eraser } from 'lucide-react';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 import { monthsBetween } from '../../utils/dateRange';
-
-export type PricePeriods = {
-  periods: Array<{
-    id: string;
-    start: string; // YYYY-MM
-    end: string; // YYYY-MM
-    defaultPrice?: number;
-    months: Array<{ ym: string; price: number }>;
-  }>;
-};
-
-export type PricePeriodsSummary = {
-  filledMonths: number;
-  averagePrice: number | null;
-};
+import type { ContractPricePeriods } from '../../types/pricePeriods';
+import { normalizeAnnualPricePeriods, clonePricePeriods } from '../../utils/contractPricing';
 
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric' });
 
 const ensureRandomId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-
-export function summarizePricePeriods(value: PricePeriods): PricePeriodsSummary {
-  const monthMap = new Map<string, number>();
-  value.periods.forEach((period) => {
-    period.months.forEach(({ ym, price }) => {
-      if (Number.isFinite(price)) {
-        monthMap.set(ym, price);
-      }
-    });
-  });
-  const prices = Array.from(monthMap.values());
-  const filledMonths = prices.length;
-  if (!filledMonths) {
-    return { filledMonths: 0, averagePrice: null };
-  }
-  const sum = prices.reduce((acc, price) => acc + price, 0);
-  return { filledMonths, averagePrice: sum / filledMonths };
-}
 
 type MonthDraft = {
   ym: string;
@@ -54,49 +23,53 @@ type PeriodDraft = {
   months: MonthDraft[];
 };
 
-const toInputString = (value?: number) =>
+const toInputString = (value?: number | null) =>
   value === undefined || value === null || Number.isNaN(value)
     ? ''
     : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const buildDraftFromPeriod = (period: PricePeriods['periods'][number]): PeriodDraft => ({
+const buildDraftFromPeriod = (period: ContractPricePeriods['periods'][number]): PeriodDraft => ({
   id: period.id || ensureRandomId(),
   start: period.start,
   end: period.end,
-  defaultPrice: toInputString(period.defaultPrice),
-  months: monthsBetween(period.start, period.end).map((ym) => {
-    const existing = period.months.find((month) => month.ym === ym);
-    return { ym, value: existing ? toInputString(existing.price) : '' };
-  }),
+  defaultPrice: toInputString(period.defaultPrice ?? null),
+  months: period.months.map((month) => ({ ym: month.ym, value: toInputString(month.price ?? null) })),
 });
 
-const buildEmptyDraft = (): PeriodDraft => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
+const buildEmptyDraft = (year?: number): PeriodDraft => {
+  const baseYear = typeof year === 'number' && Number.isFinite(year) ? year : new Date().getFullYear();
+  const start = `${baseYear}-01`;
+  const end = `${baseYear}-12`;
   return {
     id: ensureRandomId(),
-    start: `${year}-${month}`,
-    end: `${year}-${month}`,
+    start,
+    end,
     defaultPrice: '',
-    months: monthsBetween(`${year}-${month}`, `${year}-${month}`).map((ym) => ({ ym, value: '' })),
+    months: monthsBetween(start, end).map((ym) => ({ ym, value: '' })),
   };
 };
 
-const ensureMonthsForDraft = (draft: PeriodDraft): PeriodDraft => {
-  const monthList = monthsBetween(draft.start, draft.end);
-  const existing = new Map(draft.months.map((month) => [month.ym, month.value] as const));
+const syncDraftYear = (draft: PeriodDraft, year: number): PeriodDraft => {
+  const baseYear = Number.isFinite(year) ? year : new Date().getFullYear();
+  const start = `${baseYear}-01`;
+  const end = `${baseYear}-12`;
+  const existingValues = new Map(draft.months.map((month) => [month.ym.slice(5), month.value] as const));
   return {
     ...draft,
-    months: monthList.map((ym) => ({ ym, value: existing.get(ym) ?? '' })),
+    start,
+    end,
+    months: monthsBetween(start, end).map((ym) => {
+      const monthKey = ym.slice(5);
+      return { ym, value: existingValues.get(monthKey) ?? '' };
+    }),
   };
 };
 
 type PricePeriodsModalProps = {
   open: boolean;
-  value: PricePeriods;
+  value: ContractPricePeriods;
   onClose: () => void;
-  onSave: (value: PricePeriods) => void;
+  onSave: (value: ContractPricePeriods) => void;
 };
 
 function formatMonthLabel(ym: string) {
@@ -106,11 +79,12 @@ function formatMonthLabel(ym: string) {
   return monthFormatter.format(date);
 }
 
-function normalizeDrafts(value: PricePeriods): PeriodDraft[] {
-  if (!value.periods.length) {
+function normalizeDrafts(value: ContractPricePeriods): PeriodDraft[] {
+  const normalized = normalizeAnnualPricePeriods(value);
+  if (!normalized.periods.length) {
     return [buildEmptyDraft()];
   }
-  return value.periods.map(buildDraftFromPeriod);
+  return normalized.periods.map(buildDraftFromPeriod);
 }
 
 const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onClose, onSave }) => {
@@ -119,34 +93,42 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
 
   React.useEffect(() => {
     if (open) {
-      setDrafts(normalizeDrafts(value));
+      setDrafts(normalizeDrafts(clonePricePeriods(value)));
       setIsSaved(false);
     }
   }, [open, value]);
 
   const isSaveDisabled = React.useMemo(
     () => {
-      const disabled = drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0);
-      console.log('isSaveDisabled:', disabled, { drafts });
-      return disabled;
+      return drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0);
     },
     [drafts]
   );
 
   const handleAddPeriod = React.useCallback(() => {
-    setDrafts((prev) => [...prev, buildEmptyDraft()]);
+    setDrafts((prev) => {
+      const years = prev
+        .map((draft) => Number.parseInt(draft.start.slice(0, 4), 10))
+        .filter((year) => Number.isFinite(year));
+      const nextYear = years.length ? Math.max(...years) + 1 : new Date().getFullYear();
+      return [...prev, buildEmptyDraft(nextYear)];
+    });
   }, []);
 
   const updateDraft = React.useCallback((id: string, updater: (draft: PeriodDraft) => PeriodDraft) => {
-    setDrafts((prev) => prev.map((draft) => (draft.id === id ? ensureMonthsForDraft(updater(draft)) : draft)));
+    setDrafts((prev) => prev.map((draft) => (draft.id === id ? updater(draft) : draft)));
   }, []);
 
   const handleChangeStart = React.useCallback((id: string, value: string) => {
-    updateDraft(id, (draft) => ({ ...draft, start: value || draft.start }));
+    const [yearText] = value.split('-');
+    const year = Number.parseInt(yearText, 10);
+    updateDraft(id, (draft) => syncDraftYear(draft, Number.isFinite(year) ? year : draft.start ? Number.parseInt(draft.start.slice(0, 4), 10) : new Date().getFullYear()));
   }, [updateDraft]);
 
   const handleChangeEnd = React.useCallback((id: string, value: string) => {
-    updateDraft(id, (draft) => ({ ...draft, end: value || draft.end }));
+    const [yearText] = value.split('-');
+    const year = Number.parseInt(yearText, 10);
+    updateDraft(id, (draft) => syncDraftYear(draft, Number.isFinite(year) ? year : draft.end ? Number.parseInt(draft.end.slice(0, 4), 10) : new Date().getFullYear()));
   }, [updateDraft]);
 
   const handleDefaultChange = React.useCallback((id: string, value: string) => {
@@ -240,45 +222,26 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   }, []);
 
   const handleSubmit = React.useCallback(
-    (event: React.FormEvent) => {
+    (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      console.log('Iniciando salvamento...', { drafts });
-      
-      try {
-        const periods = drafts.map((draft) => {
-          const months = draft.months
-            .map((month) => ({ ym: month.ym, price: parseCurrencyInput(month.value) }))
-            .filter((month): month is { ym: string; price: number } => month.price !== null);
-          return {
-            id: draft.id,
-            start: draft.start,
-            end: draft.end,
-            defaultPrice: parseCurrencyInput(draft.defaultPrice) ?? undefined,
-            months,
-          };
-        });
-        
-        console.log('Períodos processados:', periods);
-        
-        // Calculate average price from the first period with data
-        const firstPeriodWithData = periods.find(period => period.months.length > 0);
-        const averagePrice = firstPeriodWithData?.months.length 
-          ? firstPeriodWithData.months.reduce((sum, month) => sum + month.price, 0) / firstPeriodWithData.months.length
-          : firstPeriodWithData?.defaultPrice || 0;
-        
-        console.log('Preço médio calculado:', averagePrice);
-        
-        onSave({ periods });
-        setIsSaved(true);
-        
-        // Auto-close after 2 seconds
-        setTimeout(() => {
-          onClose();
-        }, 2000);
-      } catch (error) {
-        console.error('Erro ao salvar preços:', error);
-        alert('Erro ao salvar os preços. Verifique o console para mais detalhes.');
-      }
+
+      const raw: ContractPricePeriods = {
+        periods: drafts.map((draft) => ({
+          id: draft.id,
+          start: draft.start,
+          end: draft.end,
+          defaultPrice: parseCurrencyInput(draft.defaultPrice),
+          months: draft.months.map((month) => ({
+            ym: month.ym,
+            price: parseCurrencyInput(month.value),
+          })),
+        })),
+      };
+
+      const normalized = normalizeAnnualPricePeriods(raw);
+      onSave(normalized);
+      setIsSaved(true);
+      setTimeout(onClose, 2000);
     },
     [drafts, onSave, onClose]
   );
@@ -287,36 +250,37 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-6">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Preços médios (R$/MWh)</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Defina períodos e valores mensais aplicados para cálculo dos preços médios do contrato.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-900"
-            aria-label="Fechar preços médios"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4">
-          {isSaved && (
-            <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                <span className="font-semibold">Preços salvos com sucesso!</span>
-              </div>
-              <p className="mt-1 text-xs">Os dados foram salvos e o preço médio foi calculado automaticamente.</p>
+      <div className="flex max-h-[90vh] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
+        <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Preços médios (R$/MWh)</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Defina períodos e valores mensais aplicados para cálculo dos preços médios do contrato.
+              </p>
             </div>
-          )}
-          <div className="space-y-5">
-            {drafts.map((draft, index) => {
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-900"
+              aria-label="Fechar preços médios"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+            {isSaved && (
+              <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span className="font-semibold">Preços salvos com sucesso!</span>
+                </div>
+                <p className="mt-1 text-xs">Os dados foram salvos e o preço médio foi calculado automaticamente.</p>
+              </div>
+            )}
+            <div className="space-y-5">
+              {drafts.map((draft, index) => {
               const months = monthsBetween(draft.start, draft.end);
               const hasInvalidRange = months.length === 0 && draft.start && draft.end;
               const prices = draft.months
@@ -453,40 +417,33 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
               );
             })}
 
+              <button
+                type="button"
+                onClick={handleAddPeriod}
+                className="inline-flex items-center gap-2 rounded-xl border border-dashed border-yn-orange px-4 py-3 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange/10"
+              >
+                <Plus size={18} /> Adicionar período
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
             <button
               type="button"
-              onClick={handleAddPeriod}
-              className="inline-flex items-center gap-2 rounded-xl border border-dashed border-yn-orange px-4 py-3 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange/10"
+              onClick={onClose}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-yn-orange hover:text-yn-orange dark:border-slate-700 dark:text-slate-300 dark:hover:border-yn-orange"
             >
-              <Plus size={18} /> Adicionar período
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSaveDisabled || isSaved}
+              className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaved ? 'Salvo!' : 'Salvar'}
             </button>
           </div>
         </form>
-
-        <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-yn-orange hover:text-yn-orange dark:border-slate-700 dark:text-slate-300 dark:hover:border-yn-orange"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isSaveDisabled || isSaved}
-            onClick={(e) => {
-              console.log('Botão clicado', { isSaveDisabled, isSaved });
-              if (isSaveDisabled) {
-                e.preventDefault();
-                console.log('Botão desabilitado - não pode salvar');
-                return;
-              }
-            }}
-            className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaved ? 'Salvo!' : 'Salvar'}
-          </button>
-        </div>
       </div>
     </div>
   );

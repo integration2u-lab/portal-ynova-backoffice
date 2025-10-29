@@ -14,7 +14,8 @@ import type {
   StatusResumo,
   AnaliseStatus,
 } from '../../types/contracts';
-import { obrigacaoColunas, formatMesLabel } from '../../types/contracts';
+import { obrigacaoColunas, formatMesLabel, summarizePricePeriods } from '../../types/contracts';
+import { formatCurrencyBRL } from '../../utils/currency';
 
 const statusStyles: Record<StatusResumo, string> = {
   Conforme: 'bg-green-100 text-green-700 border border-green-200',
@@ -57,8 +58,35 @@ export function StatusBadge({ status }: { status: StatusResumo }) {
 }
 
 export const ContractDetail: React.FC<Props> = ({ contrato }) => {
+  const priceSummary = React.useMemo(
+    () => summarizePricePeriods(contrato.pricePeriods ?? { periods: [] }),
+    [contrato.pricePeriods]
+  );
+  const precoReajustado = contrato.precoReajustado ?? 0;
+  const vigenciaStatus = contrato.situacaoVigencia ?? 'Não informado';
+  const priceSummaryLabel = priceSummary.filledMonths && priceSummary.averagePrice !== null
+    ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice)}`
+    : 'Nenhum valor por período';
+
   return (
     <div className="space-y-6">
+      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="grid gap-4 text-sm text-gray-600 sm:grid-cols-3">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Situação da vigência</span>
+            <span className="text-sm font-semibold text-gray-900">{vigenciaStatus}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Preço reajustado (diferença)</span>
+            <span className="text-sm font-semibold text-gray-900">{formatCurrencyBRL(precoReajustado)}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Valores por período</span>
+            <span className="text-sm font-semibold text-gray-900">{priceSummaryLabel}</span>
+          </div>
+        </div>
+      </section>
+
       <section aria-labelledby="indicadores" className="bg-white rounded-xl border border-gray-100 shadow-sm">
         <div className="border-b border-gray-100 px-4 py-3">
           <h2 id="indicadores" className="text-base font-semibold text-gray-900">

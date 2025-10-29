@@ -1,3 +1,4 @@
+import type { ContractPricePeriods } from '../types/pricePeriods';
 ﻿export type StatusResumo = 'Conforme' | 'Divergente' | 'Em anÃ¡lise';
 export type AnaliseStatus = 'verde' | 'amarelo' | 'vermelho';
 
@@ -82,6 +83,9 @@ export type ContractMock = {
   obrigacoes: ObrigacaoRow[];
   analises: AnaliseArea[];
   faturas: ContractInvoice[];
+  pricePeriods?: ContractPricePeriods;
+  precoReajustado?: number | null;
+  situacaoVigencia?: 'Vigente' | 'Encerrado';
 };
 
 const meses = ['2023-12', '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'];

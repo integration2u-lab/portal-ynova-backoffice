@@ -1,5 +1,11 @@
 import React from 'react';
 import type { ContractDetails as ContractMock } from '../../types/contracts';
+import type { ContractPricePeriods } from '../../types/pricePeriods';
+import {
+  normalizeAnnualPricePeriods,
+  summarizePricePeriods,
+  calculateAdjustedPriceDifference,
+} from '../../utils/contractPricing';
 import {
   createContract as createContractService,
   deleteContract as deleteContractService,
@@ -460,6 +466,104 @@ const normalizePeriodos = (value: unknown): ContractMock['periodos'] => {
   return value.map((periodo) => normalizeString(periodo)).filter(Boolean);
 };
 
+const normalizePricePeriods = (value: unknown): ContractPricePeriods => {
+  const extractArray = (input: unknown): unknown[] => {
+    if (Array.isArray(input)) return input;
+    if (!input || typeof input !== 'object') return [];
+    if (Array.isArray((input as { periods?: unknown }).periods)) {
+      return (input as { periods: unknown[] }).periods;
+    }
+    if (Array.isArray((input as { data?: unknown }).data)) {
+      return (input as { data: unknown[] }).data;
+    }
+    if (Array.isArray((input as { items?: unknown }).items)) {
+      return (input as { items: unknown[] }).items;
+    }
+    return [];
+  };
+
+  const rawPeriods = extractArray(value);
+  if (!rawPeriods.length) {
+    return { periods: [] };
+  }
+
+  const normalized = rawPeriods
+    .map((item, index) => {
+      const id = normalizeString((item as { id?: unknown }).id) || `period-${index + 1}`;
+      const start =
+        normalizeReferenceMonth(
+          (item as { start?: unknown }).start ??
+            (item as { start_month?: unknown }).start_month ??
+            (item as { inicio?: unknown }).inicio ??
+            (item as { month_start?: unknown }).month_start
+        ) || '';
+      const end =
+        normalizeReferenceMonth(
+          (item as { end?: unknown }).end ??
+            (item as { end_month?: unknown }).end_month ??
+            (item as { fim?: unknown }).fim ??
+            (item as { month_end?: unknown }).month_end
+        ) || '';
+      const defaultPrice =
+        parseNumericInput(
+          (item as { defaultPrice?: unknown }).defaultPrice ??
+            (item as { default_price?: unknown }).default_price ??
+            (item as { default_price_mwh?: unknown }).default_price_mwh ??
+            (item as { price?: unknown }).price
+        ) ?? null;
+
+      const monthsRaw =
+        (item as { months?: unknown }).months ??
+        (item as { valores?: unknown }).valores ??
+        (item as { prices?: unknown }).prices ??
+        (item as { meses?: unknown }).meses;
+
+      let months: ContractPricePeriods['periods'][number]['months'] = [];
+
+      if (Array.isArray(monthsRaw)) {
+        months = monthsRaw
+          .map((month) => {
+            const ym = normalizeReferenceMonth(
+              (month as { ym?: unknown }).ym ??
+                (month as { month?: unknown }).month ??
+                (month as { competencia?: unknown }).competencia
+            );
+            if (!ym) return null;
+            const price =
+              parseNumericInput(
+                (month as { price?: unknown }).price ??
+                  (month as { valor?: unknown }).valor ??
+                  (month as { value?: unknown }).value
+              ) ?? null;
+            return { ym, price };
+          })
+          .filter((month): month is { ym: string; price: number | null } => Boolean(month));
+      } else if (monthsRaw && typeof monthsRaw === 'object') {
+        months = Object.entries(monthsRaw as Record<string, unknown>)
+          .map(([key, value]) => {
+            const ym = normalizeReferenceMonth(key);
+            if (!ym) return null;
+            return { ym, price: parseNumericInput(value) ?? null };
+          })
+          .filter((month): month is { ym: string; price: number | null } => Boolean(month));
+      }
+
+      const fallbackStart = start || (months.length ? months[0]!.ym : `${new Date().getFullYear()}-01`);
+      const fallbackEnd = end || (months.length ? months[months.length - 1]!.ym : fallbackStart);
+
+      return {
+        id,
+        start: fallbackStart,
+        end: fallbackEnd,
+        defaultPrice,
+        months: months.map((month) => ({ ym: month.ym, price: month.price })),
+      };
+    })
+    .filter((period) => period.start);
+
+  return normalizeAnnualPricePeriods({ periods: normalized });
+};
+
 const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
   const extractArray = (data: unknown): unknown[] => {
     if (Array.isArray(data)) return data;
@@ -577,6 +681,35 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { precoMedio?: unknown }).precoMedio ??
       (item as { average_price_mwh?: unknown }).average_price_mwh;
     const precoMedio = Number(rawPrice) || 0;
+    const pricePeriodsRaw =
+      (item as { pricePeriods?: unknown }).pricePeriods ??
+      (item as { price_periods?: unknown }).price_periods ??
+      (item as { precosPeriodo?: unknown }).precosPeriodo ??
+      (item as { precos_periodos?: unknown }).precos_periodos;
+    const pricePeriods = normalizePricePeriods(pricePeriodsRaw);
+    const precoReajustadoDireto = parseNumericInput(
+      (item as { preco_reajustado?: unknown }).preco_reajustado ??
+        (item as { precoReajustado?: unknown }).precoReajustado ??
+        (item as { adjusted_price_delta?: unknown }).adjusted_price_delta ??
+        (item as { price_adjusted_delta_mwh?: unknown }).price_adjusted_delta_mwh
+    );
+    const precoReajustadoValor =
+      precoReajustadoDireto ?? calculateAdjustedPriceDifference(pricePeriods, precoMedio);
+    const situacaoVigenciaRaw = normalizeString(
+      (item as { situacao_vigencia?: unknown }).situacao_vigencia ??
+        (item as { vigencia_status?: unknown }).vigencia_status ??
+        (item as { situacaoVigencia?: unknown }).situacaoVigencia ??
+        (item as { status_vigencia?: unknown }).status_vigencia
+    );
+    let situacaoVigencia: 'Vigente' | 'Encerrado' | undefined;
+    if (situacaoVigenciaRaw) {
+      const normalizedStatus = removeDiacritics(situacaoVigenciaRaw).toLowerCase();
+      if (normalizedStatus.includes('encerr')) {
+        situacaoVigencia = 'Encerrado';
+      } else if (normalizedStatus.includes('vigente') || normalizedStatus.includes('ativo')) {
+        situacaoVigencia = 'Vigente';
+      }
+    }
 
     const inicioVigencia = normalizeIsoDate(
       (item as { inicioVigencia?: unknown; vigenciaInicio?: unknown }).inicioVigencia ??
@@ -589,6 +722,17 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { vigenciaFim?: unknown }).vigenciaFim ??
         (item as { end_date?: unknown }).end_date
     );
+
+    const situacaoVigenciaFinal = (() => {
+      if (situacaoVigencia) return situacaoVigencia;
+      if (fimVigencia) {
+        const endDate = new Date(`${fimVigencia}T00:00:00`);
+        if (!Number.isNaN(endDate.getTime()) && endDate < new Date()) {
+          return 'Encerrado';
+        }
+      }
+      return 'Vigente';
+    })();
 
     const periodosBase = normalizePeriodos(
       (item as { periodos?: unknown }).periodos ??
@@ -684,6 +828,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ensureField('Fonte de energia', fonteValue || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
     ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
+    ensureField('Situação da vigência', situacaoVigenciaFinal);
+    ensureField('Preço reajustado (diferença)', formatCurrencyBRL(precoReajustadoValor));
     
     // Add compliance fields
     ensureField('Conformidade consumo', normalizeString((item as { compliance_consumption?: unknown }).compliance_consumption) || 'Não informado');
@@ -764,6 +910,9 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       obrigacoes: normalizeObrigacoes((item as { obrigacoes?: unknown }).obrigacoes),
       analises: normalizeAnalises((item as { analises?: unknown; analisesConformidade?: unknown }).analises ?? (item as { analisesConformidade?: unknown }).analisesConformidade),
       faturas: normalizeFaturas((item as { faturas?: unknown; invoices?: unknown }).faturas ?? (item as { invoices?: unknown }).invoices),
+      pricePeriods,
+      precoReajustado: precoReajustadoValor,
+      situacaoVigencia: situacaoVigenciaFinal,
     } satisfies ContractMock;
   });
 };
@@ -900,6 +1049,26 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     adjusted: parsePercentInput(contract.flex) ? true : undefined,
     price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
   };
+
+  const normalizedPricePeriods = normalizeAnnualPricePeriods(contract.pricePeriods);
+  if (normalizedPricePeriods.periods.length) {
+    payload.price_periods = normalizedPricePeriods.periods.map((period) => ({
+      id: period.id,
+      start_month: period.start,
+      end_month: period.end,
+      default_price_mwh: period.defaultPrice ?? undefined,
+      months: period.months.map((month) => ({
+        month: month.ym,
+        price: month.price,
+      })),
+    }));
+  }
+  if (contract.precoReajustado !== undefined && contract.precoReajustado !== null) {
+    payload.price_adjusted_delta_mwh = contract.precoReajustado;
+  }
+  if (contract.situacaoVigencia) {
+    payload.vigencia_status = contract.situacaoVigencia;
+  }
 
   return Object.fromEntries(
     Object.entries(payload).filter(([key, value]) => {
