@@ -269,6 +269,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
             </button>
           </div>
 
+          <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {isSaved && (
               <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
