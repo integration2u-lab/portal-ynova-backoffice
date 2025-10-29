@@ -4,7 +4,15 @@ import type {
   ContractInvoiceStatus,
   ContractDetails as ContractMock,
   StatusResumo,
+  ContractPricePeriods,
 } from '../../types/contracts';
+import {
+  summarizePricePeriods,
+  normalizeAnnualPricePeriods,
+  calculateAdjustedPriceDifference,
+} from '../../types/contracts';
+import { formatCurrencyBRL } from '../../utils/currency';
+import PricePeriodsModal from './PricePeriodsModal';
 import { useContracts } from './ContractsContext';
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
@@ -37,9 +45,23 @@ type FormState = {
     valor: string;
     status: ContractInvoiceStatus;
   }>;
+  pricePeriods: ContractPricePeriods;
+  vigenciaStatus: 'Vigente' | 'Encerrado';
 };
 
 function buildFormState(contrato: ContractMock): FormState {
+  const normalizedPricePeriods = normalizeAnnualPricePeriods(contrato.pricePeriods);
+  const inferVigencia = (): 'Vigente' | 'Encerrado' => {
+    if (contrato.situacaoVigencia === 'Vigente' || contrato.situacaoVigencia === 'Encerrado') {
+      return contrato.situacaoVigencia;
+    }
+    const endDate = contrato.fimVigencia ? new Date(`${contrato.fimVigencia}T00:00:00`) : null;
+    if (endDate && !Number.isNaN(endDate.getTime()) && endDate < new Date()) {
+      return 'Encerrado';
+    }
+    return 'Vigente';
+  };
+
   return {
     codigo: contrato.codigo,
     cliente: contrato.cliente,
@@ -67,6 +89,8 @@ function buildFormState(contrato: ContractMock): FormState {
       valor: fatura.valor.toString(),
       status: fatura.status,
     })),
+    pricePeriods: normalizedPricePeriods,
+    vigenciaStatus: inferVigencia(),
   };
 }
 
@@ -81,6 +105,30 @@ export default function EditContractPage() {
   );
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isPriceModalOpen, setIsPriceModalOpen] = React.useState(false);
+
+  const priceSummary = React.useMemo(() => {
+    if (!formState) {
+      return { filledMonths: 0, averagePrice: null };
+    }
+    return summarizePricePeriods(formState.pricePeriods);
+  }, [formState]);
+
+  const precoMedioValue = React.useMemo(() => (formState ? Number(formState.precoMedio) || 0 : 0), [formState?.precoMedio]);
+
+  const priceDifference = React.useMemo(
+    () => (formState ? calculateAdjustedPriceDifference(formState.pricePeriods, precoMedioValue) : 0),
+    [formState?.pricePeriods, precoMedioValue]
+  );
+
+  const priceSummaryLabel = React.useMemo(() => {
+    if (!priceSummary.filledMonths || priceSummary.averagePrice === null) {
+      return 'Nenhum valor por período';
+    }
+    return `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice)}`;
+  }, [priceSummary]);
+
+  const priceDifferenceLabel = React.useMemo(() => formatCurrencyBRL(priceDifference), [priceDifference]);
 
   React.useEffect(() => {
     if (contrato) {
@@ -160,6 +208,12 @@ export default function EditContractPage() {
     });
   };
 
+  const handlePricePeriodsSave = (periods: ContractPricePeriods) => {
+    const normalized = normalizeAnnualPricePeriods(periods);
+    setFormState((prev) => (prev ? { ...prev, pricePeriods: normalized } : prev));
+    setIsPriceModalOpen(false);
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!contrato || !formState || isSaving) return;
@@ -167,6 +221,11 @@ export default function EditContractPage() {
     setSubmitError(null);
     setIsSaving(true);
     try {
+      const normalizedPricePeriods = normalizeAnnualPricePeriods(formState.pricePeriods);
+      const submissionSummary = summarizePricePeriods(normalizedPricePeriods);
+      const precoMedioNumero = Number(formState.precoMedio) || 0;
+      const adjustedDifference = calculateAdjustedPriceDifference(normalizedPricePeriods, precoMedioNumero);
+
       await updateContract(contrato.id, (current) => ({
         ...current,
         codigo: formState.codigo.trim(),
@@ -182,7 +241,9 @@ export default function EditContractPage() {
         limiteSuperior: formState.limiteSuperior.trim(),
         limiteInferior: formState.limiteInferior.trim(),
         flex: formState.flex.trim(),
-        precoMedio: Number(formState.precoMedio) || 0,
+        precoMedio: submissionSummary.filledMonths && submissionSummary.averagePrice !== null
+          ? submissionSummary.averagePrice
+          : precoMedioNumero,
         fornecedor: formState.fornecedor.trim(),
         proinfa: (() => {
           const raw = formState.proinfa.trim();
@@ -203,6 +264,9 @@ export default function EditContractPage() {
           valor: Number(fatura.valor) || 0,
           status: fatura.status,
         })),
+        pricePeriods: normalizedPricePeriods,
+        precoReajustado: adjustedDifference,
+        situacaoVigencia: formState.vigenciaStatus,
       }));
 
       navigate(`/contratos/${contrato.id}`);
@@ -385,6 +449,17 @@ export default function EditContractPage() {
               />
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+              Situação da vigência
+              <select
+                value={formState.vigenciaStatus}
+                onChange={handleInputChange('vigenciaStatus')}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
+              >
+                <option value="Vigente">Vigente</option>
+                <option value="Encerrado">Encerrado</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
               Limite superior
               <input
                 value={formState.limiteSuperior}
@@ -418,6 +493,21 @@ export default function EditContractPage() {
                 className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
               />
             </label>
+            <div className="flex flex-col gap-2 text-sm font-medium text-gray-700 md:col-span-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPriceModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
+                >
+                  Valor por Período
+                </button>
+                <span className="text-sm text-gray-500">{priceSummaryLabel}</span>
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Preço reajustado (diferença): <span className="text-gray-900">{priceDifferenceLabel}</span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -548,11 +638,11 @@ export default function EditContractPage() {
             {submitError}
           </div>
         )}
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <Link
-            to={`/contratos/${contrato.id}`}
-            className="inline-flex items-center justify-center rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
-          >
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <Link
+          to={`/contratos/${contrato.id}`}
+          className="inline-flex items-center justify-center rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-yn-orange hover:text-yn-orange"
+        >
             Cancelar
           </Link>
           <button
@@ -564,6 +654,12 @@ export default function EditContractPage() {
           </button>
         </div>
       </form>
+      <PricePeriodsModal
+        open={isPriceModalOpen}
+        value={formState.pricePeriods}
+        onClose={() => setIsPriceModalOpen(false)}
+        onSave={handlePricePeriodsSave}
+      />
     </div>
   );
 }
