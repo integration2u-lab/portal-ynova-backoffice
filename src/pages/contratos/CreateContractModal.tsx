@@ -627,7 +627,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       flex: `${formState.flexibility || '0'}%`,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
-      proinfa: null,
       cicloFaturamento: '',
       periodos: referenceMonths,
       pricePeriods: normalizedPricePeriods,

@@ -34,7 +34,6 @@ type FormState = {
   flex: string;
   precoMedio: string;
   fornecedor: string;
-  proinfa: string;
   cicloFaturamento: string;
   dadosContrato: ContractMock['dadosContrato'];
   resumoConformidades: ContractMock['resumoConformidades'];
@@ -78,7 +77,6 @@ function buildFormState(contrato: ContractMock): FormState {
     flex: contrato.flex,
     precoMedio: contrato.precoMedio.toString(),
     fornecedor: contrato.fornecedor,
-    proinfa: contrato.proinfa != null ? contrato.proinfa.toString() : '',
     cicloFaturamento: contrato.cicloFaturamento,
     dadosContrato: contrato.dadosContrato.map((campo) => ({ ...campo })),
     resumoConformidades: { ...contrato.resumoConformidades },
@@ -245,12 +243,6 @@ export default function EditContractPage() {
           ? submissionSummary.averagePrice
           : precoMedioNumero,
         fornecedor: formState.fornecedor.trim(),
-        proinfa: (() => {
-          const raw = formState.proinfa.trim();
-          if (!raw) return null;
-          const parsed = Number(raw.replace(',', '.'));
-          return Number.isNaN(parsed) ? null : parsed;
-        })(),
         cicloFaturamento: formState.cicloFaturamento,
         dadosContrato: formState.dadosContrato.map((item, index) => ({
           label: item.label.trim() || `Campo ${index + 1}`,
@@ -401,18 +393,6 @@ export default function EditContractPage() {
                 onChange={handleInputChange('fornecedor')}
                 className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
                 placeholder="Ex: Bolt"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-              Proinfa
-              <input
-                type="number"
-                step="0.001"
-                min="0"
-                value={formState.proinfa}
-                onChange={handleInputChange('proinfa')}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30"
-                placeholder="Ex: 0.219"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">

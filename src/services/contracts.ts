@@ -22,7 +22,6 @@ export type Contract = {
   flexibility_percent?: string | number | null;
   average_price_mwh?: string | number | null;
   supplier?: string | null;
-  proinfa_contribution?: string | number | null;
   spot_price_ref_mwh?: string | number | null;
   compliance_consumption?: string | number | null;
   compliance_nf?: string | number | null;
@@ -106,7 +105,6 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     flexibility_percent: item?.flexibility_percent ?? coerceNumber(item?.flexibility_percent),
     average_price_mwh: item?.average_price_mwh ?? coerceNumber(item?.average_price_mwh),
     supplier: item?.supplier === undefined ? undefined : item?.supplier === null ? null : toStringSafe(item?.supplier),
-    proinfa_contribution: item?.proinfa_contribution ?? coerceNumber(item?.proinfa_contribution),
     spot_price_ref_mwh: item?.spot_price_ref_mwh ?? coerceNumber(item?.spot_price_ref_mwh),
     compliance_consumption: item?.compliance_consumption ?? coerceNumber(item?.compliance_consumption),
     compliance_nf: item?.compliance_nf ?? coerceNumber(item?.compliance_nf),
@@ -157,25 +155,12 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;
   const corporateNameValue =
     typeof payload.corporate_name === 'string' ? payload.corporate_name.trim() : payload.corporate_name;
-  const proinfaRaw = payload.proinfa_contribution;
-  let proinfa: number | null | undefined = undefined;
-  if (proinfaRaw === undefined) {
-    proinfa = undefined;
-  } else if (proinfaRaw === null || proinfaRaw === '') {
-    proinfa = null;
-  } else if (typeof proinfaRaw === 'number') {
-    proinfa = Number.isFinite(proinfaRaw) ? proinfaRaw : null;
-  } else {
-    const parsed = Number(String(proinfaRaw).replace(',', '.'));
-    proinfa = Number.isFinite(parsed) ? parsed : null;
-  }
 
   return {
     ...payload,
     corporate_name:
       corporateNameValue === undefined ? undefined : corporateNameValue === '' ? null : corporateNameValue,
     supplier: supplierValue === undefined ? undefined : supplierValue === '' ? null : supplierValue,
-    proinfa_contribution: proinfa,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',
   };
 };

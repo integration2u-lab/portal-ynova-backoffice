@@ -72,7 +72,6 @@ export type ContractMock = {
   flex: string;
   precoMedio: number;
   fornecedor: string;
-  proinfa: number | null;
   cicloFaturamento: string;
   periodos: string[]; // YYYY-MM
   resumoConformidades: Record<'Consumo' | 'NF' | 'Fatura' | 'Encargos' | 'Conformidade', StatusResumo>;
@@ -136,7 +135,6 @@ export const mockContracts: ContractMock[] = [
     flex: '5%',
     precoMedio: 274.32,
     fornecedor: 'Neoenergia Comercializadora',
-    proinfa: 0.219,
     cicloFaturamento: '2024-06',
     periodos: meses.slice(1),
     resumoConformidades: {
@@ -154,7 +152,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Neoenergia Comercializadora' },
-      { label: 'Proinfa', value: '0,219' },
       { label: 'VigÃªncia', value: 'Jul/2023 - Jun/2025' },
       { label: 'Modalidade', value: 'PreÃ§o Fixo com Ajuste PLD' },
       { label: 'Fonte', value: 'Convencional' },
@@ -303,7 +300,6 @@ export const mockContracts: ContractMock[] = [
     flex: '8%',
     precoMedio: 219.5,
     fornecedor: 'RaÃ­zen Energia',
-    proinfa: 0.185,
     cicloFaturamento: '2024-05',
     periodos: meses.slice(0, 6),
     resumoConformidades: {
@@ -321,7 +317,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'RaÃ­zen Energia' },
-      { label: 'Proinfa', value: '0,185' },
       { label: 'VigÃªncia', value: 'Jan/2022 - Dez/2024' },
       { label: 'Modalidade', value: 'TUSD Verde' },
       { label: 'Fonte', value: 'Incentivada' },
@@ -469,7 +464,6 @@ export const mockContracts: ContractMock[] = [
     flex: '7%',
     precoMedio: 252.9,
     fornecedor: 'Brookfield Energia',
-    proinfa: null,
     cicloFaturamento: '2024-06',
     periodos: meses.slice(2),
     resumoConformidades: {
@@ -487,7 +481,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Brookfield Energia' },
-      { label: 'Proinfa', value: 'NÃ£o informado' },
       { label: 'VigÃªncia', value: 'Jan/2024 - Dez/2026' },
       { label: 'Modalidade', value: 'PreÃ§o Fixo' },
       { label: 'Fonte', value: 'Convencional' },
@@ -628,3 +621,4 @@ export function formatMesLabel(periodo: string) {
     year: 'numeric',
   });
 }
+

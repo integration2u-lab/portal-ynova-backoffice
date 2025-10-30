@@ -433,7 +433,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const cnpj = cnpjValue ? formatCnpj(String(cnpjValue)) : 'Não informado';
 
   // Calculate metrics from the single record data
-  const consumptionKwh = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo'));
+  const consumptionKwh = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo', 'metrics.consumption_kwh', 'metrics.consumptionKwh', 'summary.consumption_kwh'));
   const consumptionMwh = consumptionKwh !== null ? consumptionKwh / 1000 : null;
   const price = toNumber(getSafe(record, 'price', 'preco', 'tarifa'));
   const billable = toNumber(getSafe(record, 'billable', 'custo', 'cost', 'value'));

@@ -54,6 +54,11 @@ const parseEventDate = (value: unknown): string => {
   return text;
 };
 
+type SelectOption = {
+  label: string;
+  value: string;
+};
+
 type EditableMonthColumn = {
   key: keyof EmailRow;
   label: string;
@@ -61,12 +66,24 @@ type EditableMonthColumn = {
   inputType?: 'text' | 'email' | 'select' | 'datetime-local';
   minWidth?: string;
   required?: boolean;
+  selectOptions?: SelectOption[];
 };
 
-const booleanSelectOptions = [
+const booleanSelectOptions: SelectOption[] = [
   { label: 'Selecione', value: '' },
   { label: 'Sim', value: 'Sim' },
-  { label: 'NÃ£o', value: 'NÃ£o' },
+  { label: 'Não', value: 'Não' },
+];
+
+const supplierSelectOptions: SelectOption[] = [
+  { label: 'Selecione', value: '' },
+  { label: 'Boven Energia', value: 'Boven Energia' },
+  { label: 'Serena Energia', value: 'Serena Energia' },
+  { label: 'Bolt Energy', value: 'Bolt Energy' },
+  { label: 'Matrix Energia', value: 'Matrix Energia' },
+  { label: 'Voltta', value: 'Voltta' },
+  { label: 'Newave', value: 'Newave' },
+  { label: 'Auren', value: 'Auren' },
 ];
 
 const reajustedCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -162,7 +179,7 @@ const monthColumns: EditableMonthColumn[] = [
     inputType: 'text',
     minWidth: 'min-w-[160px]',
   },
-  { key: 'fornecedor', label: 'Fornecedor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
+  { key: 'fornecedor', label: 'Fornecedor', editable: true, inputType: 'select', minWidth: 'min-w-[150px]', selectOptions: supplierSelectOptions },
   { key: 'medidor', label: 'Medidor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
   { key: 'consumo', label: 'Consumo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'perdas3', label: 'Perdas (3%)', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
@@ -773,6 +790,16 @@ export default function EnergyBalanceDetailPage() {
                             : 'border-gray-200 text-gray-900 focus:border-yn-orange focus:ring-yn-orange/40'
                         }`;
 
+                        let selectOptionsToRender: SelectOption[] | undefined;
+                        if (column.inputType === 'select') {
+                          const availableOptions = column.selectOptions ?? booleanSelectOptions;
+                          const trimmedValue = displayValue.trim();
+                          selectOptionsToRender =
+                            trimmedValue && !availableOptions.some((option) => option.value === displayValue)
+                              ? [...availableOptions, { label: trimmedValue, value: displayValue }]
+                              : availableOptions;
+                        }
+
                         return (
                           <td key={column.key} className={`px-2 py-3 align-top ${column.minWidth ?? ''}`}>
                             {column.inputType === 'select' ? (
@@ -783,7 +810,7 @@ export default function EnergyBalanceDetailPage() {
                                 }
                                 className={`${commonClasses} bg-white`}
                               >
-                                {booleanSelectOptions.map((option) => (
+                                {(selectOptionsToRender ?? booleanSelectOptions).map((option) => (
                                   <option key={option.value} value={option.value}>
                                     {option.label}
                                   </option>
@@ -907,3 +934,6 @@ export default function EnergyBalanceDetailPage() {
     </div>
   );
 }
+
+
+
