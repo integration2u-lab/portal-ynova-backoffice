@@ -237,6 +237,7 @@ export default function EnergyBalanceDetailPage() {
   const [rawMonthMap, setRawMonthMap] = React.useState<Record<string, Record<string, unknown>>>({});
   const [editableRows, setEditableRows] = React.useState<Record<string, EmailRow>>({});
   const [dirtyRows, setDirtyRows] = React.useState<string[]>([]);
+  const dirtyRowsRef = React.useRef<string[]>([]);
   const [savingRowId, setSavingRowId] = React.useState<string | null>(null);
 
   const [events, setEvents] = React.useState<EnergyBalanceEvent[]>([]);
@@ -251,6 +252,10 @@ export default function EnergyBalanceDetailPage() {
     detailControllerRef.current = controller;
     setLoading(true);
     setError('');
+    setRawDetail(null);
+    setRawMonthMap({});
+    setEditableRows({});
+    setDirtyRows([]);
     try {
       const payload = await getById(id, controller.signal);
       const rawRecord =
@@ -260,8 +265,15 @@ export default function EnergyBalanceDetailPage() {
       setRawDetail(rawRecord);
 
       const normalized = normalizeEnergyBalanceDetail(payload);
-      setRawMonthMap(extractRawMonthMapping(normalized, rawRecord));
+      const monthMap = extractRawMonthMapping(normalized, rawRecord);
+      setRawMonthMap(monthMap);
       setDetail(normalized);
+
+      const initialRows = normalized.months.reduce<Record<string, EmailRow>>((acc, month) => {
+        acc[month.id] = createEditableRow(normalized, month);
+        return acc;
+      }, {});
+      setEditableRows(initialRows);
     } catch (fetchError) {
       if (controller.signal.aborted) {
         return;
@@ -336,6 +348,10 @@ export default function EnergyBalanceDetailPage() {
   }, [fetchEvents]);
 
   React.useEffect(() => {
+    dirtyRowsRef.current = dirtyRows;
+  }, [dirtyRows]);
+
+  React.useEffect(() => {
     if (!detail) {
       setEditableRows({});
       setDirtyRows([]);
@@ -343,26 +359,43 @@ export default function EnergyBalanceDetailPage() {
     }
 
     setEditableRows((prev) => {
-      const nextRows: Record<string, EmailRow> = { ...prev };
       const detailIds = new Set(detail.months.map((month) => month.id));
+      const nextRows: Record<string, EmailRow> = {};
       let hasChanges = false;
+      const dirtySnapshot = dirtyRowsRef.current;
 
       detail.months.forEach((month) => {
-        if (!nextRows[month.id]) {
-          nextRows[month.id] = createEditableRow(detail, month);
+        const existingRow = prev[month.id];
+        if (existingRow && dirtySnapshot.includes(month.id)) {
+          nextRows[month.id] = existingRow;
+        } else {
+          const rebuiltRow = createEditableRow(detail, month);
+          nextRows[month.id] = rebuiltRow;
+          if (existingRow) {
+            hasChanges = true;
+          }
+        }
+        if (!existingRow) {
           hasChanges = true;
         }
       });
 
       Object.keys(prev).forEach((rowId) => {
         if (!detailIds.has(rowId)) {
-          delete nextRows[rowId];
           hasChanges = true;
         }
       });
 
       return hasChanges ? nextRows : prev;
     });
+
+    const dirtySnapshot = dirtyRowsRef.current;
+    const filteredDirtyRows = dirtySnapshot.filter((rowId) =>
+      detail.months.some((month) => month.id === rowId),
+    );
+    if (filteredDirtyRows.length !== dirtySnapshot.length) {
+      setDirtyRows(filteredDirtyRows);
+    }
   }, [detail]);
 
   const handleFieldChange = React.useCallback(
@@ -663,7 +696,13 @@ export default function EnergyBalanceDetailPage() {
                               </select>
                             ) : (
                               <input
-                                type={column.inputType === 'email' ? 'email' : 'text'}
+                                type={
+                                  column.inputType === 'email'
+                                    ? 'email'
+                                    : column.inputType === 'datetime-local'
+                                      ? 'datetime-local'
+                                      : 'text'
+                                }
                                 value={inputValue}
                                 onChange={(event) =>
                                   handleFieldChange(month.id, column.key, event.target.value, baseRow)
