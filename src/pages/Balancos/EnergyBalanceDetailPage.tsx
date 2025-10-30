@@ -278,6 +278,8 @@ export default function EnergyBalanceDetailPage() {
       if (controller.signal.aborted) {
         return;
       }
+      setRawDetail(null);
+      setRawMonthMap({});
       const message =
         fetchError instanceof Error
           ? fetchError.message
