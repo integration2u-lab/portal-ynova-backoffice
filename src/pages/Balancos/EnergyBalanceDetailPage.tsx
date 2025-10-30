@@ -69,10 +69,99 @@ const booleanSelectOptions = [
   { label: 'Não', value: 'Não' },
 ];
 
+const reajustedCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const parseCurrencyCandidate = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed
+      .replace(/[R$\s]/gi, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '')
+      .replace(',', '.');
+    const numeric = Number.parseFloat(normalized);
+    return Number.isNaN(numeric) ? null : numeric;
+  }
+  return null;
+};
+
+const formatReajustedCurrency = (value: number): string => {
+  try {
+    return reajustedCurrencyFormatter.format(value);
+  } catch (error) {
+    console.warn('[EnergyBalanceDetail] falha ao formatar preço reajustado', error);
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  }
+};
+
+const deriveReajustedDisplayValue = (
+  month: EnergyBalanceDetail['months'][number],
+  rawMonth?: Record<string, unknown> | null,
+): string => {
+  const candidates: unknown[] = [];
+
+  if (rawMonth) {
+    const candidateKeys = [
+      'reajuted_price',
+      'reajusted_price',
+      'reajustedPrice',
+      'reajutedPrice',
+      'price_reajusted',
+      'priceReajusted',
+      'price_adjusted',
+      'priceAdjusted',
+      'adjusted_price',
+      'adjustedPrice',
+      'precoReajustado',
+      'preco_reajustado',
+    ];
+    for (const key of candidateKeys) {
+      if (Object.prototype.hasOwnProperty.call(rawMonth, key)) {
+        candidates.push(rawMonth[key]);
+      }
+    }
+  }
+
+  candidates.push(month.ajustado);
+
+  for (const candidate of candidates) {
+    const numeric = parseCurrencyCandidate(candidate);
+    if (numeric !== null) {
+      return formatReajustedCurrency(numeric);
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  return '';
+};
+
 const monthColumns: EditableMonthColumn[] = [
   { key: 'preco', label: 'Preço', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'dataBase', label: 'Data-base', editable: false, minWidth: 'min-w-[140px]' },
-  { key: 'reajustado', label: 'Reajustado', editable: true, inputType: 'select', minWidth: 'min-w-[120px]' },
+  {
+    key: 'reajustado',
+    label: 'Preço reajustado (R$)',
+    editable: true,
+    inputType: 'text',
+    minWidth: 'min-w-[160px]',
+  },
   { key: 'fornecedor', label: 'Fornecedor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
   { key: 'medidor', label: 'Medidor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
   { key: 'consumo', label: 'Consumo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
@@ -129,7 +218,7 @@ const prepareEditableValue = (field: keyof EmailRow, value: string | undefined):
   const sanitized = sanitizeDisplayValue(value);
   if (!sanitized) return '';
 
-  if (['preco', 'net', 'faturar', 'proinfa'].includes(field)) {
+  if (['preco', 'net', 'faturar', 'proinfa', 'reajustado'].includes(field)) {
     return sanitized.replace(/R\$\s*/gi, '').trim();
   }
   if (['consumo', 'minimo', 'maximo'].includes(field)) {
@@ -144,12 +233,13 @@ const prepareEditableValue = (field: keyof EmailRow, value: string | undefined):
 const createEditableRow = (
   detail: EnergyBalanceDetail,
   month: EnergyBalanceDetail['months'][number],
+  rawMonth?: Record<string, unknown> | null,
 ): EmailRow => ({
   id: month.id,
   clientes: sanitizeDisplayValue(detail.cliente || detail.header.razao) || detail.header.razao || detail.cliente || '',
   preco: prepareEditableValue('preco', month.precoReaisPorMWh),
   dataBase: month.mes,
-  reajustado: sanitizeDisplayValue(month.ajustado),
+  reajustado: prepareEditableValue('reajustado', deriveReajustedDisplayValue(month, rawMonth)),
   fornecedor: sanitizeDisplayValue(month.fornecedor),
   medidor: sanitizeDisplayValue(month.medidor),
   consumo: prepareEditableValue('consumo', month.consumoMWh),
@@ -270,7 +360,8 @@ export default function EnergyBalanceDetailPage() {
       setDetail(normalized);
 
       const initialRows = normalized.months.reduce<Record<string, EmailRow>>((acc, month) => {
-        acc[month.id] = createEditableRow(normalized, month);
+        const rawMonth = monthMap[month.id] ?? rawRecord ?? null;
+        acc[month.id] = createEditableRow(normalized, month, rawMonth);
         return acc;
       }, {});
       setEditableRows(initialRows);
@@ -369,7 +460,8 @@ export default function EnergyBalanceDetailPage() {
         if (existingRow && dirtySnapshot.includes(month.id)) {
           nextRows[month.id] = existingRow;
         } else {
-          const rebuiltRow = createEditableRow(detail, month);
+          const rawMonth = rawMonthMap[month.id] ?? rawDetail ?? null;
+          const rebuiltRow = createEditableRow(detail, month, rawMonth);
           nextRows[month.id] = rebuiltRow;
           if (existingRow) {
             hasChanges = true;
@@ -396,7 +488,7 @@ export default function EnergyBalanceDetailPage() {
     if (filteredDirtyRows.length !== dirtySnapshot.length) {
       setDirtyRows(filteredDirtyRows);
     }
-  }, [detail]);
+  }, [detail, rawDetail, rawMonthMap]);
 
   const handleFieldChange = React.useCallback(
     (rowId: string, field: keyof EmailRow, value: string, baseRow?: EmailRow) => {
@@ -481,10 +573,12 @@ export default function EnergyBalanceDetailPage() {
         disparo: updatedRow.disparo,
       };
 
+      const rawMonth = rawMonthMap[rowId] ?? rawDetail ?? null;
+
       setEditableRows((prev) => ({
         ...prev,
         [rowId]: {
-          ...(prev[rowId] ?? (monthForRow && detail ? createEditableRow(detail, monthForRow) : ({} as EmailRow))),
+          ...(prev[rowId] ?? (monthForRow && detail ? createEditableRow(detail, monthForRow, rawMonth) : ({} as EmailRow))),
           ...partial,
         },
       }));
@@ -504,7 +598,7 @@ export default function EnergyBalanceDetailPage() {
 
       setDirtyRows((prev) => prev.filter((item) => item !== rowId));
     },
-    [detail],
+    [detail, rawDetail, rawMonthMap],
   );
 
   if (loading) {
@@ -562,12 +656,12 @@ export default function EnergyBalanceDetailPage() {
 
   const contractLink = detail.header.contractId ? `/contratos/${detail.header.contractId}` : null;
   const primaryMonth = detail.months[0] ?? null;
-  const primaryMonthRow = primaryMonth
-    ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth)
-    : null;
   const primaryMonthRaw = primaryMonth
-    ? rawMonthMap[primaryMonth.id] ?? rawDetail ?? undefined
-    : rawDetail ?? undefined;
+    ? rawMonthMap[primaryMonth.id] ?? rawDetail ?? null
+    : rawDetail ?? null;
+  const primaryMonthRow = primaryMonth
+    ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)
+    : null;
 
   return (
     <div className="space-y-6 p-4">
@@ -643,7 +737,8 @@ export default function EnergyBalanceDetailPage() {
                 </tr>
               ) : (
                 detail.months.map((month) => {
-                  const baseRow = editableRows[month.id] ?? createEditableRow(detail, month);
+                  const rawMonth = rawMonthMap[month.id] ?? rawDetail ?? null;
+                  const baseRow = editableRows[month.id] ?? createEditableRow(detail, month, rawMonth);
                   const isRowDirty = dirtyRows.includes(month.id);
 
                   return (

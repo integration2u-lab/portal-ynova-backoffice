@@ -39,7 +39,7 @@ const parseBoolean = (value: string): boolean | null => {
   if (['nao', 'não', 'nao.', 'nao ', 'não.', 'nao ', 'n', 'false', '0', 'no'].includes(normalized)) {
     return false;
   }
-  return false;
+  return null;
 };
 
 const parseDate = (value: string, isDateTime = false): string | null => {
@@ -137,9 +137,23 @@ export function convertDisplayRowToEnergyBalancePayload(
   payload.cpCode = !isEmptyValue(row.cp) ? row.cp : null;
 
   const adjustedValue = parseBoolean(row.reajustado ?? '');
+  const adjustedPrice = parseNumber(row.reajustado ?? '');
   const sentOkValue = parseBoolean(row.envioOk ?? '');
 
-  payload.adjusted = adjustedValue;
+  if (adjustedPrice !== null && adjustedValue === null) {
+    payload.adjusted = null;
+    payload.reajustedPrice = adjustedPrice;
+    payload.reajutedPrice = adjustedPrice;
+    payload.reajusted_price = adjustedPrice;
+    payload.reajuted_price = adjustedPrice;
+  } else {
+    payload.adjusted = adjustedValue;
+    payload.reajustedPrice = adjustedPrice;
+    payload.reajutedPrice = adjustedPrice;
+    payload.reajusted_price = adjustedPrice;
+    payload.reajuted_price = adjustedPrice;
+  }
+
   payload.sentOk = sentOkValue;
 
   payload.billsDate = parseDate(row.dataVencimentoBoleto ?? '', true);
