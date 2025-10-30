@@ -1,12 +1,21 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { getById, getEvents } from '../../services/energyBalanceApi';
 import {
   normalizeEnergyBalanceDetail,
   normalizeEnergyBalanceEvent,
 } from '../../utils/normalizers/energyBalance';
 import type { EnergyBalanceDetail, EnergyBalanceEvent } from '../../types/energyBalance';
+import type { EmailRow } from '../../types/email';
+import {
+  convertDisplayRowToEnergyBalancePayload,
+  sanitizeDisplayValue,
+  type DisplayEnergyBalanceRow,
+} from '../../utils/energyBalancePayload';
+import { updateEmailRow } from '../../services/emailApi';
+import EmailDispatchApprovalCard from '../../components/balancos/EmailDispatchApprovalCard';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -45,12 +54,281 @@ const parseEventDate = (value: unknown): string => {
   return text;
 };
 
+type EditableMonthColumn = {
+  key: keyof EmailRow;
+  label: string;
+  editable?: boolean;
+  inputType?: 'text' | 'email' | 'select' | 'datetime-local';
+  minWidth?: string;
+  required?: boolean;
+};
+
+const booleanSelectOptions = [
+  { label: 'Selecione', value: '' },
+  { label: 'Sim', value: 'Sim' },
+  { label: 'Não', value: 'Não' },
+];
+
+const reajustedCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const parseCurrencyCandidate = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed
+      .replace(/[R$\s]/gi, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '')
+      .replace(',', '.');
+    const numeric = Number.parseFloat(normalized);
+    return Number.isNaN(numeric) ? null : numeric;
+  }
+  return null;
+};
+
+const formatReajustedCurrency = (value: number): string => {
+  try {
+    return reajustedCurrencyFormatter.format(value);
+  } catch (error) {
+    console.warn('[EnergyBalanceDetail] falha ao formatar preço reajustado', error);
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  }
+};
+
+const deriveReajustedDisplayValue = (
+  month: EnergyBalanceDetail['months'][number],
+  rawMonth?: Record<string, unknown> | null,
+): string => {
+  const candidates: unknown[] = [];
+
+  if (rawMonth) {
+    const candidateKeys = [
+      'reajuted_price',
+      'reajusted_price',
+      'reajustedPrice',
+      'reajutedPrice',
+      'price_reajusted',
+      'priceReajusted',
+      'price_adjusted',
+      'priceAdjusted',
+      'adjusted_price',
+      'adjustedPrice',
+      'precoReajustado',
+      'preco_reajustado',
+    ];
+    for (const key of candidateKeys) {
+      if (Object.prototype.hasOwnProperty.call(rawMonth, key)) {
+        candidates.push(rawMonth[key]);
+      }
+    }
+  }
+
+  candidates.push(month.ajustado);
+
+  for (const candidate of candidates) {
+    const numeric = parseCurrencyCandidate(candidate);
+    if (numeric !== null) {
+      return formatReajustedCurrency(numeric);
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  return '';
+};
+
+const monthColumns: EditableMonthColumn[] = [
+  { key: 'preco', label: 'Preço', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'dataBase', label: 'Data-base', editable: false, minWidth: 'min-w-[140px]' },
+  {
+    key: 'reajustado',
+    label: 'Preço reajustado (R$)',
+    editable: true,
+    inputType: 'text',
+    minWidth: 'min-w-[160px]',
+  },
+  { key: 'fornecedor', label: 'Fornecedor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
+  { key: 'medidor', label: 'Medidor', editable: true, inputType: 'text', minWidth: 'min-w-[150px]' },
+  { key: 'consumo', label: 'Consumo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'perdas3', label: 'Perdas (3%)', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'requisito', label: 'Requisito', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'net', label: 'NET', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'medicao', label: 'Medição', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'proinfa', label: 'Proinfa', editable: true, inputType: 'text', minWidth: 'min-w-[120px]', required: true },
+  { key: 'contrato', label: 'Contrato', editable: true, inputType: 'text', minWidth: 'min-w-[140px]' },
+  { key: 'minimo', label: 'Mínimo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'maximo', label: 'Máximo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'faturar', label: 'Faturar', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
+  { key: 'cp', label: 'CP', editable: true, inputType: 'text', minWidth: 'min-w-[110px]' },
+  { key: 'email', label: 'Email', editable: true, inputType: 'email', minWidth: 'min-w-[160px]' },
+  { key: 'envioOk', label: 'Envio ok', editable: true, inputType: 'select', minWidth: 'min-w-[130px]' },
+  { key: 'disparo', label: 'Disparo', editable: false, minWidth: 'min-w-[160px]' },
+  {
+    key: 'dataVencimentoBoleto',
+    label: 'Data vencimento boleto',
+    editable: true,
+    inputType: 'datetime-local',
+    minWidth: 'min-w-[200px]',
+  },
+];
+
+const toInputCompatibleValue = (value: string, inputType?: EditableMonthColumn['inputType']): string => {
+  if (!value) return '';
+
+  if (inputType === 'datetime-local' || inputType === 'select') {
+    if (inputType === 'select') return value;
+    if (value.includes('/')) {
+      const [datePart, timePartRaw] = value.split(' ');
+      if (datePart.includes('/')) {
+        const [day, month, year] = datePart.split('/');
+        const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const timePart = timePartRaw ? timePartRaw.slice(0, 5) : '00:00';
+        return `${isoDate}T${timePart}`;
+      }
+    }
+    if (value.includes('T')) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+        return local.toISOString().slice(0, 16);
+      }
+      return value.slice(0, 16);
+    }
+  }
+
+  return value;
+};
+
+const prepareEditableValue = (field: keyof EmailRow, value: string | undefined): string => {
+  const sanitized = sanitizeDisplayValue(value);
+  if (!sanitized) return '';
+
+  if (['preco', 'net', 'faturar', 'proinfa', 'reajustado'].includes(field)) {
+    return sanitized.replace(/R\$\s*/gi, '').trim();
+  }
+  if (['consumo', 'minimo', 'maximo'].includes(field)) {
+    return sanitized.replace(/MWh/gi, '').trim();
+  }
+  if (field === 'perdas3') {
+    return sanitized.replace(/%/g, '').trim();
+  }
+  return sanitized;
+};
+
+const createEditableRow = (
+  detail: EnergyBalanceDetail,
+  month: EnergyBalanceDetail['months'][number],
+  rawMonth?: Record<string, unknown> | null,
+): EmailRow => ({
+  id: month.id,
+  clientes: sanitizeDisplayValue(detail.cliente || detail.header.razao) || detail.header.razao || detail.cliente || '',
+  preco: prepareEditableValue('preco', month.precoReaisPorMWh),
+  dataBase: month.mes,
+  reajustado: prepareEditableValue('reajustado', deriveReajustedDisplayValue(month, rawMonth)),
+  fornecedor: sanitizeDisplayValue(month.fornecedor),
+  medidor: sanitizeDisplayValue(month.medidor),
+  consumo: prepareEditableValue('consumo', month.consumoMWh),
+  perdas3: prepareEditableValue('perdas3', month.perdas3),
+  requisito: sanitizeDisplayValue(month.requisito),
+  net: prepareEditableValue('net', month.net),
+  medicao: sanitizeDisplayValue(month.medicao),
+  proinfa: prepareEditableValue('proinfa', month.proinfa),
+  contrato: sanitizeDisplayValue(month.contrato),
+  minimo: prepareEditableValue('minimo', month.minimo),
+  maximo: prepareEditableValue('maximo', month.maximo),
+  faturar: prepareEditableValue('faturar', month.faturar),
+  cp: sanitizeDisplayValue(month.codigoCP),
+  email: sanitizeDisplayValue(month.email),
+  envioOk: sanitizeDisplayValue(month.envioOk),
+  disparo: sanitizeDisplayValue(month.disparo),
+  dataVencimentoBoleto: sanitizeDisplayValue(month.dataVencimentoBoleto),
+});
+
+const extractRawMonthMapping = (
+  normalized: EnergyBalanceDetail,
+  raw: Record<string, unknown>,
+) => {
+  const mapping: Record<string, Record<string, unknown>> = {};
+  const rawMonthsCandidates = ['months', 'data', 'items', 'balances'];
+
+  for (const key of rawMonthsCandidates) {
+    const candidate = raw[key];
+    if (Array.isArray(candidate)) {
+      normalized.months.forEach((month, index) => {
+        const item = candidate[index];
+        if (item && typeof item === 'object') {
+          mapping[month.id] = item as Record<string, unknown>;
+        }
+      });
+      if (Object.keys(mapping).length) {
+        return mapping;
+      }
+    }
+  }
+
+  normalized.months.forEach((month) => {
+    if (!mapping[month.id]) {
+      mapping[month.id] = raw;
+    }
+  });
+
+  return mapping;
+};
+
+const mergeMonthWithEmailRow = (
+  month: EnergyBalanceDetail['months'][number],
+  updates: Partial<EmailRow>,
+) => ({
+  ...month,
+  precoReaisPorMWh: updates.preco ?? month.precoReaisPorMWh,
+  ajustado: updates.reajustado ?? month.ajustado,
+  fornecedor: updates.fornecedor ?? month.fornecedor,
+  medidor: updates.medidor ?? month.medidor,
+  consumoMWh: updates.consumo ?? month.consumoMWh,
+  perdas3: updates.perdas3 ?? month.perdas3,
+  requisito: updates.requisito ?? month.requisito,
+  net: updates.net ?? month.net,
+  medicao: updates.medicao ?? month.medicao,
+  proinfa: updates.proinfa ?? month.proinfa,
+  contrato: updates.contrato ?? month.contrato,
+  minimo: updates.minimo ?? month.minimo,
+  maximo: updates.maximo ?? month.maximo,
+  faturar: updates.faturar ?? month.faturar,
+  codigoCP: updates.cp ?? month.codigoCP,
+  email: updates.email ?? month.email,
+  envioOk: updates.envioOk ?? month.envioOk,
+  disparo: updates.disparo ?? month.disparo,
+  dataVencimentoBoleto: updates.dataVencimentoBoleto ?? month.dataVencimentoBoleto,
+});
+
 export default function EnergyBalanceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = React.useState<EnergyBalanceDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const detailControllerRef = React.useRef<AbortController | null>(null);
+
+  const [rawDetail, setRawDetail] = React.useState<Record<string, unknown> | null>(null);
+  const [rawMonthMap, setRawMonthMap] = React.useState<Record<string, Record<string, unknown>>>({});
+  const [editableRows, setEditableRows] = React.useState<Record<string, EmailRow>>({});
+  const [dirtyRows, setDirtyRows] = React.useState<string[]>([]);
+  const dirtyRowsRef = React.useRef<string[]>([]);
+  const [savingRowId, setSavingRowId] = React.useState<string | null>(null);
 
   const [events, setEvents] = React.useState<EnergyBalanceEvent[]>([]);
   const [eventsLoading, setEventsLoading] = React.useState(true);
@@ -64,10 +342,29 @@ export default function EnergyBalanceDetailPage() {
     detailControllerRef.current = controller;
     setLoading(true);
     setError('');
+    setRawDetail(null);
+    setRawMonthMap({});
+    setEditableRows({});
+    setDirtyRows([]);
     try {
       const payload = await getById(id, controller.signal);
+      const rawRecord =
+        payload && typeof payload === 'object' && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>)
+          : {};
+      setRawDetail(rawRecord);
+
       const normalized = normalizeEnergyBalanceDetail(payload);
+      const monthMap = extractRawMonthMapping(normalized, rawRecord);
+      setRawMonthMap(monthMap);
       setDetail(normalized);
+
+      const initialRows = normalized.months.reduce<Record<string, EmailRow>>((acc, month) => {
+        const rawMonth = monthMap[month.id] ?? rawRecord ?? null;
+        acc[month.id] = createEditableRow(normalized, month, rawMonth);
+        return acc;
+      }, {});
+      setEditableRows(initialRows);
     } catch (fetchError) {
       if (controller.signal.aborted) {
         return;
@@ -139,6 +436,169 @@ export default function EnergyBalanceDetailPage() {
     };
   }, [fetchEvents]);
 
+  React.useEffect(() => {
+    dirtyRowsRef.current = dirtyRows;
+  }, [dirtyRows]);
+
+  React.useEffect(() => {
+    if (!detail) {
+      setEditableRows({});
+      setDirtyRows([]);
+      return;
+    }
+
+    setEditableRows((prev) => {
+      const detailIds = new Set(detail.months.map((month) => month.id));
+      const nextRows: Record<string, EmailRow> = {};
+      let hasChanges = false;
+      const dirtySnapshot = dirtyRowsRef.current;
+
+      detail.months.forEach((month) => {
+        const existingRow = prev[month.id];
+        if (existingRow && dirtySnapshot.includes(month.id)) {
+          nextRows[month.id] = existingRow;
+        } else {
+          const rawMonth = rawMonthMap[month.id] ?? rawDetail ?? null;
+          const rebuiltRow = createEditableRow(detail, month, rawMonth);
+          nextRows[month.id] = rebuiltRow;
+          if (existingRow) {
+            hasChanges = true;
+          }
+        }
+        if (!existingRow) {
+          hasChanges = true;
+        }
+      });
+
+      Object.keys(prev).forEach((rowId) => {
+        if (!detailIds.has(rowId)) {
+          hasChanges = true;
+        }
+      });
+
+      return hasChanges ? nextRows : prev;
+    });
+
+    const dirtySnapshot = dirtyRowsRef.current;
+    const filteredDirtyRows = dirtySnapshot.filter((rowId) =>
+      detail.months.some((month) => month.id === rowId),
+    );
+    if (filteredDirtyRows.length !== dirtySnapshot.length) {
+      setDirtyRows(filteredDirtyRows);
+    }
+  }, [detail, rawDetail, rawMonthMap]);
+
+  const handleFieldChange = React.useCallback(
+    (rowId: string, field: keyof EmailRow, value: string, baseRow?: EmailRow) => {
+      setEditableRows((prev) => {
+        const current = prev[rowId] ?? baseRow ?? ({} as EmailRow);
+        return {
+          ...prev,
+          [rowId]: {
+            ...current,
+            [field]: value,
+          },
+        };
+      });
+      setDirtyRows((prev) => (prev.includes(rowId) ? prev : [...prev, rowId]));
+    },
+    [],
+  );
+
+  const handleSaveRow = React.useCallback(
+    async (rowId: string) => {
+      const row = editableRows[rowId];
+      if (!row) {
+        toast.error('Nenhum dado encontrado para salvar.');
+        return;
+      }
+
+      const originalRaw = rawMonthMap[rowId] ?? rawDetail ?? undefined;
+
+      setSavingRowId(rowId);
+      try {
+        const payload = convertDisplayRowToEnergyBalancePayload(row, originalRaw);
+        const response = await updateEmailRow(rowId, payload);
+
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const record = response as Record<string, unknown>;
+          setRawDetail((prev) => ({ ...(prev ?? {}), ...record }));
+          setRawMonthMap((prev) => ({ ...prev, [rowId]: record }));
+        } else if (originalRaw && typeof originalRaw === 'object') {
+          setRawMonthMap((prev) => ({ ...prev, [rowId]: originalRaw as Record<string, unknown> }));
+        }
+
+        setDetail((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            months: prev.months.map((month) =>
+              month.id === rowId ? mergeMonthWithEmailRow(month, row) : month,
+            ),
+          };
+        });
+
+        setEditableRows((prev) => ({
+          ...prev,
+          [rowId]: {
+            ...(prev[rowId] ?? row),
+            ...row,
+          },
+        }));
+
+        setDirtyRows((prev) => prev.filter((item) => item !== rowId));
+        toast.success('Dados do mês atualizados com sucesso!');
+      } catch (saveError) {
+        console.error('[EnergyBalanceDetail] Erro ao salvar balanço mensal', saveError);
+        toast.error('Não foi possível salvar as alterações deste mês.');
+      } finally {
+        setSavingRowId(null);
+      }
+    },
+    [editableRows, rawDetail, rawMonthMap],
+  );
+
+  const handleEmailDispatchSuccess = React.useCallback(
+    (updatedRow: DisplayEnergyBalanceRow, response?: Record<string, unknown>) => {
+      const rowId = updatedRow.id ?? detail?.months[0]?.id;
+      if (!rowId) {
+        return;
+      }
+
+      const monthForRow = detail?.months.find((item) => item.id === rowId);
+      const partial: Partial<EmailRow> = {
+        envioOk: updatedRow.envioOk,
+        disparo: updatedRow.disparo,
+      };
+
+      const rawMonth = rawMonthMap[rowId] ?? rawDetail ?? null;
+
+      setEditableRows((prev) => ({
+        ...prev,
+        [rowId]: {
+          ...(prev[rowId] ?? (monthForRow && detail ? createEditableRow(detail, monthForRow, rawMonth) : ({} as EmailRow))),
+          ...partial,
+        },
+      }));
+
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          months: prev.months.map((item) => (item.id === rowId ? mergeMonthWithEmailRow(item, partial) : item)),
+        };
+      });
+
+      if (response && typeof response === 'object') {
+        setRawDetail((prev) => ({ ...(prev ?? {}), ...response }));
+        setRawMonthMap((prev) => ({ ...prev, [rowId]: response }));
+      }
+
+      setDirtyRows((prev) => prev.filter((item) => item !== rowId));
+    },
+    [detail, rawDetail, rawMonthMap],
+  );
+
   if (loading) {
     return (
       <div className="space-y-6 p-4">
@@ -193,6 +653,13 @@ export default function EnergyBalanceDetailPage() {
   }
 
   const contractLink = detail.header.contractId ? `/contratos/${detail.header.contractId}` : null;
+  const primaryMonth = detail.months[0] ?? null;
+  const primaryMonthRaw = primaryMonth
+    ? rawMonthMap[primaryMonth.id] ?? rawDetail ?? null
+    : rawDetail ?? null;
+  const primaryMonthRow = primaryMonth
+    ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)
+    : null;
 
   return (
     <div className="space-y-6 p-4">
@@ -244,68 +711,144 @@ export default function EnergyBalanceDetailPage() {
 
       <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-auto">
-          <table className="min-w-[2000px] w-full table-auto text-xs">
+          <table className="min-w-full table-auto text-xs">
             <thead className="bg-yn-orange text-white text-xs font-bold uppercase tracking-wide">
               <tr>
-                <th className="px-2 py-3 text-left min-w-[100px]">Preço</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Data-base</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Reajustado</th>
-                <th className="px-2 py-3 text-left min-w-[120px]">Fornecedor</th>
-                <th className="px-2 py-3 text-left min-w-[120px]">Medidor</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Consumo</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Perdas (3%)</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Requisito</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">NET</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Medição</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Proinfa</th>
-                <th className="px-2 py-3 text-left min-w-[120px]">Contrato</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Mínimo</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Máximo</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Faturar</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">CP</th>
-                <th className="px-2 py-3 text-left min-w-[150px]">Email</th>
-                <th className="px-2 py-3 text-left min-w-[100px]">Envio ok</th>
-                <th className="px-2 py-3 text-left min-w-[120px]">Disparo</th>
-                <th className="px-2 py-3 text-left min-w-[150px]">Data vencimento boleto</th>
+                {monthColumns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`px-2 py-3 text-left ${column.minWidth ?? ''}`}
+                  >
+                    {column.label}
+                    {column.required ? <span className="ml-1 text-red-200">*</span> : null}
+                  </th>
+                ))}
+                <th className="px-2 py-3 text-left min-w-[140px]">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {detail.months.length === 0 ? (
                 <tr>
-                  <td colSpan={20} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
+                  <td colSpan={monthColumns.length + 1} className="px-4 py-8 text-center text-sm font-bold text-gray-500">
                     Nenhum dado mensal disponível para este balanço.
                   </td>
                 </tr>
               ) : (
-                detail.months.map((month) => (
-                  <tr key={month.id} className="bg-white hover:bg-gray-50">
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.precoReaisPorMWh}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.mes}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.ajustado}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.fornecedor}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.medidor}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.consumoMWh}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.perdas3 || '3%'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.requisito || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.net || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.medicao || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.proinfa}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.contrato}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.minimo || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.maximo || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.faturar || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.codigoCP}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.email || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{month.envioOk || '-'}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{formatDate(month.disparo || '')}</td>
-                    <td className="px-2 py-3 text-xs font-bold text-gray-900">{formatDate(month.dataVencimentoBoleto || '')}</td>
-                  </tr>
-                ))
+                detail.months.map((month) => {
+                  const rawMonth = rawMonthMap[month.id] ?? rawDetail ?? null;
+                  const baseRow = editableRows[month.id] ?? createEditableRow(detail, month, rawMonth);
+                  const isRowDirty = dirtyRows.includes(month.id);
+
+                  return (
+                    <tr key={month.id} className="bg-white hover:bg-gray-50">
+                      {monthColumns.map((column) => {
+                        const rawValue = baseRow[column.key] ?? '';
+                        const displayValue = rawValue || '';
+                        const isRequiredMissing = column.required && displayValue.trim() === '';
+
+                        if (!column.editable) {
+                          let text = displayValue;
+                          if (column.key === 'dataBase') {
+                            text = month.mes || '-';
+                          }
+                          if (column.key === 'disparo') {
+                            text = formatDate(displayValue || month.disparo || '');
+                          }
+                          return (
+                            <td key={column.key} className={`px-2 py-3 text-xs font-semibold text-gray-900 ${column.minWidth ?? ''}`}>
+                              {text && text.trim() !== '' ? text : '-'}
+                            </td>
+                          );
+                        }
+
+                        const inputValue = column.inputType === 'datetime-local'
+                          ? toInputCompatibleValue(displayValue || month.dataVencimentoBoleto || '')
+                          : displayValue;
+
+                        const commonClasses = `w-full rounded-md border px-2 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 ${
+                          isRequiredMissing
+                            ? 'border-red-400 bg-red-50 text-red-700 placeholder:text-red-400 focus:border-red-500 focus:ring-red-500'
+                            : 'border-gray-200 text-gray-900 focus:border-yn-orange focus:ring-yn-orange/40'
+                        }`;
+
+                        return (
+                          <td key={column.key} className={`px-2 py-3 align-top ${column.minWidth ?? ''}`}>
+                            {column.inputType === 'select' ? (
+                              <select
+                                value={displayValue}
+                                onChange={(event) =>
+                                  handleFieldChange(month.id, column.key, event.target.value, baseRow)
+                                }
+                                className={`${commonClasses} bg-white`}
+                              >
+                                {booleanSelectOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type={
+                                  column.inputType === 'email'
+                                    ? 'email'
+                                    : column.inputType === 'datetime-local'
+                                      ? 'datetime-local'
+                                      : 'text'
+                                }
+                                value={inputValue}
+                                onChange={(event) =>
+                                  handleFieldChange(month.id, column.key, event.target.value, baseRow)
+                                }
+                                placeholder={column.required ? 'Obrigatório' : undefined}
+                                className={commonClasses}
+                              />
+                            )}
+                            {column.required && isRequiredMissing ? (
+                              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                                Preencha o PROINFA deste mês.
+                              </p>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveRow(month.id)}
+                          disabled={!isRowDirty || savingRowId === month.id}
+                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold shadow-sm transition ${
+                            !isRowDirty || savingRowId === month.id
+                              ? 'cursor-not-allowed bg-gray-200 text-gray-500'
+                              : 'bg-yn-orange text-white hover:bg-yn-orange/90'
+                          }`}
+                        >
+                          {savingRowId === month.id ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Salvando...
+                            </>
+                          ) : (
+                            'Salvar alterações'
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {primaryMonth ? (
+        <EmailDispatchApprovalCard
+          balanceId={id ?? null}
+          row={primaryMonthRow}
+          rawData={primaryMonthRaw ?? null}
+          onSuccess={handleEmailDispatchSuccess}
+        />
+      ) : null}
 
       <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm space-y-6">
         <div>
