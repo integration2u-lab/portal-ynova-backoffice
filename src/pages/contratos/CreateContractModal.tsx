@@ -48,6 +48,8 @@ type FormErrors = Partial<
     | 'contractCode'
     | 'cnpj'
     | 'volume'
+    | 'volumePrice'
+    | 'loadPercentage'
     | 'startDate'
     | 'endDate'
     | 'upperLimit'
@@ -69,6 +71,8 @@ type FormState = {
   contact: string;
   email: string; // Novo campo para emails mÃºltiplos
   volume: string;
+  volumePrice: string;
+  loadPercentage: string;
   volumeUnit: VolumeUnit;
   energySource: EnergySourceOption;
   modality: string;
@@ -96,6 +100,10 @@ const HOURS_IN_MONTH = 730;
 const dayOptions = Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, '0'));
 const competenceFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
 const volumeFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const percentageFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 const ensureRandomId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -187,6 +195,8 @@ const buildInitialFormState = (): FormState => ({
   contact: '',
   email: '', // Novo campo para emails mÃºltiplos
   volume: '',
+  volumePrice: '',
+  loadPercentage: '',
   volumeUnit: 'MWH',
   energySource: 'Convencional',
   modality: '',
@@ -278,15 +288,17 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       | 'contractCode'
       | 'segment'
       | 'contact'
-      | 'email'
-      | 'volume'
-      | 'modality'
-      | 'startDate'
-      | 'endDate'
-      | 'upperLimit'
-      | 'lowerLimit'
-      | 'flexibility'
-      | 'medidor'
+        | 'email'
+        | 'volume'
+        | 'loadPercentage'
+        | 'modality'
+        | 'startDate'
+        | 'endDate'
+        | 'upperLimit'
+        | 'lowerLimit'
+        | 'flexibility'
+        | 'medidor'
+        | 'vigenciaStatus'
     >
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -306,6 +318,24 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
   const handleVolumeUnitChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setFormState((prev) => ({ ...prev, volumeUnit: event.target.value as VolumeUnit }));
+  };
+
+  const handleVolumePriceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const sanitized = sanitizeCurrencyInput(event.target.value);
+    setFormState((prev) => ({ ...prev, volumePrice: sanitized }));
+    setErrors((prev) => {
+      if (!prev.volumePrice) return prev;
+      const next = { ...prev };
+      delete next.volumePrice;
+      return next;
+    });
+  };
+
+  const handleVolumePriceBlur = () => {
+    setFormState((prev) => ({
+      ...prev,
+      volumePrice: prev.volumePrice ? formatCurrencyInputBlur(prev.volumePrice) : '',
+    }));
   };
 
   const handleSupplierSelectionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -418,6 +448,19 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       nextErrors.volume = 'Informe um volume maior que zero';
     }
 
+    const priceValue = parseCurrencyInput(formState.volumePrice);
+    if (priceValue === null || priceValue <= 0) {
+      nextErrors.volumePrice = 'Informe um preço maior que zero';
+    }
+
+    const hasLoadPercentage = formState.loadPercentage.trim().length > 0;
+    const loadPercentageValue = Number(formState.loadPercentage);
+    if (!hasLoadPercentage) {
+      nextErrors.loadPercentage = 'Informe o percentual de carga';
+    } else if (!Number.isFinite(loadPercentageValue) || loadPercentageValue < 0 || loadPercentageValue > 100) {
+      nextErrors.loadPercentage = 'Percentual deve estar entre 0% e 100%';
+    }
+
     if (!formState.startDate) {
       nextErrors.startDate = 'Informe o início da vigência';
     }
@@ -506,6 +549,17 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const adjustedDifference = calculateAdjustedPriceDifference(normalizedPricePeriods, flatPriceValue);
 
     const volumeValue = Number(formState.volume);
+    const volumePriceValue = parseCurrencyInput(formState.volumePrice);
+    const loadPercentageValue = Number(formState.loadPercentage);
+
+    const volumePriceText =
+      typeof volumePriceValue === 'number' && Number.isFinite(volumePriceValue) && volumePriceValue > 0
+        ? formatCurrencyBRL(volumePriceValue)
+        : 'Não informado';
+    const loadPercentageText =
+      formState.loadPercentage.trim().length > 0 && Number.isFinite(loadPercentageValue)
+        ? `${percentageFormatter.format(loadPercentageValue)}%`
+        : 'Não informado';
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
@@ -540,6 +594,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             }`
           : 'Não informado',
       },
+      { label: 'Preço contratado', value: volumePriceText },
+      { label: 'Percentual de carga', value: loadPercentageText },
       { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
       { label: 'Preço reajustado (diferença)', value: formatCurrencyBRL(adjustedDifference) },
       { label: 'Responsável', value: formState.contact.trim() || 'Não informado' },
@@ -737,33 +793,80 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   />
                 </label>
 
-                <div className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  <span>Volume contratado</span>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formState.volume}
-                      onChange={handleInputChange('volume')}
-                      className={`w-full rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                        errors.volume ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                      }`}
-                      placeholder="0,00"
-                    />
-                    <select
-                      value={formState.volumeUnit}
-                      onChange={handleVolumeUnitChange}
-                      className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    >
-                      {volumeUnitOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {errors.volume && <span className="text-xs font-medium text-red-500">{errors.volume}</span>}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-3">
+                  <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Volume contratado
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formState.volume}
+                        onChange={handleInputChange('volume')}
+                        className={`w-full rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                          errors.volume ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                        }`}
+                        placeholder="0,00"
+                      />
+                      <select
+                        value={formState.volumeUnit}
+                        onChange={handleVolumeUnitChange}
+                        className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {volumeUnitOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {errors.volume && <span className="text-xs font-medium text-red-500">{errors.volume}</span>}
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Preço contratado (R$/MWh)
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={formState.volumePrice}
+                        onChange={handleVolumePriceChange}
+                        onBlur={handleVolumePriceBlur}
+                        className={`w-full rounded-lg border px-3 py-2 pl-7 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                          errors.volumePrice ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                        }`}
+                        placeholder="0,00"
+                      />
+                    </div>
+                    {errors.volumePrice && <span className="text-xs font-medium text-red-500">{errors.volumePrice}</span>}
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Percentual de carga (%)
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formState.loadPercentage}
+                        onChange={handleInputChange('loadPercentage')}
+                        className={`w-full rounded-lg border px-3 py-2 pr-9 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                          errors.loadPercentage ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                        }`}
+                        placeholder="0,00"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        %
+                      </span>
+                    </div>
+                    {errors.loadPercentage && (
+                      <span className="text-xs font-medium text-red-500">{errors.loadPercentage}</span>
+                    )}
+                  </label>
                 </div>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
