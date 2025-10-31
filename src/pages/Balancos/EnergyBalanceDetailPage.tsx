@@ -352,6 +352,55 @@ export default function EnergyBalanceDetailPage() {
   const [eventsError, setEventsError] = React.useState('');
   const eventsControllerRef = React.useRef<AbortController | null>(null);
 
+  const proinfaInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
+
+  React.useEffect(() => () => {
+    proinfaInputRefs.current = {};
+  }, []);
+
+  const normalizeProinfaForValidation = React.useCallback((raw: string | undefined): string => {
+    if (!raw) return '';
+    return raw
+      .replace(/\s+/g, '')
+      .replace(',', '.')
+      .replace(/[^0-9.-]/g, '');
+  }, []);
+
+  const isProinfaValueMissing = React.useCallback((raw: string | undefined): boolean => {
+    const normalized = normalizeProinfaForValidation(raw);
+    if (!normalized) return true;
+    const numeric = Number.parseFloat(normalized);
+    if (Number.isNaN(numeric)) return true;
+    return numeric <= 0;
+  }, [normalizeProinfaForValidation]);
+
+  const monthsMissingProinfa = React.useMemo(() => {
+    if (!detail) return [];
+    return detail.months.filter((month) => {
+      const rawMonth = rawMonthMap[month.id] ?? rawDetail ?? null;
+      const baseRow = editableRows[month.id] ?? createEditableRow(detail, month, rawMonth);
+      return isProinfaValueMissing(baseRow.proinfa);
+    });
+  }, [detail, editableRows, rawDetail, rawMonthMap, isProinfaValueMissing]);
+
+  const hasMissingProinfa = monthsMissingProinfa.length > 0;
+
+  const handleFocusFirstMissingProinfa = React.useCallback(() => {
+    const firstMissingId = monthsMissingProinfa[0]?.id;
+    if (!firstMissingId) return;
+    const input = proinfaInputRefs.current[firstMissingId];
+    if (input) {
+      input.focus();
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [monthsMissingProinfa]);
+
+  React.useEffect(() => {
+    if (!hasMissingProinfa) return;
+    handleFocusFirstMissingProinfa();
+  }, [hasMissingProinfa, handleFocusFirstMissingProinfa]);
+
+
   const fetchDetail = React.useCallback(async () => {
     if (!id) return;
     detailControllerRef.current?.abort();
@@ -680,6 +729,28 @@ export default function EnergyBalanceDetailPage() {
     ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)
     : null;
 
+  const measurementStatusRaw = (detail.statusMeasurement ?? '').trim();
+  const measurementStatusNormalized = measurementStatusRaw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const measurementStatus = measurementStatusRaw || 'Nao informado';
+  const isMeasurementComplete = measurementStatusNormalized === 'completo';
+  const measurementCardClasses = isMeasurementComplete
+    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-900/10'
+    : 'border-red-200 bg-red-50 dark:border-red-500/40 dark:bg-red-900/10';
+  const measurementValueClasses = isMeasurementComplete
+    ? 'text-emerald-700 dark:text-emerald-200'
+    : 'text-red-700 dark:text-red-200';
+
+  const proinfaCardClasses = hasMissingProinfa
+    ? 'border border-red-200 bg-red-50 ring-2 ring-red-200 dark:border-red-500/40 dark:bg-red-900/10 dark:ring-red-500/60'
+    : 'border border-gray-100 bg-white';
+
+  const proinfaValueClasses = hasMissingProinfa
+    ? 'text-red-700 dark:text-red-200'
+    : 'text-gray-900 dark:text-white';
+
   return (
     <div className="space-y-6 p-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -722,9 +793,43 @@ export default function EnergyBalanceDetailPage() {
           <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Custo total (R$)</div>
           <div className="mt-2 text-2xl font-bold text-gray-900">{detail.metrics.custoTotalBRL}</div>
         </div>
-        <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">PROINFA total</div>
-          <div className="mt-2 text-2xl font-bold text-gray-900">{detail.metrics.proinfaTotal}</div>
+        <div className={`rounded-lg p-4 shadow-sm transition ${proinfaCardClasses}`}>
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-gray-500">
+            <span>PROINFA total</span>
+            {hasMissingProinfa ? (
+              <button
+                type="button"
+                onClick={handleFocusFirstMissingProinfa}
+                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 transition hover:border-red-300 hover:text-red-700"
+              >
+                Preencher
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleFocusFirstMissingProinfa}
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-700"
+              >
+                Editar
+              </button>
+            )}
+          </div>
+          <div className={`mt-2 text-2xl font-bold ${proinfaValueClasses}`}>
+            {detail.metrics.proinfaTotal}
+          </div>
+          {hasMissingProinfa ? (
+            <p className="mt-2 text-xs font-semibold text-red-600">
+              {monthsMissingProinfa.length === 1
+                ? '1 mes com PROINFA pendente'
+                : `${monthsMissingProinfa.length} meses com PROINFA pendente`}
+            </p>
+          ) : null}
+        </div>
+        <div className={`rounded-lg border border-gray-100 bg-white p-4 shadow-sm ${measurementCardClasses}`}>
+          <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Medicao</div>
+          <div className={`mt-2 w-full rounded-lg px-3 py-2 text-left text-2xl font-bold ${measurementValueClasses}`}>
+            {measurementStatus}
+          </div>
         </div>
       </div>
 
@@ -763,7 +868,12 @@ export default function EnergyBalanceDetailPage() {
                       {monthColumns.map((column) => {
                         const rawValue = baseRow[column.key] ?? '';
                         const displayValue = rawValue || '';
-                        const isRequiredMissing = column.required && displayValue.trim() === '';
+                        const isProinfaColumn = column.key === 'proinfa';
+                        const isRequiredMissing =
+                          column.required &&
+                          (isProinfaColumn
+                            ? isProinfaValueMissing(displayValue)
+                            : displayValue.trim() === '');
 
                         if (!column.editable) {
                           let text = displayValue;
@@ -784,11 +894,14 @@ export default function EnergyBalanceDetailPage() {
                           ? toInputCompatibleValue(displayValue || month.dataVencimentoBoleto || '')
                           : displayValue;
 
-                        const commonClasses = `w-full rounded-md border px-2 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 ${
-                          isRequiredMissing
-                            ? 'border-red-400 bg-red-50 text-red-700 placeholder:text-red-400 focus:border-red-500 focus:ring-red-500'
-                            : 'border-gray-200 text-gray-900 focus:border-yn-orange focus:ring-yn-orange/40'
-                        }`;
+                        const baseClasses = isRequiredMissing
+                          ? 'border-red-400 bg-red-50 text-red-700 placeholder:text-red-400 focus:border-red-500 focus:ring-red-500'
+                          : 'border-gray-200 text-gray-900 focus:border-yn-orange focus:ring-yn-orange/40';
+                        const highlightClasses =
+                          isProinfaColumn && isRequiredMissing
+                            ? ' animate-pulse ring-2 ring-red-300 dark:ring-red-500/60'
+                            : '';
+                        const commonClasses = `w-full rounded-md border px-2 py-2 text-xs font-semibold transition focus:outline-none focus:ring-2 ${baseClasses}${highlightClasses}`;
 
                         let selectOptionsToRender: SelectOption[] | undefined;
                         if (column.inputType === 'select') {
@@ -808,8 +921,7 @@ export default function EnergyBalanceDetailPage() {
                                 onChange={(event) =>
                                   handleFieldChange(month.id, column.key, event.target.value, baseRow)
                                 }
-                                className={`${commonClasses} bg-white`}
-                              >
+                                className={`${commonClasses} bg-white`}>
                                 {(selectOptionsToRender ?? booleanSelectOptions).map((option) => (
                                   <option key={option.value} value={option.value}>
                                     {option.label}
@@ -829,13 +941,28 @@ export default function EnergyBalanceDetailPage() {
                                 onChange={(event) =>
                                   handleFieldChange(month.id, column.key, event.target.value, baseRow)
                                 }
-                                placeholder={column.required ? 'Obrigatório' : undefined}
+                                placeholder={
+                                  column.required
+                                    ? isProinfaColumn
+                                      ? 'Informe o PROINFA'
+                                      : 'Obrigatorio'
+                                    : undefined
+                                }
                                 className={commonClasses}
+                                ref={(element) => {
+                                  if (isProinfaColumn) {
+                                    if (element) {
+                                      proinfaInputRefs.current[month.id] = element;
+                                    } else {
+                                      delete proinfaInputRefs.current[month.id];
+                                    }
+                                  }
+                                }}
                               />
                             )}
                             {column.required && isRequiredMissing ? (
                               <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-red-600">
-                                Preencha o PROINFA deste mês.
+                                Preencha o PROINFA deste mes.
                               </p>
                             ) : null}
                           </td>
@@ -934,6 +1061,5 @@ export default function EnergyBalanceDetailPage() {
     </div>
   );
 }
-
 
 

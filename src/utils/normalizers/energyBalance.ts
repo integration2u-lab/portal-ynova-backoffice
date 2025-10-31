@@ -71,6 +71,56 @@ const sanitizeNumberString = (value: string) => {
   return trimmed.replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
 };
 
+const truthyBooleanStrings = [
+  'sim',
+  's',
+  'true',
+  '1',
+  'yes',
+  'y',
+  'ok',
+  'enviado',
+  'enviada',
+  'enviados',
+  'sucesso',
+  'success',
+  'confirmado',
+  'confirmed',
+];
+
+const falsyBooleanStrings = [
+  'nao',
+  'nao.',
+  'n',
+  'false',
+  '0',
+  'no',
+  'pendente',
+  'pendente.',
+  'erro',
+  'falha',
+  'failed',
+  'failure',
+  'aguardando',
+];
+
+const toBooleanFlag = (value: unknown): boolean | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value > 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    const normalizedAscii = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (truthyBooleanStrings.includes(normalizedAscii) || truthyBooleanStrings.includes(normalized)) {
+      return true;
+    }
+    if (falsyBooleanStrings.includes(normalizedAscii) || falsyBooleanStrings.includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+};
 const toNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') {
@@ -335,10 +385,34 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
     getSafe(record, 'saldo_kwh', 'saldoKwh', 'balance_kwh', 'balanceKwh', 'saldo', 'balance', 'net_balance'),
   );
 
-  const saldoDisplay = saldo.numeric === null
-    ? '-'
-    : `${saldo.numeric >= 0 ? '+' : '-'}${kwhFormatter.format(Math.abs(saldo.numeric))} kWh`;
+  const saldoDisplay =
+    saldo.numeric === null
+      ? '-'
+      : `${saldo.numeric >= 0 ? '+' : '-'} ${saldo.display}`;
 
+  const referenceLabelRaw = normalizeMonthLabel(
+    getSafe(record, 'referenceBase', 'reference_base', 'competencia', 'reference', 'mesReferencia'),
+  );
+  const referenceLabelSanitized = referenceLabelRaw.replace('Nǜo', 'Nao');
+  const referenceBaseLabel =
+    referenceLabelSanitized && referenceLabelSanitized !== 'Nao informado'
+      ? referenceLabelSanitized
+      : 'Sem referencia';
+
+  const sentOkFlag = toBooleanFlag(
+    getSafe(
+      record,
+      'sentOk',
+      'sent_ok',
+      'envioOk',
+      'envio_ok',
+      'sent',
+      'statusEnvio',
+      'envioStatus',
+      'envio_status',
+      'status_envio'
+    ),
+  );
   return {
     id,
     cliente,
@@ -348,7 +422,9 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
     consumoKWh: consumo.display,
     geracaoKWh: geracao.display,
     saldoKWh: saldoDisplay,
+    sentOk: sentOkFlag,
     saldoValor: saldo.numeric,
+    referenceBaseLabel,
   };
 }
 
@@ -499,6 +575,21 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     getSafe(record, 'contactActive', 'contact_active', 'contatoAtivo', 'ativo')
   );
 
+  const statusMeasurementSource = getSafe(
+    record,
+    'statusMeasurement',
+    'measurementStatus',
+    'status_medicao',
+    'statusMedicao',
+    'measurement_status',
+    'metrics.statusMeasurement',
+    'metrics.status_medicao',
+  );
+  const statusMeasurementText = toStringSafe(statusMeasurementSource, '');
+  const statusMeasurement = statusMeasurementText
+    ? toTitleCase(statusMeasurementText)
+    : null;
+
   const months: EnergyBalanceDetailMonthRow[] = [{
     id: toStringSafe(getSafe(record, 'id', 'uuid'), '1'),
     mes: monthLabel,
@@ -534,6 +625,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     },
     months,
     cliente: razao,
+    statusMeasurement,
   };
 }
 

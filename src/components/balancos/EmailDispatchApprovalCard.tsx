@@ -14,10 +14,73 @@ export type EmailDispatchApprovalCardProps = {
   onSuccess?: (updatedRow: DisplayEnergyBalanceRow, response?: Record<string, unknown>) => void;
 };
 
-const isEmailSent = (value?: string): boolean => {
-  if (!value) return false;
-  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-  return normalized === 'sim' || normalized === 'true' || normalized === 'enviado';
+const truthyEmailStatusValues = new Set([
+  'sim',
+  's',
+  'true',
+  '1',
+  'yes',
+  'y',
+  'ok',
+  'liberado',
+  'liberada',
+  'liberados',
+  'enviado',
+  'enviada',
+  'enviados',
+  'confirmado',
+  'confirmada',
+  'confirmados',
+]);
+
+const falsyEmailStatusValues = new Set([
+  'nao',
+  'nao.',
+  'n',
+  'false',
+  '0',
+  'no',
+  'pendente',
+  'pendente.',
+  'aguardando',
+  'open',
+  'liberar',
+  'liberacao_pendente',
+  'aguardando_liberacao',
+]);
+
+const EMAIL_STATUS_RAW_KEYS = [
+  'sentOk',
+  'sent_ok',
+  'envioOk',
+  'envio_ok',
+  'sent',
+  'statusEnvio',
+  'status_envio',
+  'envioStatus',
+  'envio_status',
+  'emailLiberado',
+  'email_liberado',
+];
+
+const toBooleanFlag = (value: unknown): boolean | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return value > 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+    if (!normalized || normalized === 'nao informado') return null;
+    if (truthyEmailStatusValues.has(normalized)) return true;
+    if (falsyEmailStatusValues.has(normalized)) return false;
+  }
+  return null;
 };
 
 export default function EmailDispatchApprovalCard({
@@ -28,13 +91,25 @@ export default function EmailDispatchApprovalCard({
 }: EmailDispatchApprovalCardProps) {
   const [pendingAction, setPendingAction] = React.useState<'release' | 'revert' | null>(null);
 
-  const alreadySent = isEmailSent(row?.envioOk);
+  const alreadySent = React.useMemo(() => {
+    if (rawData && typeof rawData === 'object') {
+      for (const key of EMAIL_STATUS_RAW_KEYS) {
+        const candidate = (rawData as Record<string, unknown>)[key];
+        const parsed = toBooleanFlag(candidate);
+        if (parsed !== null) {
+          return parsed;
+        }
+      }
+    }
+    const parsedFromRow = toBooleanFlag(row?.envioOk);
+    return parsedFromRow ?? false;
+  }, [rawData, row]);
 
   const extractSendDate = (data?: Record<string, unknown> | null): string | undefined => {
     if (!data) return undefined;
     const candidates = ['sendDate', 'disparo', 'disparo_at', 'enviadoEm', 'sentAt', 'sent_at', 'send_date'];
     for (const key of candidates) {
-      const value = data[key];
+      const value = (data as Record<string, unknown>)[key];
       if (typeof value === 'string' && value.trim() !== '') {
         return value;
       }
@@ -43,27 +118,14 @@ export default function EmailDispatchApprovalCard({
   };
 
   const toDisplayBoolean = (value: unknown): string | null => {
-    if (typeof value === 'boolean') {
-      return value ? 'Sim' : 'Não';
-    }
-    if (typeof value === 'number') {
-      return value > 0 ? 'Sim' : 'Não';
-    }
-    if (typeof value === 'string') {
-      const normalized = value
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
-      if (['sim', 's', 'true', '1', 'yes'].includes(normalized)) return 'Sim';
-      if (['nao', 'não', 'n', 'false', '0', 'no'].includes(normalized)) return 'Não';
-    }
-    return null;
+    const parsed = toBooleanFlag(value);
+    if (parsed === null) return null;
+    return parsed ? 'Sim' : 'Nao';
   };
 
   const handleDispatch = async (action: 'release' | 'revert') => {
     if (!row || !balanceId) {
-      toast.error('Não foi possível identificar o registro para envio.');
+      toast.error('Nao foi possivel identificar o registro para envio.');
       return;
     }
 
@@ -88,7 +150,7 @@ export default function EmailDispatchApprovalCard({
       const nextEnvioOk =
         toDisplayBoolean(
           responseRecord?.sentOk ?? responseRecord?.envioOk ?? responseRecord?.sent_ok ?? responseRecord?.envio_ok,
-        ) ?? (action === 'release' ? 'Sim' : 'Não');
+        ) ?? (action === 'release' ? 'Sim' : 'Nao');
       const responseSendDate = extractSendDate(responseRecord);
       const updatedRow: DisplayEnergyBalanceRow = {
         ...row,
@@ -100,8 +162,8 @@ export default function EmailDispatchApprovalCard({
       console.error('[EmailDispatchApprovalCard] Falha ao liberar disparo de email', error);
       toast.error(
         action === 'release'
-          ? 'Não foi possível liberar o disparo do email. Tente novamente.'
-          : 'Não foi possível reverter o envio do email. Tente novamente.',
+          ? 'Nao foi possivel liberar o disparo do email. Tente novamente.'
+          : 'Nao foi possivel reverter o envio do email. Tente novamente.',
       );
     } finally {
       setPendingAction(null);
@@ -112,6 +174,7 @@ export default function EmailDispatchApprovalCard({
   const handleRevert = () => void handleDispatch('revert');
 
   const isSubmitting = pendingAction !== null;
+  const badgeLabel = alreadySent ? 'Email liberado' : 'Open para liberar';
 
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm space-y-4">
@@ -119,7 +182,7 @@ export default function EmailDispatchApprovalCard({
         <div>
           <h3 className="text-sm font-bold text-gray-900">Disparo de email</h3>
           <p className="mt-1 text-xs font-semibold text-gray-600">
-            Confirme se deseja liberar o envio automático deste balanço para o cliente após revisar os dados editados.
+            Confirme se deseja liberar o envio automatico deste balanco para o cliente apos revisar os dados editados.
           </p>
         </div>
         <span
@@ -130,11 +193,11 @@ export default function EmailDispatchApprovalCard({
         >
           {alreadySent ? (
             <>
-              <MailCheck className="h-3.5 w-3.5" /> Email liberado
+              <MailCheck className="h-3.5 w-3.5" /> {badgeLabel}
             </>
           ) : (
             <>
-              <ShieldAlert className="h-3.5 w-3.5" /> Aguardando liberação
+              <ShieldAlert className="h-3.5 w-3.5" /> {badgeLabel}
             </>
           )}
         </span>
@@ -179,7 +242,7 @@ export default function EmailDispatchApprovalCard({
           )}
         </button>
         <p className="text-xs font-semibold text-gray-500">
-          O disparo atualizará o status deste balanço para enviado.
+          O disparo atualizara o status deste balanco para enviado.
         </p>
       </div>
     </section>
