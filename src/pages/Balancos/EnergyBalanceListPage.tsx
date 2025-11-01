@@ -160,6 +160,7 @@ export default function EnergyBalanceListPage() {
   }, [items, normalizedQueryText, numericQuery]);
 
   const hasData = filteredItems.length > 0;
+  const totalFiltered = filteredItems.length;
 
   const groupedItems = React.useMemo(() => {
     if (!hasData) {
@@ -240,9 +241,16 @@ export default function EnergyBalanceListPage() {
 
       <section aria-labelledby="lista-balancos" className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 id="lista-balancos" className="text-lg font-bold text-gray-900 dark:text-white">
-            Lista de balanços
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 id="lista-balancos" className="text-lg font-bold text-gray-900 dark:text-white">
+              Lista de balanços
+            </h2>
+            {hasData && (
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                {totalFiltered === 1 ? '1 balanço encontrado' : `${totalFiltered} balanços encontrados`}
+              </span>
+            )}
+          </div>
           {isRefreshing && (
             <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">Atualizando...</span>
           )}
@@ -266,11 +274,11 @@ export default function EnergyBalanceListPage() {
 
         {showLoadingState ? (
           <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm font-bold text-gray-500">
-            Carregando balancos energeticos...
+            Carregando balanços energéticos...
           </div>
         ) : !hasData ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm font-bold text-gray-500">
-            Nenhum balanco encontrado.
+            Nenhum balanço encontrado.
           </div>
         ) : (
           <div className="space-y-4">
@@ -279,7 +287,7 @@ export default function EnergyBalanceListPage() {
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                   <h3 className="text-sm font-bold text-gray-900">Referencia {group.label}</h3>
                   <span className="text-xs font-semibold text-gray-500">
-                    {group.items.length === 1 ? '1 balanco' : `${group.items.length} balancos`}
+                    {group.items.length === 1 ? '1 balanço' : `${group.items.length} balanços`}
                   </span>
                 </div>
                 <ul className="divide-y divide-gray-100">
@@ -289,7 +297,7 @@ export default function EnergyBalanceListPage() {
                         type="button"
                         onClick={() => navigate(`/balancos/${item.id}`)}
                         className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-yn-orange/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange/40 sm:flex-row sm:items-center sm:justify-between"
-                        aria-label={`Abrir balanco energetico de ${item.cliente}`}
+                        aria-label={`Abrir balanço energético de ${item.cliente}`}
                       >
                         <div className="flex flex-col gap-1">
                           <span className="text-base font-bold text-gray-900">{item.cliente}</span>

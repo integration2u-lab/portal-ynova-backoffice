@@ -1,6 +1,6 @@
 const DEFAULT_REMOTE_BASE_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000';
 const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
-''
+
 const sanitizeBaseCandidate = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -191,7 +191,6 @@ export async function getById(id: string, signal?: AbortSignal): Promise<any> {
     throw new Error('ID do balanço energético é obrigatório');
   }
   const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}`, { method: 'GET', signal });
-  console.log('getBalanceDetails payload', payload);
   return toObject(payload) ?? { id: String(id) };
 }
 
@@ -199,7 +198,6 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
   if (!id) return [];
   try {
     const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}/events`, { method: 'GET', signal });
-    console.log('getEvents payload', payload);
     return toArray(payload);
   } catch (error) {
     if (error instanceof HttpError && (error.status === 404 || error.status === 405)) {
