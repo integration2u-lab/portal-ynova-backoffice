@@ -58,6 +58,29 @@ const extractReferenceLabel = async (file: File): Promise<string | null> => {
       .filter((line) => line.length > 0);
     if (lines.length === 0) return null;
 
+    // Função para parsear data no formato brasileiro dd/mm/yyyy
+    const parseBrazilianDate = (dateStr: string): Date | null => {
+      // Tenta identificar formato dd/mm/yyyy ou dd/mm/yy
+      const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/);
+      if (!match) return null;
+      
+      const [, day, month, year] = match;
+      const fullYear = year.length === 2 ? parseInt(`20${year}`, 10) : parseInt(year, 10);
+      const monthNum = parseInt(month, 10) - 1; // JavaScript months are 0-indexed
+      const dayNum = parseInt(day, 10);
+      
+      if (monthNum < 0 || monthNum > 11) return null;
+      if (dayNum < 1 || dayNum > 31) return null;
+      
+      const date = new Date(fullYear, monthNum, dayNum);
+      // Verifica se a data é válida (evita problemas como 31/02)
+      if (date.getFullYear() !== fullYear || date.getMonth() !== monthNum || date.getDate() !== dayNum) {
+        return null;
+      }
+      
+      return date;
+    };
+
     const dataRows = lines.length > 1 ? lines.slice(1) : lines;
     for (const row of dataRows) {
       const delimiter = row.includes(';') ? ';' : ',';
@@ -65,11 +88,20 @@ const extractReferenceLabel = async (file: File): Promise<string | null> => {
       if (columns.length < 3) continue;
       const candidate = columns[2];
       if (!candidate) continue;
-      const parsed = new Date(candidate);
-      if (!Number.isNaN(parsed.getTime())) {
+      
+      // Tenta parsear como data brasileira primeiro
+      const parsed = parseBrazilianDate(candidate);
+      if (parsed && !Number.isNaN(parsed.getTime())) {
         return parsed.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
       }
-      // fallback: return raw value
+      
+      // Fallback: tenta com new Date() para outros formatos
+      const fallbackParsed = new Date(candidate);
+      if (!Number.isNaN(fallbackParsed.getTime())) {
+        return fallbackParsed.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      }
+      
+      // Fallback final: retorna valor bruto
       return candidate;
     }
     return null;

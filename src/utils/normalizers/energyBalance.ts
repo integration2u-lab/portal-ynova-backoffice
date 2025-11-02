@@ -249,6 +249,18 @@ const normalizeDate = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   const text = String(value).trim();
   if (!text) return 'Não informado';
+  
+  // Tenta parsear como data brasileira primeiro
+  const brazilianParsed = parseBrazilianDate(text);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    try {
+      return dateFormatter.format(brazilianParsed);
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar data', error);
+    }
+  }
+  
+  // Fallback: tenta com new Date() para outros formatos
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) {
     try {
@@ -264,8 +276,37 @@ const normalizeDateTime = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   const text = String(value).trim();
   if (!text) return 'Não informado';
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
+  
+  // Para data/hora, pode vir no formato dd/mm/yyyy hh:mm:ss
+  // Extrai apenas a parte da data para tentar parse brasileiro
+  const datePart = text.split(' ')[0] || text.split('T')[0];
+  const timePart = text.includes(' ') ? text.split(' ').slice(1).join(' ') : '';
+  
+  let parsed: Date | null = null;
+  
+  // Tenta parsear como data brasileira primeiro (apenas a parte da data)
+  const brazilianParsed = parseBrazilianDate(datePart);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    parsed = brazilianParsed;
+    // Se houver parte de tempo, tenta adicionar
+    if (timePart) {
+      const timeMatch = timePart.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (timeMatch) {
+        const [, hours, minutes, seconds] = timeMatch;
+        parsed.setHours(parseInt(hours, 10) || 0);
+        parsed.setMinutes(parseInt(minutes, 10) || 0);
+        parsed.setSeconds(parseInt(seconds || '0', 10) || 0);
+      }
+    }
+  } else {
+    // Fallback: tenta com new Date() para outros formatos
+    parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) {
+      parsed = null;
+    }
+  }
+  
+  if (parsed && !Number.isNaN(parsed.getTime())) {
     try {
       return dateTimeFormatter.format(parsed).replace('.', '');
     } catch (error) {
@@ -280,9 +321,34 @@ const toTitleCase = (value: string): string => {
   return value.replace(/(^|\s)([\p{L}\p{M}])/gu, (match) => match.toUpperCase());
 };
 
+// Função auxiliar para parsear data no formato brasileiro dd/mm/yyyy ou dd/mm/yy
+const parseBrazilianDate = (dateStr: string): Date | null => {
+  // Tenta identificar formato dd/mm/yyyy ou dd/mm/yy
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/);
+  if (!match) return null;
+  
+  const [, day, month, year] = match;
+  const fullYear = year.length === 2 ? parseInt(`20${year}`, 10) : parseInt(year, 10);
+  const monthNum = parseInt(month, 10) - 1; // JavaScript months are 0-indexed
+  const dayNum = parseInt(day, 10);
+  
+  if (monthNum < 0 || monthNum > 11) return null;
+  if (dayNum < 1 || dayNum > 31) return null;
+  
+  const date = new Date(fullYear, monthNum, dayNum);
+  // Verifica se a data é válida (evita problemas como 31/02)
+  if (date.getFullYear() !== fullYear || date.getMonth() !== monthNum || date.getDate() !== dayNum) {
+    return null;
+  }
+  
+  return date;
+};
+
 const normalizeMonthLabel = (value: unknown): string => {
   const text = toStringSafe(value);
   if (!text) return 'Não informado';
+  
+  // Primeiro, tenta formato ISO YYYY-MM
   if (/^\d{4}-\d{2}$/.test(text)) {
     const [year, month] = text.split('-').map((part) => Number(part));
     if (Number.isInteger(year) && Number.isInteger(month)) {
@@ -293,14 +359,56 @@ const normalizeMonthLabel = (value: unknown): string => {
       }
     }
   }
+  
+  // Segundo, tenta formato ISO YYYY-MM-DD (ex: 2025-07-01)
+  // Extrai diretamente o ano e mês da string para evitar problemas de timezone
+  const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s|T|$)/);
+  if (isoDateMatch) {
+    const [, yearStr, monthStr] = isoDateMatch;
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+      try {
+        // Usa Date local para garantir que o mês correto seja usado
+        return monthFormatter.format(new Date(year, month - 1, 1)).replace('.', '');
+      } catch (error) {
+        console.warn('[energyBalance] falha ao formatar mês', error);
+      }
+    }
+  }
+  
+  // Tenta parsear como data brasileira primeiro
+  const brazilianParsed = parseBrazilianDate(text);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    try {
+      return monthFormatter.format(brazilianParsed).replace('.', '');
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar mês', error);
+    }
+  }
+  
+  // Fallback: tenta com new Date() para outros formatos
+  // Mas para evitar problemas de timezone, tenta extrair ano e mês se possível
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) {
     try {
+      // Para formatos ISO, usar UTC para evitar problemas de timezone
+      if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+        const parts = text.split(/[-T\s]/);
+        if (parts.length >= 2) {
+          const year = parseInt(parts[0] || '0', 10);
+          const month = parseInt(parts[1] || '0', 10);
+          if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+            return monthFormatter.format(new Date(year, month - 1, 1)).replace('.', '');
+          }
+        }
+      }
       return monthFormatter.format(parsed).replace('.', '');
     } catch (error) {
       console.warn('[energyBalance] falha ao formatar mês', error);
     }
   }
+  
   return text;
 };
 

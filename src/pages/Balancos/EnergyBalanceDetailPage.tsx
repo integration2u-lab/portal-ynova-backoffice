@@ -40,6 +40,26 @@ const formatDate = (dateStr: string): string => {
   }
 };
 
+const formatDateTime = (dateStr: string): string => {
+  if (!dateStr || dateStr === 'Não disparado' || dateStr === 'Não informado') return 'Não disparado';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    // Formata data e hora em pt-BR
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  } catch (error) {
+    return dateStr;
+  }
+};
+
 const parseEventDate = (value: unknown): string => {
   if (!value) return 'Data não informada';
   const text = String(value);
@@ -355,6 +375,45 @@ const extractRawMonthMapping = (
   });
 
   return mapping;
+};
+
+// Componente para exibir emails de forma bonita quando houver múltiplos
+type EmailDisplayProps = {
+  emails: string;
+};
+
+const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
+  if (!emails || emails === '-' || emails === 'Não informado') {
+    return <div className="mt-3 text-xl font-bold text-gray-900">-</div>;
+  }
+
+  // Separa os emails por ponto e vírgula ou vírgula, remove espaços e filtra vazios
+  const emailList = emails
+    .split(/[;,]/)
+    .map((email) => email.trim())
+    .filter((email) => email.length > 0);
+
+  // Se houver apenas um email, exibe normalmente
+  if (emailList.length === 1) {
+    return <div className="mt-3 text-xl font-bold text-gray-900">{emailList[0]}</div>;
+  }
+
+  // Se houver múltiplos emails, exibe em chips
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {emailList.map((email, index) => (
+          <div
+            key={index}
+            className="inline-flex items-center rounded-lg border border-yn-orange/30 bg-yn-orange/5 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-yn-orange/50 hover:bg-yn-orange/10"
+          >
+            <span className="mr-2 text-yn-orange">✉</span>
+            {email}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const mergeMonthWithEmailRow = (
@@ -1263,7 +1322,7 @@ export default function EnergyBalanceDetailPage() {
         <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50 p-5 shadow-md transition hover:shadow-lg">
           <div className="text-xs font-semibold uppercase tracking-wider text-gray-600">Data Disparo</div>
           <div className="mt-3 text-xl font-bold text-gray-900">
-            {primaryMonthRow?.disparo || 'Não disparado'}
+            {primaryMonthRow?.disparo ? formatDateTime(primaryMonthRow.disparo) : 'Não disparado'}
           </div>
         </div>
       </div>
@@ -2077,7 +2136,7 @@ export default function EnergyBalanceDetailPage() {
                   </button>
                 </div>
               ) : (
-                <div className="mt-3 text-xl font-bold text-gray-900">{primaryMonthRow.email || '-'}</div>
+                <EmailDisplay emails={primaryMonthRow.email || '-'} />
               )}
             </div>
 
@@ -2237,7 +2296,7 @@ export default function EnergyBalanceDetailPage() {
                             text = month.mes || '-';
                           }
                           if (column.key === 'disparo') {
-                            text = formatDate(displayValue || month.disparo || '');
+                            text = formatDateTime(displayValue || month.disparo || '');
                           }
                           return (
                             <td key={column.key} className={`px-2 py-3 text-xs font-semibold text-gray-900 ${column.minWidth ?? ''}`}>

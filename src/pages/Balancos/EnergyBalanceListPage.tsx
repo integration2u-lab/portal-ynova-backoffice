@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Zap, Check, AlertTriangle, Circle, Calendar, ChevronRight } from 'lucide-react';
+import { Search, Zap, Check, AlertTriangle, Circle, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
 import UploadCsvModal from '../../components/balancos/UploadCsvModal';
 import { getList } from '../../services/energyBalanceApi';
 import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
@@ -265,13 +265,25 @@ export default function EnergyBalanceListPage() {
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsUploadOpen(true)}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
-            >
-              Enviar planilha
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void fetchBalances()}
+                disabled={isRefreshing || loading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 shadow-sm transition hover:border-yn-orange hover:bg-gray-50 hover:text-yn-orange disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Atualizar dados"
+              >
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsUploadOpen(true)}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+              >
+                Enviar planilha
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -288,9 +300,6 @@ export default function EnergyBalanceListPage() {
               </span>
             )}
           </div>
-          {isRefreshing && (
-            <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">Atualizando...</span>
-          )}
         </div>
 
         {error && (
