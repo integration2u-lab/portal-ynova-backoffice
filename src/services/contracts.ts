@@ -110,7 +110,13 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     id: toStringSafe(idSource, `contract-${index}`),
     contract_code: toStringSafe(item?.contract_code),
     client_name: toStringSafe(item?.client_name),
-    legal_name: item?.legal_name == null ? undefined : toStringSafe(item?.legal_name),
+    legal_name: (() => {
+      // API returns social_reason, but we use legal_name internally
+      const socialReason = item?.social_reason;
+      const legalName = item?.legal_name;
+      const value = socialReason ?? legalName;
+      return value == null ? undefined : toStringSafe(value);
+    })(),
     client_id: item?.client_id == null ? undefined : toStringSafe(item?.client_id),
     groupName: item?.groupName == null ? undefined : toStringSafe(item?.groupName),
     cnpj: toStringSafe(item?.cnpj),
@@ -181,9 +187,15 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;
   const balanceEmailValue = typeof payload.balance_email === 'string' ? payload.balance_email.trim() : payload.balance_email;
   const billingEmailValue = typeof payload.billing_email === 'string' ? payload.billing_email.trim() : payload.billing_email;
+  const legalNameValue = typeof payload.legal_name === 'string' ? payload.legal_name.trim() : payload.legal_name;
+
+  // Map legal_name to social_reason for API
+  const { legal_name, ...rest } = payload;
+  const socialReason = legalNameValue === undefined ? undefined : legalNameValue === '' ? null : legalNameValue;
 
   return {
-    ...payload,
+    ...rest,
+    social_reason: socialReason,
     supplier: supplierValue === undefined ? undefined : supplierValue === '' ? null : supplierValue,
     balance_email: balanceEmailValue === undefined ? undefined : balanceEmailValue === '' ? null : balanceEmailValue,
     billing_email: billingEmailValue === undefined ? undefined : billingEmailValue === '' ? null : billingEmailValue,

@@ -8,6 +8,22 @@ import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
 import EditContractModal from './EditContractModal';
 
+// Component for displaying contract status badge
+function ContractStatusBadge({ status }: { status: ContractMock['status'] }) {
+  const isActive = status === 'Ativo';
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+        isActive
+          ? 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700'
+          : 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700'
+      }`}
+    >
+      {isActive ? 'Contrato Vigente' : 'Contrato encerrado'}
+    </span>
+  );
+}
+
 const pageSize = 20;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 
@@ -107,7 +123,38 @@ export default function ContratosPage() {
       );
     });
 
-    return filtrados;
+    // Ordenar por data de cadastro (mais recente primeiro)
+    const ordenados = [...filtrados].sort((a, b) => {
+      // Extrair a data de criação dos dadosContrato
+      const getCreatedAt = (contrato: ContractMock): Date => {
+        const criadoEmField = contrato.dadosContrato?.find((field) => 
+          field.label.toLowerCase().includes('criado') || field.label.toLowerCase().includes('created')
+        );
+        if (criadoEmField?.value && criadoEmField.value !== 'Não informado') {
+          const date = new Date(criadoEmField.value);
+          if (!isNaN(date.getTime())) {
+            return date;
+          }
+        }
+        // Fallback: usar data de início de vigência ou data padrão muito antiga
+        if (contrato.inicioVigencia) {
+          const date = new Date(contrato.inicioVigencia);
+          if (!isNaN(date.getTime())) {
+            return date;
+          }
+        }
+        // Se não houver data, usar data muito antiga para que apareçam por último
+        return new Date(0);
+      };
+
+      const dateA = getCreatedAt(a);
+      const dateB = getCreatedAt(b);
+      
+      // Ordenar crescente (mais antigo primeiro - primeiro cadastrado no topo)
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    return ordenados;
   }, [contracts, searchTerm]);
 
   React.useEffect(() => {
@@ -286,10 +333,10 @@ export default function ContratosPage() {
                   <tr>
                     <th className="px-4 py-3 text-left">Contrato</th>
                     <th className="px-4 py-3 text-left">Cliente</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Segmento</th>
                     <th className="px-4 py-3 text-left">Preço Médio</th>
                     <th className="px-4 py-3 text-left">Fonte</th>
-                    <th className="px-4 py-3 text-left">Resumo</th>
                     <th className="px-4 py-3 text-left">Ações</th>
                   </tr>
                 </thead>
@@ -307,14 +354,14 @@ export default function ContratosPage() {
                         <div className="font-bold text-gray-900">{contrato.cliente}</div>
                         <div className="text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
                       </td>
+                      <td className="px-4 py-3">
+                        <ContractStatusBadge status={contrato.status} />
+                      </td>
                       <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento || 'Não informado'}</td>
                       <td className="px-4 py-3 font-bold text-gray-600">
                         {contrato.precoMedio > 0 ? `R$ ${contrato.precoMedio.toFixed(2)}` : 'Não informado'}
                       </td>
                       <td className="px-4 py-3 font-bold text-gray-600">{contrato.fonte || 'Não informado'}</td>
-                      <td className="px-4 py-3">
-                        <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Link
@@ -360,7 +407,7 @@ export default function ContratosPage() {
                     </div>
                     <div className="mt-1 text-sm font-bold text-gray-700">{contrato.cliente}</div>
                     <div className="mt-2">
-                      <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
+                      <ContractStatusBadge status={contrato.status} />
                     </div>
                   </button>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">

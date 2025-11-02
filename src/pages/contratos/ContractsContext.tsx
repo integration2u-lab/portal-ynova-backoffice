@@ -656,10 +656,10 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const ensureField = (label: string, value: string) => {
       const normalizedLabel = removeDiacritics(label);
       const finalValue = normalizeString(value);
-      if (!finalValue) return;
+      // Allow empty values for important fields like emails and razão social
       if (!dadosContratoKeys.has(normalizedLabel)) {
         dadosContratoKeys.add(normalizedLabel);
-        dadosContratoBase.push({ label, value: finalValue });
+        dadosContratoBase.push({ label, value: finalValue || 'Não informado' });
       }
     };
 
@@ -739,14 +739,53 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ? status 
       : normalizeContratoStatus((item as { status?: unknown }).status);
 
+    // Parse email field from API (format: "email1; email2; " or "email1; email2")
+    const parseEmailFromApi = (emailField: unknown): { balanceEmail?: string; billingEmail?: string } => {
+      if (!emailField || typeof emailField !== 'string') {
+        return {};
+      }
+      const emails = emailField.split(';').map(e => e.trim()).filter(e => e.length > 0);
+      if (emails.length === 0) return {};
+      if (emails.length === 1) {
+        return { balanceEmail: emails[0], billingEmail: emails[0] };
+      }
+      // Se tiver mais de um email, primeiro vai para balanceEmail e o resto para billingEmail
+      return { 
+        balanceEmail: emails[0], 
+        billingEmail: emails.slice(1).join(', ') 
+      };
+    };
+
+    const rawEmail = (item as { email?: unknown }).email ?? 
+      (item as { balance_email?: unknown }).balance_email ?? 
+      (item as { billing_email?: unknown }).billing_email;
+    const parsedEmails = parseEmailFromApi(rawEmail);
+    const balanceEmail = parsedEmails.balanceEmail || normalizeString((item as { balance_email?: unknown }).balance_email) || undefined;
+    const billingEmail = parsedEmails.billingEmail || normalizeString((item as { billing_email?: unknown }).billing_email) || undefined;
+
+    const rawRazaoSocial =
+      (item as { social_reason?: unknown }).social_reason ??
+      (item as { legal_name?: unknown }).legal_name ??
+      (item as { razaoSocial?: unknown }).razaoSocial;
+    const razaoSocial = normalizeString(rawRazaoSocial) || undefined;
+
+    // Add razão social e emails to dadosContrato for display FIRST (always show, even if empty)
+    // This ensures these fields appear even if they're not in the original dadosContrato
+    ensureField('Razão Social', razaoSocial || 'Não informado');
+    ensureField('E-mail Balanço', balanceEmail || 'Não informado');
+    ensureField('E-mail Faturamento', billingEmail || 'Não informado');
+
     return {
       id,
       codigo: normalizeString(rawCodigo),
       cliente: normalizeString(rawCliente),
+      razaoSocial,
       cnpj: normalizeString((item as { cnpj?: unknown }).cnpj),
       segmento: normalizeString(rawSegmento),
       contato: contatoFinal,
       status: statusValor,
+      balanceEmail,
+      billingEmail,
       fonte: (() => {
         // Get the raw value from API first
         const rawEnergySource = (item as { energy_source?: unknown }).energy_source ??
@@ -897,7 +936,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
-    legal_name: contract.razaoSocial ? normalizeString(contract.razaoSocial) : undefined,
+    social_reason: contract.razaoSocial && contract.razaoSocial.trim() ? normalizeString(contract.razaoSocial) : null,
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),
@@ -914,8 +953,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     lower_limit_percent: parsePercentInput(contract.limiteInferior),
     flexibility_percent: parsePercentInput(contract.flex),
     average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
-    balance_email: contract.balanceEmail ? normalizeString(contract.balanceEmail) : undefined,
-    billing_email: contract.billingEmail ? normalizeString(contract.billingEmail) : undefined,
+    email: (() => {
+      const emails: string[] = [];
+      if (contract.balanceEmail) emails.push(normalizeString(contract.balanceEmail));
+      if (contract.billingEmail) emails.push(normalizeString(contract.billingEmail));
+      return emails.length > 0 ? emails.join('; ') + ';' : null;
+    })(),
     compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,
     compliance_nf: normalizeString(contract.resumoConformidades.NF) || undefined,
     compliance_invoice: normalizeString(contract.resumoConformidades.Fatura) || undefined,
@@ -928,8 +971,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   return Object.fromEntries(
     Object.entries(payload).filter(([key, value]) => {
-      if (key === 'supplier' || key === 'balance_email' || key === 'billing_email' || key === 'legal_name') {
-        return true; // Always include these fields even if empty
+      if (key === 'supplier' || key === 'email' || key === 'social_reason') {
+        return true; // Always include these fields even if empty/null
       }
       return value !== undefined && value !== null && value !== '';
     })
@@ -979,9 +1022,11 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     return null;
   };
 
+  const socialReasonValue = pickNullableValue('social_reason');
   return {
     contract_code: pickString('contract_code', contract.codigo || contract.id),
     client_name: pickString('client_name', contract.cliente),
+    legal_name: socialReasonValue && typeof socialReasonValue === 'string' ? socialReasonValue : undefined, // Map social_reason to legal_name for service
     cnpj: pickString('cnpj', contract.cnpj),
     segment: pickString('segment', contract.segmento),
     contact_responsible: pickString('contact_responsible', contract.contato),

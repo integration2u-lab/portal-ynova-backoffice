@@ -28,12 +28,19 @@ type EditableField =
 type FieldConfig = {
   key: EditableField;
   label: string;
-  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier';
+  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier' | 'select-status';
   options?: string[];
   placeholder?: string;
 };
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
+
+// Status options for contract editing (same as CreateContractModal)
+const contractStatusOptions = [
+  { value: 'Ativo', label: 'Contrato Vigente' },
+  { value: 'Inativo', label: 'Contrato encerrado' },
+] as const;
+
 const HOURS_IN_MONTH = 730;
 const volumeUnitOptions = [
   { value: 'MWH', label: 'MWh' },
@@ -48,7 +55,7 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'cnpj', label: 'CNPJ', type: 'text', placeholder: '00.000.000/0000-00' },
   { key: 'segmento', label: 'Segmento', type: 'text', placeholder: 'Ex: Indústria' },
   { key: 'contato', label: 'Contato Responsável', type: 'text', placeholder: 'Nome completo' },
-  { key: 'status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Em análise'] },
+  { key: 'status', label: 'Status', type: 'select-status' },
   { key: 'fonte', label: 'Fonte de Energia', type: 'select', options: ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%'] },
   { key: 'modalidade', label: 'Modalidade', type: 'text', placeholder: 'Ex: Preço Fixo' },
   { key: 'fornecedor', label: 'Fornecedor', type: 'select-supplier' },
@@ -407,7 +414,19 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                       className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300"
                     >
                       {config.label}
-                      {config.type === 'select' && config.options ? (
+                      {config.type === 'select-status' ? (
+                        <select
+                          value={value}
+                          onChange={(e) => handleFieldChange(config.key, e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          {contractStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : config.type === 'select' && config.options ? (
                         <select
                           value={value}
                           onChange={(e) => handleFieldChange(config.key, e.target.value)}
