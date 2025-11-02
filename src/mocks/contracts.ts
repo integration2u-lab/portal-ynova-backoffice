@@ -53,15 +53,23 @@ export type ContractInvoice = {
   arquivo?: string;
 };
 
+export type ContractVolumeByYear = {
+  year: string; // YYYY
+  volume: number; // MWh
+  price: number; // R$/MWh
+  loadPercentage: number; // Percentual de carga
+};
+
 export type ContractMock = {
   id: string;
   codigo: string;
   cliente: string;
+  razaoSocial?: string; // Razão social do cliente (diferente do nome interno)
   cnpj: string;
   segmento: string;
   contato: string;
   status: 'Ativo' | 'Inativo' | 'Em análise';
-  fonte: 'Convencional' | 'Incentivada';
+  fonte: 'Incentivada 0%' | 'Incentivada 50%' | 'Incentivada 100%' | string;
   modalidade: string;
   inicioVigencia: string;
   fimVigencia: string;
@@ -70,9 +78,14 @@ export type ContractMock = {
   flex: string;
   precoMedio: number;
   fornecedor: string;
-  proinfa: number | null;
+  // Removido proinfa - agora está apenas no Balanço Energético
   cicloFaturamento: string;
   periodos: string[]; // YYYY-MM
+  // E-mails atrelados ao contrato
+  balanceEmail?: string; // E-mail do balanço (para envio de relatórios)
+  billingEmail?: string; // E-mail de faturamento (obrigatório para atacado)
+  // Volume contratado desmembrado por ano
+  volumeByYear?: ContractVolumeByYear[];
   resumoConformidades: Record<'Consumo' | 'NF' | 'Fatura' | 'Encargos' | 'Conformidade', StatusResumo>;
   kpis: KPIItem[];
   dadosContrato: ContractInfoField[];
@@ -131,8 +144,9 @@ export const mockContracts: ContractMock[] = [
     flex: '5%',
     precoMedio: 274.32,
     fornecedor: 'Neoenergia Comercializadora',
-    proinfa: 0.219,
     cicloFaturamento: '2024-06',
+    balanceEmail: 'balanco@unisolar.com.br',
+    billingEmail: 'faturamento@unisolar.com.br',
     periodos: meses.slice(1),
     resumoConformidades: {
       Consumo: 'Conforme',
@@ -149,7 +163,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Neoenergia Comercializadora' },
-      { label: 'Proinfa', value: '0,219' },
       { label: 'Vigência', value: 'Jul/2023 - Jun/2025' },
       { label: 'Modalidade', value: 'Preço Fixo com Ajuste PLD' },
       { label: 'Fonte', value: 'Convencional' },
@@ -298,8 +311,9 @@ export const mockContracts: ContractMock[] = [
     flex: '8%',
     precoMedio: 219.5,
     fornecedor: 'Raízen Energia',
-    proinfa: 0.185,
     cicloFaturamento: '2024-05',
+    balanceEmail: 'balanco@brasilfoods.com.br',
+    billingEmail: 'faturamento@brasilfoods.com.br',
     periodos: meses.slice(0, 6),
     resumoConformidades: {
       Consumo: 'Conforme',
@@ -316,7 +330,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Raízen Energia' },
-      { label: 'Proinfa', value: '0,185' },
       { label: 'Vigência', value: 'Jan/2022 - Dez/2024' },
       { label: 'Modalidade', value: 'TUSD Verde' },
       { label: 'Fonte', value: 'Incentivada' },
@@ -464,8 +477,9 @@ export const mockContracts: ContractMock[] = [
     flex: '7%',
     precoMedio: 252.9,
     fornecedor: 'Brookfield Energia',
-    proinfa: null,
     cicloFaturamento: '2024-06',
+    balanceEmail: 'balanco@minasgusa.com.br',
+    billingEmail: 'faturamento@minasgusa.com.br',
     periodos: meses.slice(2),
     resumoConformidades: {
       Consumo: 'Em análise',
@@ -482,7 +496,6 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Brookfield Energia' },
-      { label: 'Proinfa', value: 'Não informado' },
       { label: 'Vigência', value: 'Jan/2024 - Dez/2026' },
       { label: 'Modalidade', value: 'Preço Fixo' },
       { label: 'Fonte', value: 'Convencional' },

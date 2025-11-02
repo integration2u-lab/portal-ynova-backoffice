@@ -134,8 +134,16 @@ const parsePercentInput = (value: unknown): number | null => {
   if (!match) return null;
   const numeric = Number(match);
   if (!Number.isFinite(numeric)) return null;
-  const normalized = Math.abs(numeric) > 1 ? numeric / 100 : numeric;
-  return Number.isFinite(normalized) ? normalized : null;
+  // For limit values (upper_limit_percent, lower_limit_percent, flexibility_percent),
+  // the input field accepts values like 200 (meaning 200%), so we return the value as-is.
+  // The API expects the percentage value (200 for 200%), not decimal (2.0 for 200%).
+  // Only normalize if the value is clearly a decimal (between 0 and 1)
+  if (Math.abs(numeric) <= 1 && numeric >= 0) {
+    // Value is between 0 and 1, treat as decimal (0.5 = 50%)
+    return numeric;
+  }
+  // Value is > 1, treat as percentage already (200 = 200%)
+  return numeric;
 };
 
 const parseNumericInput = (value: unknown): number | null => {
@@ -195,10 +203,31 @@ const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
 };
 
 const normalizeFonte = (value: unknown): ContractMock['fonte'] => {
-  const text = removeDiacritics(normalizeString(value));
+  const originalValue = normalizeString(value);
+  if (!originalValue) return 'Convencional';
+  
+  const text = removeDiacritics(originalValue);
+  
+  // Preserve full value if it contains percentage (e.g., "Incentivada 100%")
+  if (/incentivada\s*\d+%|incentivada\s*100%|incentivada\s*50%|incentivada\s*0%/i.test(originalValue)) {
+    // Normalize format but keep the percentage
+    const match = originalValue.match(/(incentivada)\s*(\d+)%/i);
+    if (match) {
+      return `Incentivada ${match[2]}%` as ContractMock['fonte'];
+    }
+    return originalValue as ContractMock['fonte'];
+  }
+  
+  // Check for simplified values
   if (['incentivada', 'incentivadao', 'incentivada50', 'subsidized'].includes(text)) return 'Incentivada';
   if (['convencional', 'conventional'].includes(text)) return 'Convencional';
   if (['renovavel', 'renewable'].includes(text)) return 'Incentivada';
+  
+  // If the value doesn't match known patterns but contains "incentivada", preserve it
+  if (/incentivada/i.test(originalValue)) {
+    return originalValue as ContractMock['fonte'];
+  }
+  
   return 'Convencional';
 };
 
@@ -472,36 +501,39 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { billing_cycle?: unknown }).billing_cycle;
 
     const referenceMonth = normalizeReferenceMonth(referenceBaseRaw);
+    
+    // Normalize billing cycle - try multiple sources
+    const billingCycleRaw =
+      (item as { billing_cycle?: unknown }).billing_cycle ??
+      (item as { cicloFaturamento?: unknown }).cicloFaturamento ??
+      (item as { ciclo?: unknown }).ciclo ??
+      (item as { periodo?: unknown }).periodo ??
+      referenceMonth;
+    
     const ciclo =
-      normalizeString(
-        (item as { cicloFaturamento?: unknown; ciclo?: unknown; periodo?: unknown }).cicloFaturamento ??
-          (item as { ciclo?: unknown }).ciclo ??
-          (item as { periodo?: unknown }).periodo ??
-          (item as { billing_cycle?: unknown }).billing_cycle ??
-          referenceMonth
-      ) || referenceMonth;
+      normalizeString(billingCycleRaw) || normalizeReferenceMonth(billingCycleRaw) || referenceMonth || '';
 
     const rawCodigo =
+      (item as { contract_code?: unknown }).contract_code ??
       (item as { codigo?: unknown }).codigo ??
       (item as { codigoContrato?: unknown }).codigoContrato ??
       (item as { contract?: unknown }).contract ??
-      (item as { contract_code?: unknown }).contract_code ??
       id;
     const rawCliente =
+      (item as { client_name?: unknown }).client_name ??
       (item as { cliente?: unknown }).cliente ??
       (item as { client?: unknown }).client ??
       (item as { nomeCliente?: unknown }).nomeCliente ??
-      (item as { client_name?: unknown }).client_name ??
       'Cliente não informado';
     const rawSegmento =
-      (item as { segmento?: unknown }).segmento ?? 
-      (item as { segment?: unknown }).segment ?? 
+      (item as { segment?: unknown }).segment ??
+      (item as { segmento?: unknown }).segmento ??
       'Não informado';
     const rawContato =
+      (item as { contact_responsible?: unknown }).contact_responsible ??
       (item as { contato?: unknown }).contato ??
       (item as { responsavel?: unknown }).responsavel ??
       (item as { contact?: unknown }).contact ??
-      (item as { contact_responsible?: unknown }).contact_responsible ??
       '';
 
     const contatoAtivoRaw =
@@ -516,18 +548,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         ? contatoAtivoRaw.toLowerCase() === 'true'
         : undefined;
 
+    // Prioritize API field names that match the payload structure
     const supplier =
       normalizeString(
         (item as { supplier?: unknown }).supplier ??
           (item as { fornecedor?: unknown }).fornecedor ??
           (item as { supplier_name?: unknown }).supplier_name
       );
-    const proinfa = parseNumericInput(
-      (item as { proinfa_contribution?: unknown }).proinfa_contribution ??
-        (item as { proinfa?: unknown }).proinfa ??
-        (item as { contribuicaoProinfa?: unknown }).contribuicaoProinfa ??
-        (item as { contribuicao_proinfa?: unknown }).contribuicao_proinfa
-    );
+    // Note: proinfa was removed from contracts - now only in Energy Balance
     const meter = normalizeString(
       (item as { meter?: unknown }).meter ?? 
       (item as { medidor?: unknown }).medidor ??
@@ -545,12 +573,16 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { contract_status?: unknown }).contract_status;
     const status = normalizeString(statusRaw) || 'Não informado';
 
+    // Prioritize API field names that match the payload structure
     const rawPrice =
+      (item as { average_price_mwh?: unknown }).average_price_mwh ??
       (item as { price?: unknown }).price ??
       (item as { preco?: unknown }).preco ??
-      (item as { precoMedio?: unknown }).precoMedio ??
-      (item as { average_price_mwh?: unknown }).average_price_mwh;
-    const precoMedio = Number(rawPrice) || 0;
+      (item as { precoMedio?: unknown }).precoMedio;
+    
+    // Use parseNumericInput to properly handle string numbers and null/undefined
+    const precoMedioParsed = parseNumericInput(rawPrice);
+    const precoMedio = precoMedioParsed !== null ? precoMedioParsed : 0;
 
     const inicioVigencia = normalizeIsoDate(
       (item as { inicioVigencia?: unknown; vigenciaInicio?: unknown }).inicioVigencia ??
@@ -573,16 +605,28 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ? Array.from(new Set([...periodosBase, referenceMonth]))
       : periodosBase;
 
+    // Build compliance object first, prioritizing compliance_* fields from API
+    const complianceData: Record<string, unknown> = {};
+    const complianceFields = {
+      Consumo: (item as { compliance_consumption?: unknown }).compliance_consumption,
+      NF: (item as { compliance_nf?: unknown }).compliance_nf,
+      Fatura: (item as { compliance_invoice?: unknown }).compliance_invoice,
+      Encargos: (item as { compliance_charges?: unknown }).compliance_charges,
+      Conformidade: (item as { compliance_overall?: unknown }).compliance_overall,
+    };
+    
+    // Only add non-empty compliance fields
+    Object.entries(complianceFields).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        complianceData[key] = value;
+      }
+    });
+
+    // Normalize resumo, prioritizing API compliance fields
     const resumo = normalizeResumo(
       (item as { resumoConformidades?: unknown; conformidades?: unknown }).resumoConformidades ??
         (item as { conformidades?: unknown }).conformidades ??
-        {
-          Consumo: (item as { compliance_consumption?: unknown }).compliance_consumption,
-          NF: (item as { compliance_nf?: unknown }).compliance_nf,
-          Fatura: (item as { compliance_invoice?: unknown }).compliance_invoice,
-          Encargos: (item as { compliance_charges?: unknown }).compliance_charges,
-          Conformidade: (item as { compliance_overall?: unknown }).compliance_overall,
-        }
+        (Object.keys(complianceData).length > 0 ? complianceData : undefined)
     );
 
     const adjustedRaw =
@@ -635,25 +679,26 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 
     const supplierDisplay = supplier || 'Não informado';
     ensureField('Fornecedor', supplierDisplay);
-    ensureField('Proinfa', formatProinfa(proinfa));
+    // Note: Proinfa is now only in Energy Balance, not in contracts
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
     ensureField('Contrato', normalizeString(rawCodigo));
     ensureField('Cliente ID', clientId || 'Não informado');
     ensureField('Volume contratado', formatMwhValue(contractedVolume));
+    // Format Flex / Limites as: {flex}% ({limiteInferior}% - {limiteSuperior}%)
+    // formatPercentValue already includes % sign, so we use it directly
+    const flexFormatted = formatPercentValue(flexValue) || '0%';
+    const lowerLimitFormatted = formatPercentValue(lowerLimitRaw) || '0%';
+    const upperLimitFormatted = formatPercentValue(upperLimitRaw) || '0%';
     ensureField(
       'Flex / Limites',
-      [formatPercentValue(flexValue), formatPercentValue(lowerLimitRaw), formatPercentValue(upperLimitRaw)]
-        .filter(Boolean)
-        .join(' · ')
+      `${flexFormatted} (${lowerLimitFormatted} - ${upperLimitFormatted})`
     );
-    ensureField('Ciclo de faturamento', normalizeString(ciclo) || 'Não informado');
     ensureField('Status', status);
     ensureField('Segmento', normalizeString(rawSegmento));
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
     ensureField('Fonte de energia', normalizeString((item as { energy_source?: unknown }).energy_source) || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
-    ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
     
     // Add compliance fields
     ensureField('Conformidade consumo', normalizeString((item as { compliance_consumption?: unknown }).compliance_consumption) || 'Não informado');
@@ -702,10 +747,27 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       segmento: normalizeString(rawSegmento),
       contato: contatoFinal,
       status: statusValor,
-      fonte: normalizeFonte((item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source),
+      fonte: (() => {
+        // Get the raw value from API first
+        const rawEnergySource = (item as { energy_source?: unknown }).energy_source ??
+          (item as { fonte?: unknown }).fonte;
+        
+        // If API returns a value, preserve it as-is (e.g., "Incentivada 100%")
+        // Only normalize if it's a simple value without percentage
+        if (rawEnergySource && typeof rawEnergySource === 'string') {
+          const sourceStr = String(rawEnergySource);
+          // If it already contains percentage or full description, use it directly
+          if (/incentivada\s*\d+%|convencional/i.test(sourceStr)) {
+            return normalizeFonte(sourceStr);
+          }
+        }
+        
+        return normalizeFonte(rawEnergySource);
+      })(),
       modalidade:
         normalizeString(
-          (item as { modalidade?: unknown }).modalidade ?? (item as { contracted_modality?: unknown }).contracted_modality
+          (item as { contracted_modality?: unknown }).contracted_modality ??
+          (item as { modalidade?: unknown }).modalidade
         ) || 'Não informado',
       inicioVigencia: inicioVigencia || normalizeString((item as { inicio?: unknown }).inicio),
       fimVigencia: fimVigencia,
@@ -722,7 +784,7 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ),
       precoMedio,
       fornecedor: supplier,
-      proinfa: proinfa ?? null,
+      // Note: proinfa was removed from contracts - now only in Energy Balance
       cicloFaturamento: ciclo,
       periodos,
       resumoConformidades: resumo,
@@ -830,16 +892,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const contractedVolume = parseNumericInput(volumeField);
   const supplierFromContract = normalizeString(contract.fornecedor);
   const supplierValue = supplierFromContract || supplier || '';
-  const proinfaField = findDadosValue(['proinfa']);
-  const proinfaFromDados = parseNumericInput(proinfaField);
-  const proinfaValue =
-    contract.proinfa !== null && contract.proinfa !== undefined
-      ? contract.proinfa
-      : proinfaFromDados;
+  // Note: proinfa was removed from contracts - now only in Energy Balance
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
+    legal_name: contract.razaoSocial ? normalizeString(contract.razaoSocial) : undefined,
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),
@@ -856,7 +914,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     lower_limit_percent: parsePercentInput(contract.limiteInferior),
     flexibility_percent: parsePercentInput(contract.flex),
     average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
-    proinfa_contribution: proinfaValue ?? null,
+    balance_email: contract.balanceEmail ? normalizeString(contract.balanceEmail) : undefined,
+    billing_email: contract.billingEmail ? normalizeString(contract.billingEmail) : undefined,
     compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,
     compliance_nf: normalizeString(contract.resumoConformidades.NF) || undefined,
     compliance_invoice: normalizeString(contract.resumoConformidades.Fatura) || undefined,
@@ -869,8 +928,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   return Object.fromEntries(
     Object.entries(payload).filter(([key, value]) => {
-      if (key === 'supplier' || key === 'proinfa_contribution') {
-        return true;
+      if (key === 'supplier' || key === 'balance_email' || key === 'billing_email' || key === 'legal_name') {
+        return true; // Always include these fields even if empty
       }
       return value !== undefined && value !== null && value !== '';
     })
@@ -882,6 +941,21 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
   const record = payload as Record<string, unknown>;
 
   const pickString = (key: string, fallback = '') => normalizeString(record[key] ?? fallback);
+  const pickNumericValue = (key: string): number | null => {
+    const value = record[key];
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    // Try to parse string numbers
+    if (typeof value === 'string') {
+      const parsed = parseNumericInput(value);
+      return parsed;
+    }
+    return null;
+  };
   const pickNullableValue = (key: string): string | number | null => {
     const value = record[key];
     if (value === undefined || value === '') {
@@ -893,7 +967,16 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     if (typeof value === 'string') {
       return value;
     }
-    return value as string | number | null;
+    // If value is an object or array, convert to string or return null
+    if (value !== null && typeof value === 'object') {
+      try {
+        const stringified = String(value);
+        return stringified !== '[object Object]' && stringified !== '[object Array]' ? stringified : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   };
 
   return {
@@ -902,21 +985,21 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     cnpj: pickString('cnpj', contract.cnpj),
     segment: pickString('segment', contract.segmento),
     contact_responsible: pickString('contact_responsible', contract.contato),
-    contracted_volume_mwh: record.contracted_volume_mwh ?? null,
+    contracted_volume_mwh: pickNumericValue('contracted_volume_mwh'),
     status: pickString('status', contract.status),
     energy_source: pickString('energy_source', contract.fonte),
     contracted_modality: pickString('contracted_modality', contract.modalidade),
     start_date: pickString('start_date', contract.inicioVigencia),
     end_date: pickString('end_date', contract.fimVigencia),
     billing_cycle: pickString('billing_cycle', contract.cicloFaturamento),
-    upper_limit_percent: record.upper_limit_percent ?? null,
-    lower_limit_percent: record.lower_limit_percent ?? null,
-    flexibility_percent: record.flexibility_percent ?? null,
-    average_price_mwh: record.average_price_mwh ?? null,
+    upper_limit_percent: pickNumericValue('upper_limit_percent'),
+    lower_limit_percent: pickNumericValue('lower_limit_percent'),
+    flexibility_percent: pickNumericValue('flexibility_percent'),
+    average_price_mwh: pickNumericValue('average_price_mwh'),
     supplier: (record.supplier ?? null) as string | null,
-    proinfa_contribution: record.proinfa_contribution ?? null,
+    // Note: proinfa_contribution was removed from contracts - now only in Energy Balance
     groupName: pickString('groupName', 'default') || 'default',
-    spot_price_ref_mwh: record.spot_price_ref_mwh ?? null,
+    spot_price_ref_mwh: pickNumericValue('spot_price_ref_mwh'),
     compliance_consumption: pickNullableValue('compliance_consumption'),
     compliance_nf: pickNullableValue('compliance_nf'),
     compliance_invoice: pickNullableValue('compliance_invoice'),
