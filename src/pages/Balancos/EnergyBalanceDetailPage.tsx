@@ -970,19 +970,61 @@ export default function EnergyBalanceDetailPage() {
 
     setSavingRowId(rowId);
     try {
+      // Converter o valor do PROINFA corretamente (preservar zero à esquerda)
+      // Se o usuário digitou "0,3", converter para número 0.3 e depois para string "0.3"
+      let proinfaValue: string | number = fieldInputValue;
+      
+      // Normalizar o valor: remover espaços e símbolos, substituir vírgula por ponto
+      const normalized = fieldInputValue.trim().replace(/[R$\s]/g, '').replace(',', '.');
+      
+      console.log('[handleSaveProinfaTotal] 🔍 Processando PROINFA:', {
+        originalInput: fieldInputValue,
+        normalized,
+      });
+      
+      if (normalized && normalized !== '') {
+        const numValue = parseFloat(normalized);
+        if (!isNaN(numValue) && isFinite(numValue)) {
+          // Determinar quantas casas decimais preservar
+          const decimalPlaces = normalized.includes('.') ? (normalized.split('.')[1]?.length || 0) : 0;
+          
+          // Converter para string preservando casas decimais e zero à esquerda
+          if (decimalPlaces > 0) {
+            proinfaValue = numValue.toFixed(decimalPlaces);
+          } else {
+            proinfaValue = numValue.toString();
+          }
+          
+          console.log('[handleSaveProinfaTotal] ✅ PROINFA convertido:', {
+            numValue,
+            decimalPlaces,
+            finalValue: proinfaValue,
+          });
+        } else {
+          proinfaValue = fieldInputValue; // Manter valor original se não for número válido
+        }
+      }
+
       // Atualizar o rawMonthMap com o novo valor de proinfaContribution
       const updatedRaw = {
         ...originalRaw,
-        proinfaContribution: fieldInputValue,
-        proinfa_contribution: fieldInputValue,
-        proinfa: fieldInputValue,
+        proinfaContribution: proinfaValue,
+        proinfa_contribution: proinfaValue,
+        proinfa: proinfaValue,
       };
 
       // Criar payload para enviar à API
       const payload: Record<string, unknown> = {
         ...(originalRaw as Record<string, unknown>),
-        proinfaContribution: fieldInputValue,
+        proinfaContribution: proinfaValue,
       };
+
+      console.log('[handleSaveProinfaTotal] 🔍 Salvando PROINFA:', {
+        inputValue: fieldInputValue,
+        normalized,
+        finalValue: proinfaValue,
+        payload,
+      });
 
       const response = await updateEmailRow(rowId, payload);
 
@@ -1159,10 +1201,10 @@ export default function EnergyBalanceDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-screen-2xl space-y-6 p-6">
-      <header className="rounded-xl border border-gray-200 bg-gradient-to-r from-white to-gray-50 p-6 shadow-md">
+      <header className="rounded-xl border-2 border-yn-orange bg-gradient-to-r from-white to-gray-50 p-6 shadow-lg">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 flex-wrap mb-3">
               <h1 className="text-3xl font-bold text-gray-900">
                 Balanço Energético
               </h1>
@@ -1170,9 +1212,19 @@ export default function EnergyBalanceDetailPage() {
                 {detail.header.titleSuffix || '-'}
               </span>
             </div>
-            <p className="mt-2 text-sm font-medium text-gray-600">
-              {detail.header.razao} · CNPJ {detail.header.cnpj || 'Não informado'}
-            </p>
+            <div className="bg-white rounded-lg border-2 border-yn-orange/30 px-4 py-3 shadow-sm">
+              <div className="flex flex-col gap-1">
+                <div className="text-xl font-bold text-gray-900">
+                  {detail.header.razao || 'Cliente não informado'}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-600">CNPJ:</span>
+                  <span className="text-base font-bold text-yn-orange">
+                    {detail.header.cnpj || 'Não informado'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {contractLink ? (
@@ -1188,7 +1240,7 @@ export default function EnergyBalanceDetailPage() {
               </span>
             )}
             <Link
-              to="/contratos"
+              to="/balancos"
               className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:border-gray-400 hover:shadow-md"
             >
               ← Voltar

@@ -10,6 +10,7 @@ export interface EnergyBalanceListItem {
   saldoValor?: number | null;
   sentOk?: boolean | null;
   referenceBaseLabel?: string;
+  proinfa?: string | number | null;
 }
 
 export interface EnergyBalanceDetailMetrics {

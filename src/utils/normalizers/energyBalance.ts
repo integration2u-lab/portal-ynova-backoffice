@@ -413,6 +413,13 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
       'status_envio'
     ),
   );
+
+  // Extrair PROINFA para verificar se está preenchido
+  const proinfaRaw = toNumber(
+    getSafe(record, 'proinfaContribution', 'proinfa_contribution', 'proinfa', 'proinfaTotal')
+  );
+  const proinfa = proinfaRaw !== null && proinfaRaw > 0 ? proinfaRaw : null;
+
   return {
     id,
     cliente,
@@ -425,6 +432,7 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
     sentOk: sentOkFlag,
     saldoValor: saldo.numeric,
     referenceBaseLabel,
+    proinfa,
   };
 }
 

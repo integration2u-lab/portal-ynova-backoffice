@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Zap, Check, AlertTriangle, Circle } from 'lucide-react';
+import { Search, Zap, Check, AlertTriangle, Circle, Calendar, ChevronRight } from 'lucide-react';
 import UploadCsvModal from '../../components/balancos/UploadCsvModal';
 import { getList } from '../../services/energyBalanceApi';
 import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
@@ -47,6 +47,34 @@ function SentOkBadge({ sentOk }: SentOkBadgeProps) {
   );
 }
 
+type ProinfaBadgeProps = {
+  proinfa?: string | number | null;
+};
+
+function ProinfaBadge({ proinfa }: ProinfaBadgeProps) {
+  const baseClassName =
+    'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold';
+
+  // Verificar se PROINFA está preenchido (tem valor maior que 0)
+  const isFilled = proinfa !== null && proinfa !== undefined && proinfa !== '' && Number(proinfa) > 0;
+
+  if (isFilled) {
+    return (
+      <span className={`${baseClassName} border-green-200 bg-green-100 text-green-700`}>
+        <Check size={14} />
+        PROINFA
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${baseClassName} border-red-200 bg-red-100 text-red-700`}>
+      <AlertTriangle size={14} />
+      PROINFA
+    </span>
+  );
+}
+
 export default function EnergyBalanceListPage() {
   const navigate = useNavigate();
   const [items, setItems] = React.useState<EnergyBalanceListItem[]>([]);
@@ -60,6 +88,7 @@ export default function EnergyBalanceListPage() {
   const previousSearchRef = React.useRef('');
   const controllerRef = React.useRef<AbortController | null>(null);
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<string>('');
 
   const fetchBalances = React.useCallback(async () => {
     controllerRef.current?.abort();
@@ -182,6 +211,14 @@ export default function EnergyBalanceListPage() {
       items: map.get(label) ?? [],
     }));
   }, [filteredItems, hasData]);
+
+  // Definir a primeira aba como ativa quando os dados carregarem
+  React.useEffect(() => {
+    if (groupedItems.length > 0 && !activeTab) {
+      setActiveTab(groupedItems[0].label);
+    }
+  }, [groupedItems, activeTab]);
+
   const showLoadingState = loading && itemsRef.current.length === 0;
 
   return (
@@ -281,42 +318,78 @@ export default function EnergyBalanceListPage() {
             Nenhum balanço encontrado.
           </div>
         ) : (
-          <div className="space-y-4">
-            {groupedItems.map((group) => (
-              <div key={group.id} className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <h3 className="text-sm font-bold text-gray-900">Referencia {group.label}</h3>
-                  <span className="text-xs font-semibold text-gray-500">
-                    {group.items.length === 1 ? '1 balanço' : `${group.items.length} balanços`}
+          <div className="space-y-6">
+            {/* Abas dos meses */}
+            <div className="flex flex-wrap gap-2 border-b border-gray-200">
+              {groupedItems.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => setActiveTab(group.label)}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition ${
+                    activeTab === group.label
+                      ? 'bg-yn-orange text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span>{group.label}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs ${
+                    activeTab === group.label
+                      ? 'bg-white/20 text-white'
+                      : 'bg-yn-orange text-white'
+                  }`}>
+                    {group.items.length}
                   </span>
+                  {activeTab === group.label && <ChevronRight className="h-4 w-4" />}
+                </button>
+              ))}
+            </div>
+
+            {/* Conteúdo da aba ativa */}
+            {groupedItems.map((group) => {
+              if (activeTab !== group.label) return null;
+              
+              return (
+                <div key={group.id} className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+                  {/* Cabeçalho do mês ativo */}
+                  <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+                    <Calendar className="h-5 w-5 text-yn-orange" />
+                    <h3 className="text-lg font-bold text-gray-900">{group.label}</h3>
+                    <span className="rounded-full bg-yn-orange px-3 py-1 text-xs font-bold text-white">
+                      {group.items.length} {group.items.length === 1 ? 'balanço' : 'balanços'}
+                    </span>
+                  </div>
+                  
+                  {/* Lista de balanços do mês */}
+                  <ul className="divide-y divide-gray-100">
+                    {group.items.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/balancos/${item.id}`)}
+                          className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-yn-orange/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange/40 sm:flex-row sm:items-center sm:justify-between"
+                          aria-label={`Abrir balanço energético de ${item.cliente}`}
+                        >
+                          <div className="flex flex-col gap-1">
+                            <span className="text-base font-bold text-gray-900">{item.cliente}</span>
+                            <span className="text-xs font-bold text-gray-500">CNPJ {item.cnpj}</span>
+                            <span className="text-xs font-bold text-gray-500">Medidor {item.meterCode}</span>
+                          </div>
+                          <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                              <Zap size={14} />
+                              {item.consumoKWh}
+                            </span>
+                            <ProinfaBadge proinfa={item.proinfa} />
+                            <SentOkBadge sentOk={item.sentOk} />
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="divide-y divide-gray-100">
-                  {group.items.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/balancos/${item.id}`)}
-                        className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-yn-orange/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange/40 sm:flex-row sm:items-center sm:justify-between"
-                        aria-label={`Abrir balanço energético de ${item.cliente}`}
-                      >
-                        <div className="flex flex-col gap-1">
-                          <span className="text-base font-bold text-gray-900">{item.cliente}</span>
-                          <span className="text-xs font-bold text-gray-500">CNPJ {item.cnpj}</span>
-                          <span className="text-xs font-bold text-gray-500">Medidor {item.meterCode}</span>
-                        </div>
-                        <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                            <Zap size={14} />
-                            {item.consumoKWh}
-                          </span>
-                          <SentOkBadge sentOk={item.sentOk} />
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
