@@ -25,6 +25,7 @@ export type {
   KPIItem,
   ObrigacaoRow,
   StatusResumo,
+  ContractVolumeByYear,
 };
 
 export { formatMesLabel, obrigacaoColunas } from '../mocks/contracts';
