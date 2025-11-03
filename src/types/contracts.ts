@@ -29,10 +29,7 @@ export type {
   KPIItem,
   ObrigacaoRow,
   StatusResumo,
-  ContractPriceMonth,
-  ContractPricePeriod,
-  ContractPricePeriods,
-  PricePeriodsSummary,
+  ContractVolumeByYear,
 };
 
 export { formatMesLabel, obrigacaoColunas } from '../mocks/contracts';

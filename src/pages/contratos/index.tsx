@@ -6,6 +6,23 @@ import type { ContractDetails as ContractMock, StatusResumo } from '../../types/
 import { formatMesLabel } from '../../types/contracts';
 import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
+import EditContractModal from './EditContractModal';
+
+// Component for displaying contract status badge
+function ContractStatusBadge({ status }: { status: ContractMock['status'] }) {
+  const isActive = status === 'Ativo';
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+        isActive
+          ? 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700'
+          : 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700'
+      }`}
+    >
+      {isActive ? 'Contrato Vigente' : 'Contrato encerrado'}
+    </span>
+  );
+}
 
 const pageSize = 20;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em anÃ¡lise', 'Divergente'];
@@ -59,14 +76,16 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
 }
 
 export default function ContratosPage() {
-  const { contracts, addContract, isLoading, error, refreshContracts } = useContracts();
+  const { contracts, addContract, isLoading, error, refreshContracts, getContractById } = useContracts();
 
   const [referencePeriod] = React.useState<'all'>('all');
   const [paginaAtual, setPaginaAtual] = React.useState(1);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [contratoSelecionado, setContratoSelecionado] = React.useState<string | null>(null);
+  const [contratoParaEditar, setContratoParaEditar] = React.useState<ContractMock | null>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const { updateContract } = useContracts();
   const isUpdating = isLoading || isRefreshing;
 
   const handleRefreshContracts = React.useCallback(async () => {
@@ -106,7 +125,38 @@ export default function ContratosPage() {
       );
     });
 
-    return filtrados;
+    // Ordenar por data de cadastro (mais recente primeiro)
+    const ordenados = [...filtrados].sort((a, b) => {
+      // Extrair a data de criação dos dadosContrato
+      const getCreatedAt = (contrato: ContractMock): Date => {
+        const criadoEmField = contrato.dadosContrato?.find((field) => 
+          field.label.toLowerCase().includes('criado') || field.label.toLowerCase().includes('created')
+        );
+        if (criadoEmField?.value && criadoEmField.value !== 'Não informado') {
+          const date = new Date(criadoEmField.value);
+          if (!isNaN(date.getTime())) {
+            return date;
+          }
+        }
+        // Fallback: usar data de início de vigência ou data padrão muito antiga
+        if (contrato.inicioVigencia) {
+          const date = new Date(contrato.inicioVigencia);
+          if (!isNaN(date.getTime())) {
+            return date;
+          }
+        }
+        // Se não houver data, usar data muito antiga para que apareçam por último
+        return new Date(0);
+      };
+
+      const dateA = getCreatedAt(a);
+      const dateB = getCreatedAt(b);
+      
+      // Ordenar crescente (mais antigo primeiro - primeiro cadastrado no topo)
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    return ordenados;
   }, [contracts, searchTerm]);
 
   React.useEffect(() => {
@@ -127,7 +177,11 @@ export default function ContratosPage() {
     }
   }, [contratoSelecionado, contratosFiltrados]);
 
-  const contratoDetalhado = contratosFiltrados.find((c) => c.id === contratoSelecionado) ?? null;
+  // Use getContractById to get the full contract data, same as when opening the contract
+  const contratoDetalhado = React.useMemo(() => {
+    if (!contratoSelecionado) return null;
+    return getContractById(contratoSelecionado) ?? null;
+  }, [contratoSelecionado, getContractById]);
 
 
   const statusResumoGeral = React.useMemo(() => {
@@ -157,6 +211,14 @@ export default function ContratosPage() {
       return saved;
     },
     [addContract, handleRefreshContracts]
+  );
+
+  const handleEditContract = React.useCallback(
+    async (contractId: string, updates: Partial<ContractMock>) => {
+      await updateContract(contractId, updates);
+      await handleRefreshContracts();
+    },
+    [updateContract, handleRefreshContracts]
   );
 
   return (
@@ -270,13 +332,12 @@ export default function ContratosPage() {
                 <thead className="bg-gray-50 dark:bg-[#3E3E3E] text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">
                   <tr>
                     <th className="px-4 py-3 text-left">Contrato</th>
-                    <th className="px-4 py-3 text-left">Razão social</th>
+                    <th className="px-4 py-3 text-left">Cliente</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Segmento</th>
-                    <th className="px-4 py-3 text-left">Ciclo</th>
-                    <th className="px-4 py-3 text-left">PreÃ§o MÃ©dio</th>
+                    <th className="px-4 py-3 text-left">Preço Médio</th>
                     <th className="px-4 py-3 text-left">Fonte</th>
-                    <th className="px-4 py-3 text-left">Resumo</th>
-                    <th className="px-4 py-3 text-left">AÃ§Ãµes</th>
+                    <th className="px-4 py-3 text-left">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -296,13 +357,14 @@ export default function ContratosPage() {
                         )}
                         <div className="text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
                       </td>
-                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento}</td>
-                      <td className="px-4 py-3 font-bold text-gray-600">{formatMonthLabel(contrato.cicloFaturamento)}</td>
-                      <td className="px-4 py-3 font-bold text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
-                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.fonte}</td>
                       <td className="px-4 py-3">
-                        <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
+                        <ContractStatusBadge status={contrato.status} />
                       </td>
+                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento || 'Não informado'}</td>
+                      <td className="px-4 py-3 font-bold text-gray-600">
+                        {contrato.precoMedio > 0 ? `R$ ${contrato.precoMedio.toFixed(2)}` : 'Não informado'}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-gray-600">{contrato.fonte || 'Não informado'}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Link
@@ -312,13 +374,16 @@ export default function ContratosPage() {
                           >
                             Abrir
                           </Link>
-                          <Link
-                            to={`/contratos/${contrato.id}/editar`}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setContratoParaEditar(contrato);
+                            }}
                             className="rounded-md border border-yn-orange px-3 py-1 font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
-                            onClick={(event) => event.stopPropagation()}
                           >
                             Editar
-                          </Link>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -342,14 +407,13 @@ export default function ContratosPage() {
                   >
                     <div className="flex items-center justify-between text-sm font-bold text-gray-900">
                       <span>{contrato.codigo}</span>
-                      <span className="text-xs font-bold text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
                     </div>
                     <div className="mt-1 text-sm font-bold text-gray-700">{contrato.razaoSocial || contrato.cliente}</div>
                     {contrato.razaoSocial && contrato.cliente && contrato.razaoSocial !== contrato.cliente && (
                       <div className="text-xs font-bold text-gray-500">Nome fantasia: {contrato.cliente}</div>
                     )}
                     <div className="mt-2">
-                      <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
+                      <ContractStatusBadge status={contrato.status} />
                     </div>
                   </button>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -359,12 +423,13 @@ export default function ContratosPage() {
                     >
                       Abrir
                     </Link>
-                    <Link
-                      to={`/contratos/${contrato.id}/editar`}
+                    <button
+                      type="button"
+                      onClick={() => setContratoParaEditar(contrato)}
                       className="flex-1 rounded-md border border-yn-orange px-3 py-2 text-center font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
                     >
                       Editar
-                    </Link>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -418,12 +483,13 @@ export default function ContratosPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPills summary={summarizeResumo(contratoDetalhado.resumoConformidades)} />
-              <Link
-                to={`/contratos/${contratoDetalhado.id}/editar`}
+              <button
+                type="button"
+                onClick={() => setContratoParaEditar(contratoDetalhado)}
                 className="inline-flex items-center justify-center rounded-md border border-yn-orange px-3 py-2 text-sm font-bold text-yn-orange transition hover:bg-yn-orange hover:text-white"
               >
                 Editar contrato
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -431,6 +497,14 @@ export default function ContratosPage() {
         </section>
       )}
       <CreateContractModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreate={handleCreateContract} />
+      {contratoParaEditar && (
+        <EditContractModal
+          open={!!contratoParaEditar}
+          contract={contratoParaEditar}
+          onClose={() => setContratoParaEditar(null)}
+          onSave={handleEditContract}
+        />
+      )}
     </div>
   );
 }

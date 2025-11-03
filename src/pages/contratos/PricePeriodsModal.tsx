@@ -2,8 +2,27 @@ import React from 'react';
 import { Plus, Trash2, X, Eraser } from 'lucide-react';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 import { monthsBetween } from '../../utils/dateRange';
-import type { ContractPricePeriods } from '../../types/pricePeriods';
-import { normalizeAnnualPricePeriods, clonePricePeriods } from '../../utils/contractPricing';
+
+export type PricePeriods = {
+  periods: Array<{
+    id: string;
+    start: string; // YYYY-MM
+    end: string; // YYYY-MM
+    defaultPrice?: number;
+    defaultAdjustedPrice?: number; // Preço reajustado por inflação
+    inflationRate?: number; // Taxa de reajuste anual (ex: 0.05 para 5%)
+    months: Array<{ 
+      ym: string; 
+      price: number; // Preço base
+      adjustedPrice?: number; // Preço reajustado (usado apenas para o ano vigente)
+    }>;
+  }>;
+};
+
+export type PricePeriodsSummary = {
+  filledMonths: number;
+  averagePrice: number | null;
+};
 
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric' });
 
@@ -12,7 +31,8 @@ const ensureRandomId = () =>
 
 type MonthDraft = {
   ym: string;
-  value: string;
+  price: string; // Preço base
+  adjustedPrice: string; // Preço reajustado
 };
 
 type PeriodDraft = {
@@ -20,7 +40,10 @@ type PeriodDraft = {
   start: string;
   end: string;
   defaultPrice: string;
+  defaultAdjustedPrice: string;
+  inflationRate: string; // Taxa de inflação anual (ex: "5" para 5%)
   months: MonthDraft[];
+  showMonthly: boolean; // Toggle para visualização mensal ou anual
 };
 
 const toInputString = (value?: number | null) =>
@@ -32,8 +55,18 @@ const buildDraftFromPeriod = (period: ContractPricePeriods['periods'][number]): 
   id: period.id || ensureRandomId(),
   start: period.start,
   end: period.end,
-  defaultPrice: toInputString(period.defaultPrice ?? null),
-  months: period.months.map((month) => ({ ym: month.ym, value: toInputString(month.price ?? null) })),
+  defaultPrice: toInputString(period.defaultPrice),
+  defaultAdjustedPrice: toInputString(period.defaultAdjustedPrice),
+  inflationRate: period.inflationRate ? (period.inflationRate * 100).toFixed(2) : '',
+  months: monthsBetween(period.start, period.end).map((ym) => {
+    const existing = period.months.find((month) => month.ym === ym);
+    return { 
+      ym, 
+      price: existing ? toInputString(existing.price) : '',
+      adjustedPrice: existing ? toInputString(existing.adjustedPrice) : '',
+    };
+  }),
+  showMonthly: false, // Por padrão mostrar ano a ano
 });
 
 const buildEmptyDraft = (year?: number): PeriodDraft => {
@@ -45,22 +78,29 @@ const buildEmptyDraft = (year?: number): PeriodDraft => {
     start,
     end,
     defaultPrice: '',
-    months: monthsBetween(start, end).map((ym) => ({ ym, value: '' })),
+    defaultAdjustedPrice: '',
+    inflationRate: '',
+    months: monthsBetween(`${year}-${month}`, `${year}-${month}`).map((ym) => ({ 
+      ym, 
+      price: '', 
+      adjustedPrice: '' 
+    })),
+    showMonthly: false,
   };
 };
 
-const syncDraftYear = (draft: PeriodDraft, year: number): PeriodDraft => {
-  const baseYear = Number.isFinite(year) ? year : new Date().getFullYear();
-  const start = `${baseYear}-01`;
-  const end = `${baseYear}-12`;
-  const existingValues = new Map(draft.months.map((month) => [month.ym.slice(5), month.value] as const));
+const ensureMonthsForDraft = (draft: PeriodDraft): PeriodDraft => {
+  const monthList = monthsBetween(draft.start, draft.end);
+  const existing = new Map(draft.months.map((month) => [month.ym, month] as const));
   return {
     ...draft,
-    start,
-    end,
-    months: monthsBetween(start, end).map((ym) => {
-      const monthKey = ym.slice(5);
-      return { ym, value: existingValues.get(monthKey) ?? '' };
+    months: monthList.map((ym) => {
+      const existingMonth = existing.get(ym);
+      return { 
+        ym, 
+        price: existingMonth?.price ?? '', 
+        adjustedPrice: existingMonth?.adjustedPrice ?? '' 
+      };
     }),
   };
 };
@@ -151,21 +191,61 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
         if (draft.id !== id) return draft;
         const formatted = formatCurrencyInputBlur(draft.defaultPrice);
         if (!formatted) {
-          return { ...draft, defaultPrice: '', months: draft.months.map((month) => ({ ...month, value: month.value })) };
+          return { ...draft, defaultPrice: '', months: draft.months.map((month) => ({ ...month, price: month.price })) };
         }
         return {
           ...draft,
           defaultPrice: formatted,
           months: draft.months.map((month) => ({
             ...month,
-            value: month.value ? formatCurrencyInputBlur(month.value) : formatted,
+            price: month.price ? formatCurrencyInputBlur(month.price) : formatted,
           })),
         };
       })
     );
   }, []);
 
-  const handleMonthChange = React.useCallback((periodId: string, ym: string, value: string) => {
+  const handleDefaultAdjustedChange = React.useCallback((id: string, value: string) => {
+    const sanitized = sanitizeCurrencyInput(value);
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === id
+          ? {
+              ...draft,
+              defaultAdjustedPrice: sanitized,
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleDefaultAdjustedBlur = React.useCallback((id: string) => {
+    setDrafts((prev) =>
+      prev.map((draft) => {
+        if (draft.id !== id) return draft;
+        return {
+          ...draft,
+          defaultAdjustedPrice: formatCurrencyInputBlur(draft.defaultAdjustedPrice),
+        };
+      })
+    );
+  }, []);
+
+  const handleInflationRateChange = React.useCallback((id: string, value: string) => {
+    const sanitized = value.replace(/[^\d,.-]/g, '').replace(',', '.');
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === id
+          ? {
+              ...draft,
+              inflationRate: sanitized,
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleMonthPriceChange = React.useCallback((periodId: string, ym: string, value: string) => {
     const sanitized = sanitizeCurrencyInput(value);
     setDrafts((prev) =>
       prev.map((draft) =>
@@ -176,7 +256,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                 month.ym === ym
                   ? {
                       ...month,
-                      value: sanitized,
+                      price: sanitized,
                     }
                   : month
               ),
@@ -186,7 +266,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
     );
   }, []);
 
-  const handleMonthBlur = React.useCallback((periodId: string, ym: string) => {
+  const handleMonthPriceBlur = React.useCallback((periodId: string, ym: string) => {
     setDrafts((prev) =>
       prev.map((draft) =>
         draft.id === periodId
@@ -194,7 +274,45 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
               ...draft,
               months: draft.months.map((month) =>
                 month.ym === ym
-                  ? { ...month, value: month.value ? formatCurrencyInputBlur(month.value) : '' }
+                  ? { ...month, price: month.price ? formatCurrencyInputBlur(month.price) : '' }
+                  : month
+              ),
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleMonthAdjustedPriceChange = React.useCallback((periodId: string, ym: string, value: string) => {
+    const sanitized = sanitizeCurrencyInput(value);
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === periodId
+          ? {
+              ...draft,
+              months: draft.months.map((month) =>
+                month.ym === ym
+                  ? {
+                      ...month,
+                      adjustedPrice: sanitized,
+                    }
+                  : month
+              ),
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleMonthAdjustedPriceBlur = React.useCallback((periodId: string, ym: string) => {
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === periodId
+          ? {
+              ...draft,
+              months: draft.months.map((month) =>
+                month.ym === ym
+                  ? { ...month, adjustedPrice: month.adjustedPrice ? formatCurrencyInputBlur(month.adjustedPrice) : '' }
                   : month
               ),
             }
@@ -214,7 +332,22 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
           ? {
               ...draft,
               defaultPrice: '',
-              months: draft.months.map((month) => ({ ...month, value: '' })),
+              defaultAdjustedPrice: '',
+              inflationRate: '',
+              months: draft.months.map((month) => ({ ...month, price: '', adjustedPrice: '' })),
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const toggleShowMonthly = React.useCallback((id: string) => {
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === id
+          ? {
+              ...draft,
+              showMonthly: !draft.showMonthly,
             }
           : draft
       )
@@ -224,24 +357,59 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   const handleSubmit = React.useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-
-      const raw: ContractPricePeriods = {
-        periods: drafts.map((draft) => ({
-          id: draft.id,
-          start: draft.start,
-          end: draft.end,
-          defaultPrice: parseCurrencyInput(draft.defaultPrice),
-          months: draft.months.map((month) => ({
-            ym: month.ym,
-            price: parseCurrencyInput(month.value),
-          })),
-        })),
-      };
-
-      const normalized = normalizeAnnualPricePeriods(raw);
-      onSave(normalized);
-      setIsSaved(true);
-      setTimeout(onClose, 2000);
+      console.log('Iniciando salvamento...', { drafts });
+      
+      try {
+        const periods = drafts.map((draft) => {
+          const months = draft.months
+            .map((month) => {
+              const price = parseCurrencyInput(month.price);
+              if (price === null) return null;
+              const adjustedPrice = parseCurrencyInput(month.adjustedPrice);
+              return {
+                ym: month.ym,
+                price,
+                ...(adjustedPrice !== null && { adjustedPrice }),
+              };
+            })
+            .filter((month): month is { ym: string; price: number; adjustedPrice?: number } => month !== null);
+          
+          const defaultPrice = parseCurrencyInput(draft.defaultPrice) ?? undefined;
+          const defaultAdjustedPrice = parseCurrencyInput(draft.defaultAdjustedPrice) ?? undefined;
+          const inflationRate = draft.inflationRate ? parseFloat(draft.inflationRate.replace(',', '.')) / 100 : undefined;
+          
+          return {
+            id: draft.id,
+            start: draft.start,
+            end: draft.end,
+            defaultPrice,
+            defaultAdjustedPrice,
+            inflationRate,
+            months,
+          };
+        });
+        
+        console.log('Períodos processados:', periods);
+        
+        // Calculate average price from the first period with data (usando preço base)
+        const firstPeriodWithData = periods.find(period => period.months.length > 0);
+        const averagePrice = firstPeriodWithData && firstPeriodWithData.months.length > 0
+          ? firstPeriodWithData.months.reduce((sum, month) => sum + month.price, 0) / firstPeriodWithData.months.length
+          : firstPeriodWithData?.defaultPrice || 0;
+        
+        console.log('Preço médio calculado:', averagePrice);
+        
+        onSave({ periods });
+        setIsSaved(true);
+        
+        // Auto-close after 2 seconds
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } catch (error) {
+        console.error('Erro ao salvar preços:', error);
+        alert('Erro ao salvar os preços. Verifique o console para mais detalhes.');
+      }
     },
     [drafts, onSave, onClose]
   );
@@ -284,7 +452,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
               const months = monthsBetween(draft.start, draft.end);
               const hasInvalidRange = months.length === 0 && draft.start && draft.end;
               const prices = draft.months
-                .map((month) => parseCurrencyInput(month.value))
+                .map((month) => parseCurrencyInput(month.price))
                 .filter((value): value is number => value !== null);
               const filled = prices.length;
               const average = filled ? prices.reduce((acc, price) => acc + price, 0) / filled : null;
@@ -325,7 +493,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Preço padrão do período
+                          Preço Base (R$/MWh)
                           <div className="relative">
                             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                               R$
@@ -340,6 +508,41 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                               className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
                             />
                           </div>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Preço Reajustado (R$/MWh)
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              R$
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={draft.defaultAdjustedPrice}
+                              onChange={(event) => handleDefaultAdjustedChange(draft.id, event.target.value)}
+                              onBlur={() => handleDefaultAdjustedBlur(draft.id)}
+                              placeholder="0,00"
+                              className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </div>
+                          <span className="text-xs text-slate-500">Usado apenas para o ano vigente</span>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Taxa de Reajuste Anual (%)
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={draft.inflationRate}
+                              onChange={(event) => handleInflationRateChange(draft.id, event.target.value)}
+                              placeholder="0,00"
+                              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-8 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                            />
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                              %
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500">Baseado na data-base do contrato</span>
                         </label>
                       </div>
                       {hasInvalidRange && (
@@ -387,19 +590,35 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                   {formatMonthLabel(ym)}
                                 </span>
-                                <div className="relative">
-                                  <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                    R$
-                                  </span>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={month?.value ?? ''}
-                                    onChange={(event) => handleMonthChange(draft.id, ym, event.target.value)}
-                                    onBlur={() => handleMonthBlur(draft.id, ym)}
-                                    placeholder="0,00"
-                                    className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
-                                  />
+                                <div className="space-y-2">
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                      R$
+                                    </span>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={month?.price ?? ''}
+                                      onChange={(event) => handleMonthPriceChange(draft.id, ym, event.target.value)}
+                                      onBlur={() => handleMonthPriceBlur(draft.id, ym)}
+                                      placeholder="Preço Base"
+                                      className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
+                                    />
+                                  </div>
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                      R$
+                                    </span>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={month?.adjustedPrice ?? ''}
+                                      onChange={(event) => handleMonthAdjustedPriceChange(draft.id, ym, event.target.value)}
+                                      onBlur={() => handleMonthAdjustedPriceBlur(draft.id, ym)}
+                                      placeholder="Reajustado"
+                                      className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
+                                    />
+                                  </div>
                                 </div>
                               </label>
                             );

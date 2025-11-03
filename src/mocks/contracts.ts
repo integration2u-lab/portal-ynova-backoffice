@@ -54,16 +54,24 @@ export type ContractInvoice = {
   arquivo?: string;
 };
 
+export type ContractVolumeByYear = {
+  year: string; // YYYY
+  volume: number; // MWh
+  price: number; // R$/MWh
+  loadPercentage: number; // Percentual de carga
+};
+
 export type ContractMock = {
   id: string;
   codigo: string;
   razaoSocial?: string;
   cliente: string;
+  razaoSocial?: string; // Razão social do cliente (diferente do nome interno)
   cnpj: string;
   segmento: string;
   contato: string;
-  status: 'Ativo' | 'Inativo' | 'Em anÃ¡lise';
-  fonte: string;
+  status: 'Ativo' | 'Inativo' | 'Em análise';
+  fonte: 'Incentivada 0%' | 'Incentivada 50%' | 'Incentivada 100%' | string;
   modalidade: string;
   inicioVigencia: string;
   fimVigencia: string;
@@ -72,8 +80,14 @@ export type ContractMock = {
   flex: string;
   precoMedio: number;
   fornecedor: string;
+  // Removido proinfa - agora está apenas no Balanço Energético
   cicloFaturamento: string;
   periodos: string[]; // YYYY-MM
+  // E-mails atrelados ao contrato
+  balanceEmail?: string; // E-mail do balanço (para envio de relatórios)
+  billingEmail?: string; // E-mail de faturamento (obrigatório para atacado)
+  // Volume contratado desmembrado por ano
+  volumeByYear?: ContractVolumeByYear[];
   resumoConformidades: Record<'Consumo' | 'NF' | 'Fatura' | 'Encargos' | 'Conformidade', StatusResumo>;
   kpis: KPIItem[];
   dadosContrato: ContractInfoField[];
@@ -136,6 +150,8 @@ export const mockContracts: ContractMock[] = [
     precoMedio: 274.32,
     fornecedor: 'Neoenergia Comercializadora',
     cicloFaturamento: '2024-06',
+    balanceEmail: 'balanco@unisolar.com.br',
+    billingEmail: 'faturamento@unisolar.com.br',
     periodos: meses.slice(1),
     resumoConformidades: {
       Consumo: 'Conforme',
@@ -152,8 +168,8 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Neoenergia Comercializadora' },
-      { label: 'VigÃªncia', value: 'Jul/2023 - Jun/2025' },
-      { label: 'Modalidade', value: 'PreÃ§o Fixo com Ajuste PLD' },
+      { label: 'Vigência', value: 'Jul/2023 - Jun/2025' },
+      { label: 'Modalidade', value: 'Preço Fixo com Ajuste PLD' },
       { label: 'Fonte', value: 'Convencional' },
       { label: 'Volume Contratado', value: '3.200 MWh/mÃªs' },
       { label: 'Flex / Limites', value: 'Â±5% (95% - 105%)' },
@@ -299,8 +315,10 @@ export const mockContracts: ContractMock[] = [
     limiteInferior: '92%',
     flex: '8%',
     precoMedio: 219.5,
-    fornecedor: 'RaÃ­zen Energia',
+    fornecedor: 'Raízen Energia',
     cicloFaturamento: '2024-05',
+    balanceEmail: 'balanco@brasilfoods.com.br',
+    billingEmail: 'faturamento@brasilfoods.com.br',
     periodos: meses.slice(0, 6),
     resumoConformidades: {
       Consumo: 'Conforme',
@@ -316,8 +334,8 @@ export const mockContracts: ContractMock[] = [
       { label: 'VariaÃ§Ã£o mensal', value: 'R$ 214 mil', variation: { value: '+0,4%', direction: 'neutral' } },
     ],
     dadosContrato: [
-      { label: 'Fornecedor', value: 'RaÃ­zen Energia' },
-      { label: 'VigÃªncia', value: 'Jan/2022 - Dez/2024' },
+      { label: 'Fornecedor', value: 'Raízen Energia' },
+      { label: 'Vigência', value: 'Jan/2022 - Dez/2024' },
       { label: 'Modalidade', value: 'TUSD Verde' },
       { label: 'Fonte', value: 'Incentivada' },
       { label: 'Volume Contratado', value: '2.450 MWh/mÃªs' },
@@ -465,6 +483,8 @@ export const mockContracts: ContractMock[] = [
     precoMedio: 252.9,
     fornecedor: 'Brookfield Energia',
     cicloFaturamento: '2024-06',
+    balanceEmail: 'balanco@minasgusa.com.br',
+    billingEmail: 'faturamento@minasgusa.com.br',
     periodos: meses.slice(2),
     resumoConformidades: {
       Consumo: 'Em anÃ¡lise',
@@ -481,8 +501,8 @@ export const mockContracts: ContractMock[] = [
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Brookfield Energia' },
-      { label: 'VigÃªncia', value: 'Jan/2024 - Dez/2026' },
-      { label: 'Modalidade', value: 'PreÃ§o Fixo' },
+      { label: 'Vigência', value: 'Jan/2024 - Dez/2026' },
+      { label: 'Modalidade', value: 'Preço Fixo' },
       { label: 'Fonte', value: 'Convencional' },
       { label: 'Volume Contratado', value: '1.650 MWh/mÃªs' },
       { label: 'Flex / Limites', value: 'Â±7% (93% - 108%)' },

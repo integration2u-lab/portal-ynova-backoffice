@@ -1,16 +1,26 @@
 import { deleteRequest, getJson, patchJson, postJson, putJson } from '../lib/apiClient';
 
+export type ContractVolumeByYear = {
+  year: string; // YYYY
+  volume: number; // MWh
+  price: number; // R$/MWh
+  load_percentage: number; // Percentual de carga
+};
+
 export type Contract = {
   id: string;
   contract_code: string;
   corporate_name?: string;
   client_name: string;
+  legal_name?: string; // Razão social do cliente
   client_id?: string;
   groupName?: string;
   cnpj: string;
   segment: string;
   contact_responsible: string;
   contracted_volume_mwh: string | number | null;
+  // Volume contratado desmembrado por ano
+  volume_by_year?: ContractVolumeByYear[];
   status: string;
   energy_source: string;
   contracted_modality: string;
@@ -22,6 +32,10 @@ export type Contract = {
   flexibility_percent?: string | number | null;
   average_price_mwh?: string | number | null;
   supplier?: string | null;
+  // Removido proinfa_contribution - agora está apenas no Balanço Energético
+  // E-mails atrelados ao contrato
+  balance_email?: string | null; // E-mail do balanço (para envio de relatórios)
+  billing_email?: string | null; // E-mail de faturamento (obrigatório para atacado)
   spot_price_ref_mwh?: string | number | null;
   compliance_consumption?: string | number | null;
   compliance_nf?: string | number | null;
@@ -79,21 +93,39 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  const corporateName = toStringSafe(
-    item?.corporate_name ?? item?.corporateName ?? item?.razao_social ?? item?.razaoSocial ?? item?.razao
-  );
+  // Normalize volume_by_year if present
+  const normalizeVolumeByYear = (value: unknown): ContractVolumeByYear[] | undefined => {
+    if (!Array.isArray(value)) return undefined;
+    return value.map((item: unknown) => {
+      const v = item as Record<string, unknown>;
+      return {
+        year: toStringSafe(v?.year ?? v?.ano),
+        volume: coerceNumber(v?.volume ?? v?.volume_mwh) ?? 0,
+        price: coerceNumber(v?.price ?? v?.preco ?? v?.average_price_mwh) ?? 0,
+        load_percentage: coerceNumber(v?.load_percentage ?? v?.loadPercentage ?? v?.percentual_carga) ?? 0,
+      };
+    });
+  };
 
   return {
     id: toStringSafe(idSource, `contract-${index}`),
     contract_code: toStringSafe(item?.contract_code),
     corporate_name: corporateName || undefined,
     client_name: toStringSafe(item?.client_name),
+    legal_name: (() => {
+      // API returns social_reason, but we use legal_name internally
+      const socialReason = item?.social_reason;
+      const legalName = item?.legal_name;
+      const value = socialReason ?? legalName;
+      return value == null ? undefined : toStringSafe(value);
+    })(),
     client_id: item?.client_id == null ? undefined : toStringSafe(item?.client_id),
     groupName: item?.groupName == null ? undefined : toStringSafe(item?.groupName),
     cnpj: toStringSafe(item?.cnpj),
     segment: toStringSafe(item?.segment),
     contact_responsible: toStringSafe(item?.contact_responsible),
     contracted_volume_mwh: item?.contracted_volume_mwh ?? coerceNumber(item?.contracted_volume_mwh),
+    volume_by_year: normalizeVolumeByYear(item?.volume_by_year ?? item?.volumeByYear),
     status: toStringSafe(item?.status),
     energy_source: toStringSafe(item?.energy_source),
     contracted_modality: toStringSafe(item?.contracted_modality),
@@ -105,6 +137,8 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     flexibility_percent: item?.flexibility_percent ?? coerceNumber(item?.flexibility_percent),
     average_price_mwh: item?.average_price_mwh ?? coerceNumber(item?.average_price_mwh),
     supplier: item?.supplier === undefined ? undefined : item?.supplier === null ? null : toStringSafe(item?.supplier),
+    balance_email: item?.balance_email == null ? undefined : item?.balance_email === null ? null : toStringSafe(item?.balance_email),
+    billing_email: item?.billing_email == null ? undefined : item?.billing_email === null ? null : toStringSafe(item?.billing_email),
     spot_price_ref_mwh: item?.spot_price_ref_mwh ?? coerceNumber(item?.spot_price_ref_mwh),
     compliance_consumption: item?.compliance_consumption ?? coerceNumber(item?.compliance_consumption),
     compliance_nf: item?.compliance_nf ?? coerceNumber(item?.compliance_nf),
@@ -153,14 +187,20 @@ export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'update
 
 const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;
-  const corporateNameValue =
-    typeof payload.corporate_name === 'string' ? payload.corporate_name.trim() : payload.corporate_name;
+  const balanceEmailValue = typeof payload.balance_email === 'string' ? payload.balance_email.trim() : payload.balance_email;
+  const billingEmailValue = typeof payload.billing_email === 'string' ? payload.billing_email.trim() : payload.billing_email;
+  const legalNameValue = typeof payload.legal_name === 'string' ? payload.legal_name.trim() : payload.legal_name;
+
+  // Map legal_name to social_reason for API
+  const { legal_name, ...rest } = payload;
+  const socialReason = legalNameValue === undefined ? undefined : legalNameValue === '' ? null : legalNameValue;
 
   return {
-    ...payload,
-    corporate_name:
-      corporateNameValue === undefined ? undefined : corporateNameValue === '' ? null : corporateNameValue,
+    ...rest,
+    social_reason: socialReason,
     supplier: supplierValue === undefined ? undefined : supplierValue === '' ? null : supplierValue,
+    balance_email: balanceEmailValue === undefined ? undefined : balanceEmailValue === '' ? null : balanceEmailValue,
+    billing_email: billingEmailValue === undefined ? undefined : billingEmailValue === '' ? null : billingEmailValue,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',
   };
 };
