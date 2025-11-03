@@ -14,7 +14,7 @@ import {
   sanitizeDisplayValue,
   type DisplayEnergyBalanceRow,
 } from '../../utils/energyBalancePayload';
-import { updateEmailRow } from '../../services/emailApi';
+import { energyBalanceRequest } from '../../services/energyBalanceApi';
 import EmailDispatchApprovalCard from '../../components/balancos/EmailDispatchApprovalCard';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -40,13 +40,17 @@ const formatDate = (dateStr: string): string => {
   }
 };
 
-const formatDateTime = (dateStr: string): string => {
-  if (!dateStr || dateStr === 'Não disparado' || dateStr === 'Não informado') return 'Não disparado';
+const formatDateTime = (dateStr: string | undefined | null): string => {
+  if (!dateStr || typeof dateStr !== 'string' || dateStr.trim() === '' || dateStr === 'Não disparado' || dateStr === 'Não informado') {
+    return 'Não disparado';
+  }
   try {
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
+    if (isNaN(date.getTime())) {
+      return dateStr;
+    }
     // Formata data e hora em pt-BR
-    return date.toLocaleString('pt-BR', {
+    const formatted = date.toLocaleString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -55,7 +59,9 @@ const formatDateTime = (dateStr: string): string => {
       second: '2-digit',
       hour12: false
     });
+    return formatted || dateStr;
   } catch (error) {
+    console.warn('[EnergyBalanceDetail] falha ao formatar data/hora:', error, dateStr);
     return dateStr;
   }
 };
@@ -379,11 +385,11 @@ const extractRawMonthMapping = (
 
 // Componente para exibir emails de forma bonita quando houver múltiplos
 type EmailDisplayProps = {
-  emails: string;
+  emails: string | undefined | null;
 };
 
 const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
-  if (!emails || emails === '-' || emails === 'Não informado') {
+  if (!emails || typeof emails !== 'string' || emails.trim() === '' || emails === '-' || emails === 'Não informado') {
     return <div className="mt-3 text-xl font-bold text-gray-900">-</div>;
   }
 
@@ -392,6 +398,11 @@ const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
     .split(/[;,]/)
     .map((email) => email.trim())
     .filter((email) => email.length > 0);
+
+  // Se não houver emails válidos após a separação
+  if (emailList.length === 0) {
+    return <div className="mt-3 text-xl font-bold text-gray-900">-</div>;
+  }
 
   // Se houver apenas um email, exibe normalmente
   if (emailList.length === 1) {
@@ -404,7 +415,7 @@ const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
       <div className="flex flex-wrap gap-2">
         {emailList.map((email, index) => (
           <div
-            key={index}
+            key={`email-${index}`}
             className="inline-flex items-center rounded-lg border border-yn-orange/30 bg-yn-orange/5 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-yn-orange/50 hover:bg-yn-orange/10"
           >
             <span className="mr-2 text-yn-orange">✉</span>
@@ -779,7 +790,14 @@ export default function EnergyBalanceDetailPage() {
       setSavingRowId(rowId);
       try {
         const payload = convertDisplayRowToEnergyBalancePayload(row, originalRaw);
-        const response = await updateEmailRow(rowId, payload);
+        const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: JSON.stringify(payload),
+        });
 
         if (response && typeof response === 'object' && !Array.isArray(response)) {
           const record = response as Record<string, unknown>;
@@ -900,7 +918,14 @@ export default function EnergyBalanceDetailPage() {
     try {
       const originalRaw = rawMonthMap[rowId] ?? rawDetail ?? undefined;
       const payload = convertDisplayRowToEnergyBalancePayload(updatedRow, originalRaw);
-      const response = await updateEmailRow(rowId, payload);
+      const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
         const record = response as Record<string, unknown>;
@@ -981,7 +1006,14 @@ export default function EnergyBalanceDetailPage() {
     try {
       const originalRaw = rawMonthMap[rowId] ?? rawDetail ?? undefined;
       const payload = convertDisplayRowToEnergyBalancePayload(updatedRow, originalRaw);
-      const response = await updateEmailRow(rowId, payload);
+      const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
         const record = response as Record<string, unknown>;
@@ -1085,7 +1117,14 @@ export default function EnergyBalanceDetailPage() {
         payload,
       });
 
-      const response = await updateEmailRow(rowId, payload);
+      const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
         const record = response as Record<string, unknown>;
@@ -1322,7 +1361,7 @@ export default function EnergyBalanceDetailPage() {
         <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50 p-5 shadow-md transition hover:shadow-lg">
           <div className="text-xs font-semibold uppercase tracking-wider text-gray-600">Data Disparo</div>
           <div className="mt-3 text-xl font-bold text-gray-900">
-            {primaryMonthRow?.disparo ? formatDateTime(primaryMonthRow.disparo) : 'Não disparado'}
+            {primaryMonthRow?.disparo ? formatDateTime(String(primaryMonthRow.disparo)) : 'Não disparado'}
           </div>
         </div>
       </div>
@@ -2296,7 +2335,8 @@ export default function EnergyBalanceDetailPage() {
                             text = month.mes || '-';
                           }
                           if (column.key === 'disparo') {
-                            text = formatDateTime(displayValue || month.disparo || '');
+                            const disparoValue = displayValue || month.disparo || '';
+                            text = disparoValue ? formatDateTime(String(disparoValue)) : 'Não disparado';
                           }
                           return (
                             <td key={column.key} className={`px-2 py-3 text-xs font-semibold text-gray-900 ${column.minWidth ?? ''}`}>

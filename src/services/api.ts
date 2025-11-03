@@ -228,7 +228,7 @@ export type Paged<T> = { items: T[]; total: number; page: number; pageSize: numb
 
 export const ContractsAPI = {
   list: async (q: ContractsQuery = {}) => {
-    const contracts = await apiFetch<Contract[]>(`/contracts`, { method: 'GET' });
+    const contracts = await apiFetch<Contract[]>('/contracts', { method: 'GET' });
 
     const searchTerm = (q.search || '').toLowerCase();
     const cnpjFilter = (q.cnpj || '').replace(/[^0-9]/g, '');

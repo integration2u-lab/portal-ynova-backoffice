@@ -5,7 +5,7 @@
  */
 
 // URL base da API de balanço energético
-export const API_BASE_URL = 'https://f2336283d9e5.ngrok-free.app';
+export const API_BASE_URL = 'https://api-balanco.ynovamarketplace.com';
 
 // Mock mode - altere para true se quiser usar dados mockados
 export const USE_MOCK_API = false;

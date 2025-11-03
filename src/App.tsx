@@ -24,7 +24,7 @@ import EditarContratoPage from './pages/contratos/EditContractPage';
 import ContractsLayout from './pages/contratos/ContractsLayout';
 import EnergyBalanceListPage from './pages/Balancos/EnergyBalanceListPage';
 import EnergyBalanceDetailPage from './pages/Balancos/EnergyBalanceDetailPage';
-import EmailPage from './pages/EmailPage';
+// import EmailPage from './pages/EmailPage'; // Temporariamente desabilitada
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
 function AppRoutes() {
@@ -61,7 +61,7 @@ function AppRoutes() {
               <Route path=":id" element={<EnergyBalanceDetailPage />} />
             </Route>
 
-            <Route path="email" element={<EmailPage />} />
+            {/* <Route path="email" element={<EmailPage />} /> */}
 
             {/* Gestão: Contratos */}
             <Route path="contratos" element={<ContractsLayout />}>

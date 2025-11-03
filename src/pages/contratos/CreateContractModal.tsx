@@ -52,9 +52,8 @@ type FormErrors = Partial<
 >;
 
 type FormState = {
-  razaoSocial: string;
-  client: string;
   razaoSocial: string; // Razão social do cliente
+  client: string;
   cnpj: string;
   segment: string;
   contact: string;
@@ -180,7 +179,6 @@ const buildAnalises = (): ContractMock['analises'] => [
 const buildInitialFormState = (): FormState => ({
   razaoSocial: '',
   client: '',
-  razaoSocial: '',
   cnpj: '',
   segment: '',
   contact: '',
@@ -558,8 +556,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       formState.volumeUnit === 'MW_MEDIO' ? volumeValue * HOURS_IN_MONTH : volumeValue;
     const volumeBase = Number.isFinite(normalizedVolume) ? normalizedVolume : 0;
 
-    const supplierValue = formState.isCustomSupplier ? formState.supplierCustom.trim() : formState.supplier.trim();
-
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
 
@@ -609,9 +605,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const newContract: ContractMock = {
       id,
       codigo,
-      razaoSocial: razaoSocial || formState.client.trim(),
+      razaoSocial: formState.razaoSocial.trim() || razaoSocial || formState.client.trim(), // Will be sent as social_reason to API - empty string becomes undefined
       cliente: formState.client.trim(),
-      razaoSocial: formState.razaoSocial.trim() || undefined, // Will be sent as social_reason to API - empty string becomes undefined
       cnpj: formState.cnpj.trim(),
       segmento: formState.segment.trim(),
       contato: formState.contact.trim(),

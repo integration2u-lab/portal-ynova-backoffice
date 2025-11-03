@@ -693,8 +693,17 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { end_date?: unknown }).end_date
     );
 
+    // Extrai situacaoVigencia do item da API
+    const situacaoVigenciaRaw =
+      (item as { situacaoVigencia?: unknown }).situacaoVigencia ??
+      (item as { vigencia_status?: unknown }).vigencia_status ??
+      (item as { situacaoVigencia?: unknown }).situacaoVigencia;
+    const situacaoVigencia = normalizeString(situacaoVigenciaRaw);
+
     const situacaoVigenciaFinal = (() => {
-      if (situacaoVigencia) return situacaoVigencia;
+      if (situacaoVigencia && (situacaoVigencia === 'Vigente' || situacaoVigencia === 'Encerrado')) {
+        return situacaoVigencia;
+      }
       if (fimVigencia) {
         const endDate = new Date(`${fimVigencia}T00:00:00`);
         if (!Number.isNaN(endDate.getTime()) && endDate < new Date()) {
@@ -712,6 +721,18 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const periodos = referenceMonth
       ? Array.from(new Set([...periodosBase, referenceMonth]))
       : periodosBase;
+
+    // Normaliza pricePeriods do item da API
+    const pricePeriods = normalizePricePeriods(
+      (item as { pricePeriods?: unknown }).pricePeriods ??
+        (item as { price_periods?: unknown }).price_periods
+    );
+
+    // Normaliza precoReajustado do item da API
+    const precoReajustadoRaw =
+      (item as { precoReajustado?: unknown }).precoReajustado ??
+      (item as { price_adjusted_delta_mwh?: unknown }).price_adjusted_delta_mwh;
+    const precoReajustadoValor = parseNumericInput(precoReajustadoRaw) ?? undefined;
 
     // Build compliance object first, prioritizing compliance_* fields from API
     const complianceData: Record<string, unknown> = {};
@@ -879,20 +900,19 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       (item as { social_reason?: unknown }).social_reason ??
       (item as { legal_name?: unknown }).legal_name ??
       (item as { razaoSocial?: unknown }).razaoSocial;
-    const razaoSocial = normalizeString(rawRazaoSocial) || undefined;
+    const razaoSocialFinal = normalizeString(rawRazaoSocial) || razaoSocial || undefined;
 
     // Add razão social e emails to dadosContrato for display FIRST (always show, even if empty)
     // This ensures these fields appear even if they're not in the original dadosContrato
-    ensureField('Razão Social', razaoSocial || 'Não informado');
+    ensureField('Razão Social', razaoSocialFinal || 'Não informado');
     ensureField('E-mail Balanço', balanceEmail || 'Não informado');
     ensureField('E-mail Faturamento', billingEmail || 'Não informado');
 
     return {
       id,
       codigo: normalizeString(rawCodigo),
-      razaoSocial: razaoSocial,
+      razaoSocial: razaoSocialFinal,
       cliente: normalizeString(rawCliente),
-      razaoSocial,
       cnpj: normalizeString((item as { cnpj?: unknown }).cnpj),
       segmento: normalizeString(rawSegmento),
       contato: contatoFinal,
@@ -957,11 +977,13 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 const buildEndpointCandidates = (rawUrl: string): string[] => {
   const normalized = normalizeString(rawUrl) || DEFAULT_API_URL;
   const sanitized = normalized.replace(/\s/g, '');
-  if (!sanitized) return [DEFAULT_API_URL];
+  if (!sanitized) return [`${DEFAULT_API_URL}contracts`];
   const withoutTrailingSlash = sanitized.replace(/\/$/, '');
   const candidates = new Set<string>();
-  candidates.add(withoutTrailingSlash);
-  if (!/\/contracts(\b|\d|\/)/i.test(withoutTrailingSlash)) {
+  // Sempre garante que /contracts está no path
+  if (/\/contracts(\b|\d|\/)/i.test(withoutTrailingSlash)) {
+    candidates.add(withoutTrailingSlash);
+  } else {
     candidates.add(`${withoutTrailingSlash}/contracts`);
   }
   return Array.from(candidates);
@@ -1049,6 +1071,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const supplierFromContract = normalizeString(contract.fornecedor);
   const supplierValue = supplierFromContract || supplier || '';
   // Note: proinfa was removed from contracts - now only in Energy Balance
+  const corporateNameValue = normalizeString(razaoFromDados || contract.razaoSocial);
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,

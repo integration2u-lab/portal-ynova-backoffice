@@ -1,7 +1,7 @@
 import React from 'react';
 import { MailCheck, ShieldAlert, Loader2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import { updateEmailRow } from '../../services/emailApi';
+import { energyBalanceRequest } from '../../services/energyBalanceApi';
 import {
   convertDisplayRowToEnergyBalancePayload,
   type DisplayEnergyBalanceRow,
@@ -139,7 +139,14 @@ export default function EmailDispatchApprovalCard({
         delete payload.sendDate;
       }
 
-      const response = await updateEmailRow(balanceId, payload);
+      const response = await energyBalanceRequest(`/energy-balance/${balanceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
       toast.success(
         action === 'release'
           ? 'Disparo de email liberado com sucesso!'

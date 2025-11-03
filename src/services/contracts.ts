@@ -57,9 +57,7 @@ type ListOptions = {
   signal?: AbortSignal;
 };
 
-const isDev = import.meta.env.DEV;
-const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
-const collectionPath = isDev && useProxy ? '/api/contracts' : '/contracts';
+const collectionPath = '/contracts';
 
 const asArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;

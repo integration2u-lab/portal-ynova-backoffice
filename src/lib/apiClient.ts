@@ -1,6 +1,8 @@
 const isDev = import.meta.env.DEV;
 const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
-const BASE_URL = isDev && useProxy ? '' : (import.meta.env.VITE_API_BASE_URL ?? '');
+// URL base padrão para API de contratos
+const DEFAULT_API_BASE_URL = 'https://api-balanco.ynovamarketplace.com';
+const BASE_URL = isDev && useProxy ? '' : (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL);
 
 type ApiFetchOptions = RequestInit & {
   /**
@@ -24,6 +26,12 @@ const isBodyInit = (value: unknown): value is BodyInit => {
 
 const buildUrl = (path: string) => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  
+  // Para endpoints de contratos, sempre usa a URL completa: https://api-balanco.ynovamarketplace.com/contracts
+  if (normalizedPath.startsWith('/contracts')) {
+    return `https://api-balanco.ynovamarketplace.com${normalizedPath}`;
+  }
+  
   return `${BASE_URL}${normalizedPath}`;
 };
 

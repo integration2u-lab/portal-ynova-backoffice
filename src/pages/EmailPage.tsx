@@ -1,7 +1,8 @@
 import React from 'react';
 import { Check, Loader2, RefreshCw, Search, X, Calendar, ChevronRight, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { getEmailRows, updateEmailRow } from '../services/emailApi';
+// Email page está temporariamente desabilitada
+// import { getEmailRows, updateEmailRow } from '../services/emailApi';
 import { normalizeEmailRow } from '../utils/normalizers/energyBalance';
 import type { EmailRow } from '../types/email';
 import { convertDisplayRowToEnergyBalancePayload } from '../utils/energyBalancePayload';
@@ -222,7 +223,8 @@ export default function EmailPage() {
     setError('');
 
     try {
-      const payload = await getEmailRows(controller.signal);
+      // Email page está temporariamente desabilitada
+      const payload: unknown[] = []; // await getEmailRows(controller.signal);
       const normalized = (Array.isArray(payload) ? payload : [])
         .map((item, index) => {
           try {
@@ -349,7 +351,9 @@ export default function EmailPage() {
         
         console.log('[EmailPage] Updating row with API data:', updateData);
         
-        await updateEmailRow(rowId, updateData);
+        // Email page está temporariamente desabilitada
+        // await updateEmailRow(rowId, updateData);
+        await Promise.resolve(); // Placeholder
 
         // Clear editing state immediately after successful API call
         setEditingId((current) => (current === rowId ? null : current));
