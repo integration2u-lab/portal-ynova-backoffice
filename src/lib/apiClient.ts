@@ -1,7 +1,9 @@
 const isDev = import.meta.env.DEV;
 const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
 // URL base padrão para API de contratos
-const DEFAULT_API_BASE_URL = 'https://api-balanco.ynovamarketplace.com';
+const DEFAULT_API_BASE_URL = 'api-balanco.ynovamarketplace.com/api';
+// URL ngrok para testes
+const NGROK_API_BASE_URL = 'https://f2336283d9e5.ngrok-free.app';
 const BASE_URL = isDev && useProxy ? '' : (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL);
 
 type ApiFetchOptions = RequestInit & {
@@ -27,9 +29,9 @@ const isBodyInit = (value: unknown): value is BodyInit => {
 const buildUrl = (path: string) => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   
-  // Para endpoints de contratos, sempre usa a URL completa: https://api-balanco.ynovamarketplace.com/contracts
+  // Para endpoints de contratos, usa a URL ngrok para testes
   if (normalizedPath.startsWith('/contracts')) {
-    return `https://api-balanco.ynovamarketplace.com${normalizedPath}`;
+    return `${NGROK_API_BASE_URL}${normalizedPath}`;
   }
   
   return `${BASE_URL}${normalizedPath}`;
@@ -41,6 +43,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json');
+  }
+  
+  // Adiciona header para ngrok não bloquear
+  if (path.startsWith('/contracts')) {
+    headers.set('ngrok-skip-browser-warning', 'true');
   }
 
   let body: BodyInit | undefined;

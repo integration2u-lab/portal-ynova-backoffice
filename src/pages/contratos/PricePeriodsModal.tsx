@@ -9,13 +9,7 @@ export type PricePeriods = {
     start: string; // YYYY-MM
     end: string; // YYYY-MM
     defaultPrice?: number;
-    defaultAdjustedPrice?: number; // Preço reajustado por inflação
-    inflationRate?: number; // Taxa de reajuste anual (ex: 0.05 para 5%)
-    months: Array<{ 
-      ym: string; 
-      price: number; // Preço base
-      adjustedPrice?: number; // Preço reajustado (usado apenas para o ano vigente)
-    }>;
+    months: Array<{ ym: string; price: number }>;
   }>;
 };
 
@@ -29,10 +23,27 @@ const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 
 const ensureRandomId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);
 
+export function summarizePricePeriods(value: PricePeriods): PricePeriodsSummary {
+  const monthMap = new Map<string, number>();
+  value.periods.forEach((period) => {
+    period.months.forEach(({ ym, price }) => {
+      if (Number.isFinite(price)) {
+        monthMap.set(ym, price);
+      }
+    });
+  });
+  const prices = Array.from(monthMap.values());
+  const filledMonths = prices.length;
+  if (!filledMonths) {
+    return { filledMonths: 0, averagePrice: null };
+  }
+  const sum = prices.reduce((acc, price) => acc + price, 0);
+  return { filledMonths, averagePrice: sum / filledMonths };
+}
+
 type MonthDraft = {
   ym: string;
-  price: string; // Preço base
-  adjustedPrice: string; // Preço reajustado
+  value: string;
 };
 
 type PeriodDraft = {
@@ -40,76 +51,52 @@ type PeriodDraft = {
   start: string;
   end: string;
   defaultPrice: string;
-  defaultAdjustedPrice: string;
-  inflationRate: string; // Taxa de inflação anual (ex: "5" para 5%)
   months: MonthDraft[];
-  showMonthly: boolean; // Toggle para visualização mensal ou anual
 };
 
-const toInputString = (value?: number | null) =>
+const toInputString = (value?: number) =>
   value === undefined || value === null || Number.isNaN(value)
     ? ''
     : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const buildDraftFromPeriod = (period: ContractPricePeriods['periods'][number]): PeriodDraft => ({
+const buildDraftFromPeriod = (period: PricePeriods['periods'][number]): PeriodDraft => ({
   id: period.id || ensureRandomId(),
   start: period.start,
   end: period.end,
   defaultPrice: toInputString(period.defaultPrice),
-  defaultAdjustedPrice: toInputString(period.defaultAdjustedPrice),
-  inflationRate: period.inflationRate ? (period.inflationRate * 100).toFixed(2) : '',
   months: monthsBetween(period.start, period.end).map((ym) => {
     const existing = period.months.find((month) => month.ym === ym);
-    return { 
-      ym, 
-      price: existing ? toInputString(existing.price) : '',
-      adjustedPrice: existing ? toInputString(existing.adjustedPrice) : '',
-    };
+    return { ym, value: existing ? toInputString(existing.price) : '' };
   }),
-  showMonthly: false, // Por padrão mostrar ano a ano
 });
 
-const buildEmptyDraft = (year?: number): PeriodDraft => {
-  const baseYear = typeof year === 'number' && Number.isFinite(year) ? year : new Date().getFullYear();
-  const start = `${baseYear}-01`;
-  const end = `${baseYear}-12`;
+const buildEmptyDraft = (): PeriodDraft => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
   return {
     id: ensureRandomId(),
-    start,
-    end,
+    start: `${year}-${month}`,
+    end: `${year}-${month}`,
     defaultPrice: '',
-    defaultAdjustedPrice: '',
-    inflationRate: '',
-    months: monthsBetween(`${year}-${month}`, `${year}-${month}`).map((ym) => ({ 
-      ym, 
-      price: '', 
-      adjustedPrice: '' 
-    })),
-    showMonthly: false,
+    months: monthsBetween(`${year}-${month}`, `${year}-${month}`).map((ym) => ({ ym, value: '' })),
   };
 };
 
 const ensureMonthsForDraft = (draft: PeriodDraft): PeriodDraft => {
   const monthList = monthsBetween(draft.start, draft.end);
-  const existing = new Map(draft.months.map((month) => [month.ym, month] as const));
+  const existing = new Map(draft.months.map((month) => [month.ym, month.value] as const));
   return {
     ...draft,
-    months: monthList.map((ym) => {
-      const existingMonth = existing.get(ym);
-      return { 
-        ym, 
-        price: existingMonth?.price ?? '', 
-        adjustedPrice: existingMonth?.adjustedPrice ?? '' 
-      };
-    }),
+    months: monthList.map((ym) => ({ ym, value: existing.get(ym) ?? '' })),
   };
 };
 
 type PricePeriodsModalProps = {
   open: boolean;
-  value: ContractPricePeriods;
+  value: PricePeriods;
   onClose: () => void;
-  onSave: (value: ContractPricePeriods) => void;
+  onSave: (value: PricePeriods) => void;
 };
 
 function formatMonthLabel(ym: string) {
@@ -119,12 +106,11 @@ function formatMonthLabel(ym: string) {
   return monthFormatter.format(date);
 }
 
-function normalizeDrafts(value: ContractPricePeriods): PeriodDraft[] {
-  const normalized = normalizeAnnualPricePeriods(value);
-  if (!normalized.periods.length) {
+function normalizeDrafts(value: PricePeriods): PeriodDraft[] {
+  if (!value.periods.length) {
     return [buildEmptyDraft()];
   }
-  return normalized.periods.map(buildDraftFromPeriod);
+  return value.periods.map(buildDraftFromPeriod);
 }
 
 const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onClose, onSave }) => {
@@ -133,42 +119,34 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
 
   React.useEffect(() => {
     if (open) {
-      setDrafts(normalizeDrafts(clonePricePeriods(value)));
+      setDrafts(normalizeDrafts(value));
       setIsSaved(false);
     }
   }, [open, value]);
 
   const isSaveDisabled = React.useMemo(
     () => {
-      return drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0);
+      const disabled = drafts.some((draft) => monthsBetween(draft.start, draft.end).length === 0);
+      console.log('isSaveDisabled:', disabled, { drafts });
+      return disabled;
     },
     [drafts]
   );
 
   const handleAddPeriod = React.useCallback(() => {
-    setDrafts((prev) => {
-      const years = prev
-        .map((draft) => Number.parseInt(draft.start.slice(0, 4), 10))
-        .filter((year) => Number.isFinite(year));
-      const nextYear = years.length ? Math.max(...years) + 1 : new Date().getFullYear();
-      return [...prev, buildEmptyDraft(nextYear)];
-    });
+    setDrafts((prev) => [...prev, buildEmptyDraft()]);
   }, []);
 
   const updateDraft = React.useCallback((id: string, updater: (draft: PeriodDraft) => PeriodDraft) => {
-    setDrafts((prev) => prev.map((draft) => (draft.id === id ? updater(draft) : draft)));
+    setDrafts((prev) => prev.map((draft) => (draft.id === id ? ensureMonthsForDraft(updater(draft)) : draft)));
   }, []);
 
   const handleChangeStart = React.useCallback((id: string, value: string) => {
-    const [yearText] = value.split('-');
-    const year = Number.parseInt(yearText, 10);
-    updateDraft(id, (draft) => syncDraftYear(draft, Number.isFinite(year) ? year : draft.start ? Number.parseInt(draft.start.slice(0, 4), 10) : new Date().getFullYear()));
+    updateDraft(id, (draft) => ({ ...draft, start: value || draft.start }));
   }, [updateDraft]);
 
   const handleChangeEnd = React.useCallback((id: string, value: string) => {
-    const [yearText] = value.split('-');
-    const year = Number.parseInt(yearText, 10);
-    updateDraft(id, (draft) => syncDraftYear(draft, Number.isFinite(year) ? year : draft.end ? Number.parseInt(draft.end.slice(0, 4), 10) : new Date().getFullYear()));
+    updateDraft(id, (draft) => ({ ...draft, end: value || draft.end }));
   }, [updateDraft]);
 
   const handleDefaultChange = React.useCallback((id: string, value: string) => {
@@ -191,61 +169,21 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
         if (draft.id !== id) return draft;
         const formatted = formatCurrencyInputBlur(draft.defaultPrice);
         if (!formatted) {
-          return { ...draft, defaultPrice: '', months: draft.months.map((month) => ({ ...month, price: month.price })) };
+          return { ...draft, defaultPrice: '', months: draft.months.map((month) => ({ ...month, value: month.value })) };
         }
         return {
           ...draft,
           defaultPrice: formatted,
           months: draft.months.map((month) => ({
             ...month,
-            price: month.price ? formatCurrencyInputBlur(month.price) : formatted,
+            value: month.value ? formatCurrencyInputBlur(month.value) : formatted,
           })),
         };
       })
     );
   }, []);
 
-  const handleDefaultAdjustedChange = React.useCallback((id: string, value: string) => {
-    const sanitized = sanitizeCurrencyInput(value);
-    setDrafts((prev) =>
-      prev.map((draft) =>
-        draft.id === id
-          ? {
-              ...draft,
-              defaultAdjustedPrice: sanitized,
-            }
-          : draft
-      )
-    );
-  }, []);
-
-  const handleDefaultAdjustedBlur = React.useCallback((id: string) => {
-    setDrafts((prev) =>
-      prev.map((draft) => {
-        if (draft.id !== id) return draft;
-        return {
-          ...draft,
-          defaultAdjustedPrice: formatCurrencyInputBlur(draft.defaultAdjustedPrice),
-        };
-      })
-    );
-  }, []);
-
-  const handleInflationRateChange = React.useCallback((id: string, value: string) => {
-    const sanitized = value.replace(/[^\d,.-]/g, '').replace(',', '.');
-    setDrafts((prev) =>
-      prev.map((draft) =>
-        draft.id === id
-          ? {
-              ...draft,
-              inflationRate: sanitized,
-            }
-          : draft
-      )
-    );
-  }, []);
-
-  const handleMonthPriceChange = React.useCallback((periodId: string, ym: string, value: string) => {
+  const handleMonthChange = React.useCallback((periodId: string, ym: string, value: string) => {
     const sanitized = sanitizeCurrencyInput(value);
     setDrafts((prev) =>
       prev.map((draft) =>
@@ -256,7 +194,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                 month.ym === ym
                   ? {
                       ...month,
-                      price: sanitized,
+                      value: sanitized,
                     }
                   : month
               ),
@@ -266,7 +204,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
     );
   }, []);
 
-  const handleMonthPriceBlur = React.useCallback((periodId: string, ym: string) => {
+  const handleMonthBlur = React.useCallback((periodId: string, ym: string) => {
     setDrafts((prev) =>
       prev.map((draft) =>
         draft.id === periodId
@@ -274,45 +212,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
               ...draft,
               months: draft.months.map((month) =>
                 month.ym === ym
-                  ? { ...month, price: month.price ? formatCurrencyInputBlur(month.price) : '' }
-                  : month
-              ),
-            }
-          : draft
-      )
-    );
-  }, []);
-
-  const handleMonthAdjustedPriceChange = React.useCallback((periodId: string, ym: string, value: string) => {
-    const sanitized = sanitizeCurrencyInput(value);
-    setDrafts((prev) =>
-      prev.map((draft) =>
-        draft.id === periodId
-          ? {
-              ...draft,
-              months: draft.months.map((month) =>
-                month.ym === ym
-                  ? {
-                      ...month,
-                      adjustedPrice: sanitized,
-                    }
-                  : month
-              ),
-            }
-          : draft
-      )
-    );
-  }, []);
-
-  const handleMonthAdjustedPriceBlur = React.useCallback((periodId: string, ym: string) => {
-    setDrafts((prev) =>
-      prev.map((draft) =>
-        draft.id === periodId
-          ? {
-              ...draft,
-              months: draft.months.map((month) =>
-                month.ym === ym
-                  ? { ...month, adjustedPrice: month.adjustedPrice ? formatCurrencyInputBlur(month.adjustedPrice) : '' }
+                  ? { ...month, value: month.value ? formatCurrencyInputBlur(month.value) : '' }
                   : month
               ),
             }
@@ -332,22 +232,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
           ? {
               ...draft,
               defaultPrice: '',
-              defaultAdjustedPrice: '',
-              inflationRate: '',
-              months: draft.months.map((month) => ({ ...month, price: '', adjustedPrice: '' })),
-            }
-          : draft
-      )
-    );
-  }, []);
-
-  const toggleShowMonthly = React.useCallback((id: string) => {
-    setDrafts((prev) =>
-      prev.map((draft) =>
-        draft.id === id
-          ? {
-              ...draft,
-              showMonthly: !draft.showMonthly,
+              months: draft.months.map((month) => ({ ...month, value: '' })),
             }
           : draft
       )
@@ -355,45 +240,29 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   }, []);
 
   const handleSubmit = React.useCallback(
-    (event: React.FormEvent<HTMLFormElement>) => {
+    (event: React.FormEvent) => {
       event.preventDefault();
       console.log('Iniciando salvamento...', { drafts });
       
       try {
         const periods = drafts.map((draft) => {
           const months = draft.months
-            .map((month) => {
-              const price = parseCurrencyInput(month.price);
-              if (price === null) return null;
-              const adjustedPrice = parseCurrencyInput(month.adjustedPrice);
-              return {
-                ym: month.ym,
-                price,
-                ...(adjustedPrice !== null && { adjustedPrice }),
-              };
-            })
-            .filter((month): month is { ym: string; price: number; adjustedPrice?: number } => month !== null);
-          
-          const defaultPrice = parseCurrencyInput(draft.defaultPrice) ?? undefined;
-          const defaultAdjustedPrice = parseCurrencyInput(draft.defaultAdjustedPrice) ?? undefined;
-          const inflationRate = draft.inflationRate ? parseFloat(draft.inflationRate.replace(',', '.')) / 100 : undefined;
-          
+            .map((month) => ({ ym: month.ym, price: parseCurrencyInput(month.value) }))
+            .filter((month): month is { ym: string; price: number } => month.price !== null);
           return {
             id: draft.id,
             start: draft.start,
             end: draft.end,
-            defaultPrice,
-            defaultAdjustedPrice,
-            inflationRate,
+            defaultPrice: parseCurrencyInput(draft.defaultPrice) ?? undefined,
             months,
           };
         });
         
         console.log('Períodos processados:', periods);
         
-        // Calculate average price from the first period with data (usando preço base)
+        // Calculate average price from the first period with data
         const firstPeriodWithData = periods.find(period => period.months.length > 0);
-        const averagePrice = firstPeriodWithData && firstPeriodWithData.months.length > 0
+        const averagePrice = firstPeriodWithData?.months.length 
           ? firstPeriodWithData.months.reduce((sum, month) => sum + month.price, 0) / firstPeriodWithData.months.length
           : firstPeriodWithData?.defaultPrice || 0;
         
@@ -419,40 +288,39 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-6">
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
-        <form onSubmit={handleSubmit} className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Preços médios (R$/MWh)</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Defina períodos e valores mensais aplicados para cálculo dos preços médios do contrato.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-900"
-              aria-label="Fechar preços médios"
-            >
-              <X size={18} />
-            </button>
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Preços médios (R$/MWh)</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Defina períodos e valores mensais aplicados para cálculo dos preços médios do contrato.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-900"
+            aria-label="Fechar preços médios"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {isSaved && (
-              <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                  <span className="font-semibold">Preços salvos com sucesso!</span>
-                </div>
-                <p className="mt-1 text-xs">Os dados foram salvos e o preço médio foi calculado automaticamente.</p>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4">
+          {isSaved && (
+            <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                <span className="font-semibold">Preços salvos com sucesso!</span>
               </div>
-            )}
-            <div className="space-y-5">
-              {drafts.map((draft, index) => {
+              <p className="mt-1 text-xs">Os dados foram salvos e o preço médio foi calculado automaticamente.</p>
+            </div>
+          )}
+          <div className="space-y-5">
+            {drafts.map((draft, index) => {
               const months = monthsBetween(draft.start, draft.end);
               const hasInvalidRange = months.length === 0 && draft.start && draft.end;
               const prices = draft.months
-                .map((month) => parseCurrencyInput(month.price))
+                .map((month) => parseCurrencyInput(month.value))
                 .filter((value): value is number => value !== null);
               const filled = prices.length;
               const average = filled ? prices.reduce((acc, price) => acc + price, 0) / filled : null;
@@ -493,7 +361,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Preço Base (R$/MWh)
+                          Preço padrão do período
                           <div className="relative">
                             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                               R$
@@ -508,41 +376,6 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                               className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
                             />
                           </div>
-                        </label>
-                        <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Preço Reajustado (R$/MWh)
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                              R$
-                            </span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={draft.defaultAdjustedPrice}
-                              onChange={(event) => handleDefaultAdjustedChange(draft.id, event.target.value)}
-                              onBlur={() => handleDefaultAdjustedBlur(draft.id)}
-                              placeholder="0,00"
-                              className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                            />
-                          </div>
-                          <span className="text-xs text-slate-500">Usado apenas para o ano vigente</span>
-                        </label>
-                        <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                          Taxa de Reajuste Anual (%)
-                          <div className="relative">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={draft.inflationRate}
-                              onChange={(event) => handleInflationRateChange(draft.id, event.target.value)}
-                              placeholder="0,00"
-                              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-8 text-sm shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                            />
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                              %
-                            </span>
-                          </div>
-                          <span className="text-xs text-slate-500">Baseado na data-base do contrato</span>
                         </label>
                       </div>
                       {hasInvalidRange && (
@@ -590,35 +423,19 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                   {formatMonthLabel(ym)}
                                 </span>
-                                <div className="space-y-2">
-                                  <div className="relative">
-                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                      R$
-                                    </span>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={month?.price ?? ''}
-                                      onChange={(event) => handleMonthPriceChange(draft.id, ym, event.target.value)}
-                                      onBlur={() => handleMonthPriceBlur(draft.id, ym)}
-                                      placeholder="Preço Base"
-                                      className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
-                                    />
-                                  </div>
-                                  <div className="relative">
-                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                      R$
-                                    </span>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={month?.adjustedPrice ?? ''}
-                                      onChange={(event) => handleMonthAdjustedPriceChange(draft.id, ym, event.target.value)}
-                                      onBlur={() => handleMonthAdjustedPriceBlur(draft.id, ym)}
-                                      placeholder="Reajustado"
-                                      className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
-                                    />
-                                  </div>
+                                <div className="relative">
+                                  <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    R$
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={month?.value ?? ''}
+                                    onChange={(event) => handleMonthChange(draft.id, ym, event.target.value)}
+                                    onBlur={() => handleMonthBlur(draft.id, ym)}
+                                    placeholder="0,00"
+                                    className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
+                                  />
                                 </div>
                               </label>
                             );
@@ -636,33 +453,40 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
               );
             })}
 
-              <button
-                type="button"
-                onClick={handleAddPeriod}
-                className="inline-flex items-center gap-2 rounded-xl border border-dashed border-yn-orange px-4 py-3 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange/10"
-              >
-                <Plus size={18} /> Adicionar período
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-yn-orange hover:text-yn-orange dark:border-slate-700 dark:text-slate-300 dark:hover:border-yn-orange"
+              onClick={handleAddPeriod}
+              className="inline-flex items-center gap-2 rounded-xl border border-dashed border-yn-orange px-4 py-3 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange/10"
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSaveDisabled || isSaved}
-              className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSaved ? 'Salvo!' : 'Salvar'}
+              <Plus size={18} /> Adicionar período
             </button>
           </div>
         </form>
+
+        <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-yn-orange hover:text-yn-orange dark:border-slate-700 dark:text-slate-300 dark:hover:border-yn-orange"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isSaveDisabled || isSaved}
+            onClick={(e) => {
+              console.log('Botão clicado', { isSaveDisabled, isSaved });
+              if (isSaveDisabled) {
+                e.preventDefault();
+                console.log('Botão desabilitado - não pode salvar');
+                return;
+              }
+            }}
+            className="rounded-lg bg-yn-orange px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaved ? 'Salvo!' : 'Salvar'}
+          </button>
+        </div>
       </div>
     </div>
   );
