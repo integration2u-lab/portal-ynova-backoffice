@@ -3,7 +3,7 @@ const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
 // URL base padrão para API de contratos
 const DEFAULT_API_BASE_URL = 'api-balanco.ynovamarketplace.com/api';
 // URL ngrok para testes
-const NGROK_API_BASE_URL = 'https://f2336283d9e5.ngrok-free.app';
+const NGROK_API_BASE_URL = 'https://api-balanco.ynovamarketplace.com';
 const BASE_URL = isDev && useProxy ? '' : (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL);
 
 type ApiFetchOptions = RequestInit & {
