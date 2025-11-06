@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       // Proxy desabilitado - todas as chamadas vão direto para a API configurada no .env
       // A API será acessada via VITE_ENERGY_BALANCE_API_URL (ex: https://d16078567006.ngrok-free.app)
       allowedHosts: [
-        'https://bfaed6f9f27a.ngrok-free.app',
+        'https://api.ynovamarketplace.com.br',
         'http://localhost:3000',
       ],
       hmr: {

@@ -212,7 +212,7 @@ const resourcePath = (id: string) => `${collectionPath}/${id}`;
 
 export async function listContracts(options: ListOptions = {}): Promise<Contract[]> {
   console.log('[services/contracts] listContracts - Iniciando busca em:', collectionPath);
-  console.log('[services/contracts] listContracts - URL completa será: https://f2336283d9e5.ngrok-free.app/contracts');
+  console.log('[services/contracts] listContracts - URL completa será: https://api-balanco.ynovamarketplace.com/contracts');
   
   const payload = await getJson<ContractsLikePayload | Contract>(collectionPath, {
     signal: options.signal,

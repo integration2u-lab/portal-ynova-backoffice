@@ -8,7 +8,7 @@ import {
   type CreateContractPayload,
 } from '../../services/contracts';
 
-const DEFAULT_API_URL = 'https://f2336283d9e5.ngrok-free.app';
+const DEFAULT_API_URL = 'https://api-balanco.ynovamarketplace.com';
 
 const runtimeEnv: Record<string, string | undefined> =
   ((typeof import.meta !== 'undefined'
