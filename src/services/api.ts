@@ -106,7 +106,6 @@ export type Contract = {
   flexibility_percent: string | number | null;
   average_price_mwh: string | number | null;
   supplier?: string | null;
-  proinfa_contribution?: string | number | null;
   spot_price_ref_mwh: string | number | null;
   compliance_consumption: string;
   compliance_nf: string;
@@ -229,7 +228,7 @@ export type Paged<T> = { items: T[]; total: number; page: number; pageSize: numb
 
 export const ContractsAPI = {
   list: async (q: ContractsQuery = {}) => {
-    const contracts = await apiFetch<Contract[]>(`/contracts`, { method: 'GET' });
+    const contracts = await apiFetch<Contract[]>('/contracts', { method: 'GET' });
 
     const searchTerm = (q.search || '').toLowerCase();
     const cnpjFilter = (q.cnpj || '').replace(/[^0-9]/g, '');

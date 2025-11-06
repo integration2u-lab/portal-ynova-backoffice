@@ -24,10 +24,21 @@ const SHOULD_USE_MOCK_API = (() => {
 })()
 
 async function bootstrap() {
-  // Enable MSW only when mock API mode is explicitly requestedd
+  // Enable MSW only when mock API mode is explicitly requested
   if (SHOULD_USE_MOCK_API) {
     const { worker } = await import('./mocks/browser')
     await worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
+  } else {
+    // Desabilitar e desregistrar o MSW se estiver ativo
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      for (const registration of registrations) {
+        if (registration.active?.scriptURL.includes('mockServiceWorker')) {
+          await registration.unregister()
+          console.log('[MSW] ❌ Mock Service Worker desregistrado')
+        }
+      }
+    }
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(

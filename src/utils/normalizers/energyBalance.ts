@@ -71,6 +71,56 @@ const sanitizeNumberString = (value: string) => {
   return trimmed.replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
 };
 
+const truthyBooleanStrings = [
+  'sim',
+  's',
+  'true',
+  '1',
+  'yes',
+  'y',
+  'ok',
+  'enviado',
+  'enviada',
+  'enviados',
+  'sucesso',
+  'success',
+  'confirmado',
+  'confirmed',
+];
+
+const falsyBooleanStrings = [
+  'nao',
+  'nao.',
+  'n',
+  'false',
+  '0',
+  'no',
+  'pendente',
+  'pendente.',
+  'erro',
+  'falha',
+  'failed',
+  'failure',
+  'aguardando',
+];
+
+const toBooleanFlag = (value: unknown): boolean | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value > 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    const normalizedAscii = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (truthyBooleanStrings.includes(normalizedAscii) || truthyBooleanStrings.includes(normalized)) {
+      return true;
+    }
+    if (falsyBooleanStrings.includes(normalizedAscii) || falsyBooleanStrings.includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+};
 const toNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') {
@@ -199,6 +249,18 @@ const normalizeDate = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   const text = String(value).trim();
   if (!text) return 'Não informado';
+  
+  // Tenta parsear como data brasileira primeiro
+  const brazilianParsed = parseBrazilianDate(text);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    try {
+      return dateFormatter.format(brazilianParsed);
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar data', error);
+    }
+  }
+  
+  // Fallback: tenta com new Date() para outros formatos
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) {
     try {
@@ -214,8 +276,37 @@ const normalizeDateTime = (value: unknown): string => {
   if (value === undefined || value === null || value === '') return 'Não informado';
   const text = String(value).trim();
   if (!text) return 'Não informado';
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
+  
+  // Para data/hora, pode vir no formato dd/mm/yyyy hh:mm:ss
+  // Extrai apenas a parte da data para tentar parse brasileiro
+  const datePart = text.split(' ')[0] || text.split('T')[0];
+  const timePart = text.includes(' ') ? text.split(' ').slice(1).join(' ') : '';
+  
+  let parsed: Date | null = null;
+  
+  // Tenta parsear como data brasileira primeiro (apenas a parte da data)
+  const brazilianParsed = parseBrazilianDate(datePart);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    parsed = brazilianParsed;
+    // Se houver parte de tempo, tenta adicionar
+    if (timePart) {
+      const timeMatch = timePart.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (timeMatch) {
+        const [, hours, minutes, seconds] = timeMatch;
+        parsed.setHours(parseInt(hours, 10) || 0);
+        parsed.setMinutes(parseInt(minutes, 10) || 0);
+        parsed.setSeconds(parseInt(seconds || '0', 10) || 0);
+      }
+    }
+  } else {
+    // Fallback: tenta com new Date() para outros formatos
+    parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) {
+      parsed = null;
+    }
+  }
+  
+  if (parsed && !Number.isNaN(parsed.getTime())) {
     try {
       return dateTimeFormatter.format(parsed).replace('.', '');
     } catch (error) {
@@ -230,9 +321,34 @@ const toTitleCase = (value: string): string => {
   return value.replace(/(^|\s)([\p{L}\p{M}])/gu, (match) => match.toUpperCase());
 };
 
+// Função auxiliar para parsear data no formato brasileiro dd/mm/yyyy ou dd/mm/yy
+const parseBrazilianDate = (dateStr: string): Date | null => {
+  // Tenta identificar formato dd/mm/yyyy ou dd/mm/yy
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})$/);
+  if (!match) return null;
+  
+  const [, day, month, year] = match;
+  const fullYear = year.length === 2 ? parseInt(`20${year}`, 10) : parseInt(year, 10);
+  const monthNum = parseInt(month, 10) - 1; // JavaScript months are 0-indexed
+  const dayNum = parseInt(day, 10);
+  
+  if (monthNum < 0 || monthNum > 11) return null;
+  if (dayNum < 1 || dayNum > 31) return null;
+  
+  const date = new Date(fullYear, monthNum, dayNum);
+  // Verifica se a data é válida (evita problemas como 31/02)
+  if (date.getFullYear() !== fullYear || date.getMonth() !== monthNum || date.getDate() !== dayNum) {
+    return null;
+  }
+  
+  return date;
+};
+
 const normalizeMonthLabel = (value: unknown): string => {
   const text = toStringSafe(value);
   if (!text) return 'Não informado';
+  
+  // Primeiro, tenta formato ISO YYYY-MM
   if (/^\d{4}-\d{2}$/.test(text)) {
     const [year, month] = text.split('-').map((part) => Number(part));
     if (Number.isInteger(year) && Number.isInteger(month)) {
@@ -243,14 +359,56 @@ const normalizeMonthLabel = (value: unknown): string => {
       }
     }
   }
+  
+  // Segundo, tenta formato ISO YYYY-MM-DD (ex: 2025-07-01)
+  // Extrai diretamente o ano e mês da string para evitar problemas de timezone
+  const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s|T|$)/);
+  if (isoDateMatch) {
+    const [, yearStr, monthStr] = isoDateMatch;
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+      try {
+        // Usa Date local para garantir que o mês correto seja usado
+        return monthFormatter.format(new Date(year, month - 1, 1)).replace('.', '');
+      } catch (error) {
+        console.warn('[energyBalance] falha ao formatar mês', error);
+      }
+    }
+  }
+  
+  // Tenta parsear como data brasileira primeiro
+  const brazilianParsed = parseBrazilianDate(text);
+  if (brazilianParsed && !Number.isNaN(brazilianParsed.getTime())) {
+    try {
+      return monthFormatter.format(brazilianParsed).replace('.', '');
+    } catch (error) {
+      console.warn('[energyBalance] falha ao formatar mês', error);
+    }
+  }
+  
+  // Fallback: tenta com new Date() para outros formatos
+  // Mas para evitar problemas de timezone, tenta extrair ano e mês se possível
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) {
     try {
+      // Para formatos ISO, usar UTC para evitar problemas de timezone
+      if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+        const parts = text.split(/[-T\s]/);
+        if (parts.length >= 2) {
+          const year = parseInt(parts[0] || '0', 10);
+          const month = parseInt(parts[1] || '0', 10);
+          if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+            return monthFormatter.format(new Date(year, month - 1, 1)).replace('.', '');
+          }
+        }
+      }
       return monthFormatter.format(parsed).replace('.', '');
     } catch (error) {
       console.warn('[energyBalance] falha ao formatar mês', error);
     }
   }
+  
   return text;
 };
 
@@ -335,9 +493,40 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
     getSafe(record, 'saldo_kwh', 'saldoKwh', 'balance_kwh', 'balanceKwh', 'saldo', 'balance', 'net_balance'),
   );
 
-  const saldoDisplay = saldo.numeric === null
-    ? '-'
-    : `${saldo.numeric >= 0 ? '+' : '-'}${kwhFormatter.format(Math.abs(saldo.numeric))} kWh`;
+  const saldoDisplay =
+    saldo.numeric === null
+      ? '-'
+      : `${saldo.numeric >= 0 ? '+' : '-'} ${saldo.display}`;
+
+  const referenceLabelRaw = normalizeMonthLabel(
+    getSafe(record, 'referenceBase', 'reference_base', 'competencia', 'reference', 'mesReferencia'),
+  );
+  const referenceLabelSanitized = referenceLabelRaw.replace('Nǜo', 'Nao');
+  const referenceBaseLabel =
+    referenceLabelSanitized && referenceLabelSanitized !== 'Nao informado'
+      ? referenceLabelSanitized
+      : 'Sem referencia';
+
+  const sentOkFlag = toBooleanFlag(
+    getSafe(
+      record,
+      'sentOk',
+      'sent_ok',
+      'envioOk',
+      'envio_ok',
+      'sent',
+      'statusEnvio',
+      'envioStatus',
+      'envio_status',
+      'status_envio'
+    ),
+  );
+
+  // Extrair PROINFA para verificar se está preenchido
+  const proinfaRaw = toNumber(
+    getSafe(record, 'proinfaContribution', 'proinfa_contribution', 'proinfa', 'proinfaTotal')
+  );
+  const proinfa = proinfaRaw !== null && proinfaRaw > 0 ? proinfaRaw : null;
 
   return {
     id,
@@ -348,7 +537,10 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
     consumoKWh: consumo.display,
     geracaoKWh: geracao.display,
     saldoKWh: saldoDisplay,
+    sentOk: sentOkFlag,
     saldoValor: saldo.numeric,
+    referenceBaseLabel,
+    proinfa,
   };
 }
 
@@ -433,7 +625,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const cnpj = cnpjValue ? formatCnpj(String(cnpjValue)) : 'Não informado';
 
   // Calculate metrics from the single record data
-  const consumptionKwh = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo'));
+  const consumptionKwh = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo', 'metrics.consumption_kwh', 'metrics.consumptionKwh', 'summary.consumption_kwh'));
   const consumptionMwh = consumptionKwh !== null ? consumptionKwh / 1000 : null;
   const price = toNumber(getSafe(record, 'price', 'preco', 'tarifa'));
   const billable = toNumber(getSafe(record, 'billable', 'custo', 'cost', 'value'));
@@ -459,6 +651,11 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     'Não informado',
   );
 
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Consumption (Consumo):', {
+    rawKwh: consumptionKwh,
+    convertedMwh: consumptionMwh,
+    normalized: normalizeMwh(consumptionMwh)
+  });
   const consumoMWh = normalizeMwh(consumptionMwh);
   const precoReaisPorMWh = price !== null ? normalizeCurrencyAllowZero(price) : 'Não informado';
   const custoMes = billable !== null ? normalizeCurrencyAllowZero(billable) : 'Não informado';
@@ -468,9 +665,30 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const maxDemand = toNumber(getSafe(record, 'maxDemand', 'max_demand', 'max'));
   const faixaContratual = describeRange(minDemand, maxDemand);
 
-  const ajustado = normalizeBoolean(
-    getSafe(record, 'adjusted', 'ajustado', 'isAdjusted', 'ajustado_bool', 'ajuste'),
+  // Try to get reajusted_price first, if not available, fallback to boolean
+  const reajustedPriceValue = toNumber(
+    getSafe(
+      record,
+      'reajuted_price',
+      'reajusted_price',
+      'reajustedPrice',
+      'reajutedPrice',
+      'price_reajusted',
+      'priceReajusted',
+      'price_adjusted',
+      'priceAdjusted',
+      'adjusted_price',
+      'adjustedPrice',
+      'precoReajustado',
+      'preco_reajustado',
+    ),
   );
+  
+  const ajustado = reajustedPriceValue !== null
+    ? normalizeCurrencyAllowZero(reajustedPriceValue)
+    : normalizeBoolean(
+        getSafe(record, 'adjusted', 'ajustado', 'isAdjusted', 'ajustado_bool', 'ajuste'),
+      );
 
   const fornecedor = toStringSafe(
     getSafe(record, 'supplier', 'fornecedor', 'provider', 'company'),
@@ -499,6 +717,76 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     getSafe(record, 'contactActive', 'contact_active', 'contatoAtivo', 'ativo')
   );
 
+  const statusMeasurementSource = getSafe(
+    record,
+    'statusMeasurement',
+    'measurementStatus',
+    'status_medicao',
+    'statusMedicao',
+    'measurement_status',
+    'metrics.statusMeasurement',
+    'metrics.status_medicao',
+  );
+  const statusMeasurementText = toStringSafe(statusMeasurementSource, '');
+  const statusMeasurement = statusMeasurementText
+    ? toTitleCase(statusMeasurementText)
+    : null;
+
+  // Campos adicionais necessários para edição
+  const lossValue = toNumber(getSafe(record, 'loss', 'perdas', 'losses', 'perdas3'));
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Loss (Perdas):', {
+    raw: lossValue,
+    dividedBy1000: lossValue !== null ? lossValue / 1000 : null,
+    normalized: lossValue !== null ? normalizeMwh(lossValue / 1000) : 'Não informado'
+  });
+  const perdas3 = lossValue !== null ? normalizeMwh(lossValue / 1000) : 'Não informado';
+
+  const requirementValue = toNumber(getSafe(record, 'requirement', 'requisito', 'req'));
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Requirement (Requisito):', {
+    raw: requirementValue,
+    dividedBy1000: requirementValue !== null ? requirementValue / 1000 : null,
+    normalized: requirementValue !== null ? normalizeMwh(requirementValue / 1000) : 'Não informado'
+  });
+  const requisito = requirementValue !== null ? normalizeMwh(requirementValue / 1000) : 'Não informado';
+
+  const netValue = toNumber(getSafe(record, 'net', 'net_value', 'valorLiquido'));
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Net:', { raw: netValue, normalized: netValue !== null ? netValue.toFixed(2) : 'Não informado' });
+  const net = netValue !== null ? netValue.toFixed(2) : 'Não informado';
+
+  const medicao = toStringSafe(
+    getSafe(record, 'statusMeasurement', 'status_measurement', 'medicao', 'measurement'),
+    'Não informado',
+  );
+
+  const minimo = minDemand !== null ? normalizeMwh(minDemand) : 'Não informado';
+  const maximo = maxDemand !== null ? normalizeMwh(maxDemand) : 'Não informado';
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Demanda:', {
+    minRaw: minDemand,
+    maxRaw: maxDemand,
+    minNormalized: minimo,
+    maxNormalized: maximo
+  });
+
+  const billableValue = toNumber(getSafe(record, 'billable', 'faturar', 'bill'));
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Billable (Faturar):', {
+    raw: billableValue,
+    dividedBy1000: billableValue !== null ? billableValue / 1000 : null,
+    normalized: billableValue !== null ? normalizeMwh(billableValue / 1000) : 'Não informado'
+  });
+  const faturar = billableValue !== null ? normalizeMwh(billableValue / 1000) : 'Não informado';
+
+  const emailRaw = getSafe(record, 'email', 'emails', 'destinatario', 'recipient');
+  const email = emailRaw ? String(emailRaw) : 'Não informado';
+
+  const sentOkRaw = getSafe(record, 'sentOk', 'sent_ok', 'envioOk', 'envio_ok');
+  const envioOk = sentOkRaw === true ? 'Sim' : sentOkRaw === false ? 'Não' : 'Não informado';
+
+  const disparoRaw = getSafe(record, 'sendDate', 'send_date', 'disparo', 'sentAt');
+  const disparo = disparoRaw ? normalizeDateTime(disparoRaw) : 'Não disparado';
+
+  const dataVencimentoRaw = getSafe(record, 'billsDate', 'bills_date', 'dataVencimento', 'vencimento', 'due_date');
+  const dataVencimentoBoleto = dataVencimentoRaw ? normalizeDate(dataVencimentoRaw) : 'Não informado';
+
   const months: EnergyBalanceDetailMonthRow[] = [{
     id: toStringSafe(getSafe(record, 'id', 'uuid'), '1'),
     mes: monthLabel,
@@ -516,6 +804,18 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     dataAtualizacao,
     contatoAtivo,
     actions: '-',
+    // Campos adicionais para os cards editáveis
+    perdas3,
+    requisito,
+    net,
+    medicao,
+    minimo,
+    maximo,
+    faturar,
+    email,
+    envioOk,
+    disparo,
+    dataVencimentoBoleto,
   }];
 
   return {
@@ -534,6 +834,7 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
     },
     months,
     cliente: razao,
+    statusMeasurement,
   };
 }
 
@@ -609,9 +910,30 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
     ),
   );
 
-  const reajustado = normalizeBoolean(
-    getSafe(record, 'reajustado', 'ajustado', 'isAdjusted', 'ajuste'),
+  // Try to get reajusted_price first, if not available, fallback to boolean
+  const reajustedPriceValue = toNumber(
+    getSafe(
+      record,
+      'reajuted_price',
+      'reajusted_price',
+      'reajustedPrice',
+      'reajutedPrice',
+      'price_reajusted',
+      'priceReajusted',
+      'price_adjusted',
+      'priceAdjusted',
+      'adjusted_price',
+      'adjustedPrice',
+      'precoReajustado',
+      'preco_reajustado',
+    ),
   );
+  
+  const reajustado = reajustedPriceValue !== null
+    ? normalizeCurrencyAllowZero(reajustedPriceValue)
+    : normalizeBoolean(
+        getSafe(record, 'reajustado', 'ajustado', 'isAdjusted', 'ajuste'),
+      );
 
   const fornecedor = toStringSafe(
     getSafe(record, 'fornecedor', 'supplier', 'provider', 'company', 'fornecedor_nome'),
@@ -623,30 +945,54 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
     'Não informado',
   );
 
-  const consumo = normalizeMwh(
-    getSafe(record, 'consumo', 'consumo_mwh', 'consumption', 'consumption_mwh', 'consumoMwh'),
-  );
+  console.log('[normalizeEmailRow] 🔍 Dados brutos recebidos do backend:', {
+    id: record.id,
+    consumptionKwh: record.consumptionKwh,
+    loss: record.loss,
+    requirement: record.requirement,
+    net: record.net,
+    statusMeasurement: record.statusMeasurement,
+    minDemand: record.minDemand,
+    maxDemand: record.maxDemand,
+    billable: record.billable,
+    email: record.email,
+    sentOk: record.sentOk,
+    sent_ok: record.sent_ok,
+    sendDate: record.sendDate,
+    send_date: record.send_date,
+    billsDate: record.billsDate,
+    bills_date: record.bills_date,
+  });
 
-  const perdas3 = normalizePercent(
-    getSafe(record, 'perdas3', 'perdas', 'losses', 'losses3', 'perda'),
-  );
+  // Consumo (MWh) - buscar de consumptionKwh e converter para MWh
+  const consumptionKwhValue = toNumber(getSafe(record, 'consumptionKwh', 'consumption_kwh', 'consumo_kwh', 'consumo'));
+  const consumo = consumptionKwhValue !== null ? normalizeMwh(consumptionKwhValue / 1000) : 'Não informado';
+  console.log('[normalizeEmailRow] Consumo:', { raw: consumptionKwhValue, normalized: consumo });
 
-  const requisito = toStringSafe(
-    getSafe(record, 'requisito', 'requirement', 'req', 'requisito_cons', 'requisito_minimo'),
-    'Não informado',
-  );
+  // Perdas (3%) - buscar de loss
+  const lossValue = toNumber(getSafe(record, 'loss', 'perdas', 'losses', 'perdas3'));
+  const perdas3 = lossValue !== null ? normalizeMwh(lossValue / 1000) : 'Não informado';
+  console.log('[normalizeEmailRow] Perdas:', { raw: lossValue, normalized: perdas3 });
 
-  const net = normalizeCurrencyAllowZero(
-    getSafe(record, 'net', 'net_value', 'valorLiquido', 'valor_liquido'),
-  );
+  // Requisito - buscar de requirement
+  const requirementValue = toNumber(getSafe(record, 'requirement', 'requisito', 'req'));
+  const requisito = requirementValue !== null ? normalizeMwh(requirementValue / 1000) : 'Não informado';
+  console.log('[normalizeEmailRow] Requisito:', { raw: requirementValue, normalized: requisito });
 
+  // NET - buscar de net (número completo, sem R$)
+  const netValue = toNumber(getSafe(record, 'net', 'net_value', 'valorLiquido'));
+  const net = netValue !== null ? netValue.toFixed(2) : 'Não informado';
+  console.log('[normalizeEmailRow] NET:', { raw: netValue, normalized: net });
+
+  // Medição - buscar de statusMeasurement
   const medicao = toStringSafe(
-    getSafe(record, 'medicao', 'measurement', 'tipoMedicao', 'tipo_medicao'),
+    getSafe(record, 'statusMeasurement', 'status_measurement', 'medicao', 'measurement'),
     'Não informado',
   );
+  console.log('[normalizeEmailRow] Medição:', medicao);
 
   const proinfa = normalizeProinfa(
-    getSafe(record, 'proinfa', 'proinfa_total', 'encargoProinfa', 'encargo_proinfa'),
+    getSafe(record, 'proinfa', 'proinfaContribution', 'proinfa_contribution', 'proinfa_total'),
   );
 
   const contrato = toStringSafe(
@@ -654,38 +1000,45 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
     'Não informado',
   );
 
-  const minimo = normalizeMwh(
-    getSafe(record, 'minimo', 'min', 'limite_inferior', 'faixa_min', 'min_mwh'),
-  );
+  // Mínimo (MWh) - buscar de min_demand
+  const minDemandValue = toNumber(getSafe(record, 'minDemand', 'min_demand', 'minimo', 'min'));
+  const minimo = minDemandValue !== null ? normalizeMwh(minDemandValue) : 'Não informado';
+  console.log('[normalizeEmailRow] Mínimo:', { raw: minDemandValue, normalized: minimo });
 
-  const maximo = normalizeMwh(
-    getSafe(record, 'maximo', 'max', 'limite_superior', 'faixa_max', 'max_mwh'),
-  );
+  // Máximo (MWh) - buscar de max_demand
+  const maxDemandValue = toNumber(getSafe(record, 'maxDemand', 'max_demand', 'maximo', 'max'));
+  const maximo = maxDemandValue !== null ? normalizeMwh(maxDemandValue) : 'Não informado';
+  console.log('[normalizeEmailRow] Máximo:', { raw: maxDemandValue, normalized: maximo });
 
-  const faturar = normalizeBoolean(
-    getSafe(record, 'faturar', 'bill', 'shouldBill', 'faturar_bool'),
-  );
+  // Faturar - buscar de billable
+  const billableValue = toNumber(getSafe(record, 'billable', 'faturar', 'bill'));
+  const faturar = billableValue !== null ? normalizeMwh(billableValue / 1000) : 'Não informado';
+  console.log('[normalizeEmailRow] Faturar:', { raw: billableValue, normalized: faturar });
 
-  const cp = normalizeBoolean(
-    getSafe(record, 'cp', 'conta_participacao', 'cp_flag', 'contaParticipacao'),
-  );
-
-  const email = toStringSafe(
-    getSafe(record, 'email', 'destinatario', 'recipient', 'emailDestino'),
+  const cp = toStringSafe(
+    getSafe(record, 'cpCode', 'cp', 'cp_code', 'conta_participacao'),
     'Não informado',
   );
 
-  const envioOk = normalizeBoolean(
-    getSafe(record, 'sentOk', 'envioOk', 'envio_ok', 'sent', 'statusEnvio', 'envioStatus', 'sent_ok'),
-  );
+  // Email - buscar de email (pode ter múltiplos)
+  const emailRaw = getSafe(record, 'email', 'emails', 'destinatario', 'recipient');
+  const email = emailRaw ? String(emailRaw) : 'Não informado';
+  console.log('[normalizeEmailRow] Email:', email);
 
-  const disparo = normalizeDateTime(
-    getSafe(record, 'sendDate', 'disparo', 'disparo_at', 'enviadoEm', 'sentAt', 'sent_at', 'send_date'),
-  );
+  // Envio OK - buscar de sent_ok (true/false)
+  const sentOkRaw = getSafe(record, 'sentOk', 'sent_ok', 'envioOk', 'envio_ok');
+  const envioOk = sentOkRaw === true ? 'Sim' : sentOkRaw === false ? 'Não' : 'Não informado';
+  console.log('[normalizeEmailRow] Envio OK:', { raw: sentOkRaw, normalized: envioOk });
 
-  const dataVencimentoBoleto = normalizeDate(
-    getSafe(record, 'billsDate', 'dataVencimentoBoleto', 'vencimento', 'due_date', 'data_vencimento', 'bills_date', 'data_vencimento_boleto'),
-  );
+  // Data Disparo - buscar de send_date
+  const disparoRaw = getSafe(record, 'sendDate', 'send_date', 'disparo', 'sentAt');
+  const disparo = disparoRaw ? normalizeDateTime(disparoRaw) : 'Não disparado';
+  console.log('[normalizeEmailRow] Data Disparo:', { raw: disparoRaw, normalized: disparo });
+
+  // Data Vencimento da NF - buscar de bills_date
+  const dataVencimentoRaw = getSafe(record, 'billsDate', 'bills_date', 'dataVencimento', 'vencimento', 'due_date');
+  const dataVencimentoBoleto = dataVencimentoRaw ? normalizeDate(dataVencimentoRaw) : 'Não informado';
+  console.log('[normalizeEmailRow] Data Vencimento NF:', { raw: dataVencimentoRaw, normalized: dataVencimentoBoleto });
 
   return {
     id,

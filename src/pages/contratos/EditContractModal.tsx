@@ -2,7 +2,8 @@ import React from 'react';
 import { X, PencilLine } from 'lucide-react';
 import type { ContractDetails as ContractMock, StatusResumo } from '../../types/contracts';
 import { SUPPLIERS, SUPPLIER_NAMES, getSupplierEmails } from '../../utils/suppliers';
-import PricePeriodsModal, { PricePeriods, summarizePricePeriods } from './PricePeriodsModal';
+import PricePeriodsModal, { PricePeriods } from './PricePeriodsModal';
+import { summarizePricePeriods } from '../../types/contracts';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 
 type EditableField = 

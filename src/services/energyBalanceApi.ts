@@ -1,26 +1,11 @@
-const DEFAULT_REMOTE_BASE_URL = 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000';
+import { API_CONFIG } from '../config/api';
+
 const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
-''
-const sanitizeBaseCandidate = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed === '/') return '';
-  return trimmed;
-};
 
-const unique = <T,>(items: T[]): T[] => items.filter((value, index) => items.indexOf(value) === index);
+// Usar configuração do arquivo TypeScript em vez de variáveis de ambiente
+const API_BASE_URL = API_CONFIG.baseURL;
 
-const rawBaseCandidates = [
-  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_API_URL),
-  sanitizeBaseCandidate(import.meta.env.VITE_ENERGY_BALANCE_BASE_URL),
-  sanitizeBaseCandidate(import.meta.env.VITE_API_BASE_URL),
-  '/api',
-  '',
-  DEFAULT_REMOTE_BASE_URL,
-].filter((candidate): candidate is string => candidate !== null && candidate !== undefined);
-
-const API_BASE_CANDIDATES = unique(rawBaseCandidates);
+console.log('[energyBalanceApi] 🚀 Inicializado com URL:', API_BASE_URL);
 
 // const WEBHOOK_RUNTIME_CANDIDATES = [
 //   sanitizeBaseCandidate(import.meta.env.DEFAULT_WEBHOOK_URL),
@@ -89,73 +74,65 @@ const shouldRetryStatus = (status: number) => [404, 405, 502, 503, 504].includes
 const shouldRetryError = (error: unknown) => error instanceof TypeError;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let lastError: unknown = null;
+  const url = joinUrl(API_BASE_URL, path);
+  console.log(`[energyBalanceApi] 🔗 Chamando: ${url}`);
+  
+  const headers = new Headers(init.headers);
+  
+  // Adicionar headers da configuração
+  Object.entries(API_CONFIG.headers).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
 
-  for (const base of API_BASE_CANDIDATES) {
-    const url = joinUrl(base, path);
-    const headers = new Headers(init.headers);
-    // Ensure ngrok warning header is sent for energy-balance endpoints
-    try {
-      if (typeof path === 'string' && path.includes('/energy-balance')) {
-        headers.set('ngrok-skip-browser-warning', 'true');
-      }
-    } catch (e) {
-      // ignore header setting errors
+  const sameOrigin = isSameOriginUrl(url);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+      signal: init.signal,
+      credentials: init.credentials ?? (sameOrigin ? 'include' : 'omit'),
+      mode: init.mode ?? (sameOrigin ? 'same-origin' : 'cors'),
+    });
+    console.log(`[energyBalanceApi] ✅ Status: ${response.status} ${response.statusText}`);
+  } catch (error) {
+    console.error(`[energyBalanceApi] ❌ Erro na requisição:`, error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
     }
-    const sameOrigin = isSameOriginUrl(url);
-
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        ...init,
-        headers,
-        signal: init.signal,
-        credentials: init.credentials ?? (sameOrigin ? 'include' : 'omit'),
-        mode: init.mode ?? (sameOrigin ? 'same-origin' : 'cors'),
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      if (shouldRetryError(error)) {
-        lastError = error;
-        continue;
-      }
-      const message = error instanceof Error ? error.message : 'Falha inesperada ao acessar a API de balanço energético';
-      throw new HttpError(message);
-    }
-
-    if (!response.ok) {
-      const body = await parseJsonSafely(response);
-      const errorMessage =
-        (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
-          ? (body as any).error
-          : undefined) || response.statusText || `HTTP ${response.status}`;
-      const httpError = new HttpError(errorMessage, { status: response.status, body });
-
-      if (httpError.status && shouldRetryStatus(httpError.status)) {
-        lastError = httpError;
-        continue;
-      }
-
-      throw httpError;
-    }
-
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      return (await response.json()) as T;
-    }
-
-    return (await parseJsonSafely(response)) as T;
+    const message = error instanceof Error ? error.message : 'Falha ao conectar com a API';
+    throw new HttpError(message);
   }
 
-  if (lastError instanceof HttpError) {
-    throw lastError;
+  if (!response.ok) {
+    const body = await parseJsonSafely(response);
+    const errorMessage =
+      (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
+        ? (body as any).error
+        : undefined) || response.statusText || `HTTP ${response.status}`;
+    console.error(`[energyBalanceApi] ❌ Resposta com erro: ${response.status} - ${errorMessage}`);
+    throw new HttpError(errorMessage, { status: response.status, body });
   }
-  if (lastError instanceof Error) {
-    throw new HttpError(lastError.message);
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const data = await response.json();
+    console.log(`[energyBalanceApi] 📦 Dados recebidos:`, Array.isArray(data) ? `Array com ${data.length} itens` : typeof data);
+    
+    // Log detalhado do primeiro item para debug
+    if (Array.isArray(data) && data.length > 0) {
+      console.log('[energyBalanceApi] 🔍 Primeiro item da resposta:', data[0]);
+    } else if (!Array.isArray(data) && typeof data === 'object') {
+      console.log('[energyBalanceApi] 🔍 Objeto recebido:', data);
+    }
+    
+    return data as T;
   }
-  throw new HttpError('Falha ao acessar a API de balanço energético.');
+
+  const data = await parseJsonSafely(response);
+  console.log(`[energyBalanceApi] 📦 Dados parseados:`, Array.isArray(data) ? `Array com ${(data as any[]).length} itens` : typeof data);
+  return data as T;
 }
 
 const toArray = (payload: unknown): any[] => {
@@ -191,7 +168,6 @@ export async function getById(id: string, signal?: AbortSignal): Promise<any> {
     throw new Error('ID do balanço energético é obrigatório');
   }
   const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}`, { method: 'GET', signal });
-  console.log('getBalanceDetails payload', payload);
   return toObject(payload) ?? { id: String(id) };
 }
 
@@ -199,7 +175,6 @@ export async function getEvents(id: string, signal?: AbortSignal): Promise<any[]
   if (!id) return [];
   try {
     const payload = await request<any>(`/energy-balance/${encodeURIComponent(id)}/events`, { method: 'GET', signal });
-    console.log('getEvents payload', payload);
     return toArray(payload);
   } catch (error) {
     if (error instanceof HttpError && (error.status === 404 || error.status === 405)) {

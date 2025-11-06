@@ -11,6 +11,10 @@ import type {
   ObrigacaoRow,
   StatusResumo,
 } from '../mocks/contracts';
+import type { ContractPriceMonth, ContractPricePeriod, ContractPricePeriods } from './pricePeriods';
+import type { PricePeriodsSummary } from '../utils/contractPricing';
+
+export { summarizePricePeriods, normalizeAnnualPricePeriods, calculateAdjustedPriceDifference } from '../utils/contractPricing';
 
 export type ContractDetails = ContractMock;
 

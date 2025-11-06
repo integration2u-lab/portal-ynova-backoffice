@@ -10,6 +10,7 @@ export type ContractVolumeByYear = {
 export type Contract = {
   id: string;
   contract_code: string;
+  corporate_name?: string;
   client_name: string;
   legal_name?: string; // Razão social do cliente
   client_id?: string;
@@ -41,6 +42,10 @@ export type Contract = {
   compliance_invoice?: string | number | null;
   compliance_charges?: string | number | null;
   compliance_overall?: string | number | null;
+  // Preços por período (JSON string)
+  price_periods?: string | null; // JSON string com a estrutura de períodos e meses
+  flat_price_mwh?: string | number | null; // Preço flat aplicado
+  flat_years?: string | number | null; // Número de anos para preço flat (1-10)
   created_at: string;
   updated_at: string;
 };
@@ -56,9 +61,7 @@ type ListOptions = {
   signal?: AbortSignal;
 };
 
-const isDev = import.meta.env.DEV;
-const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
-const collectionPath = isDev && useProxy ? '/api/contracts' : '/contracts';
+const collectionPath = '/contracts';
 
 const asArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;
@@ -109,6 +112,7 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
   return {
     id: toStringSafe(idSource, `contract-${index}`),
     contract_code: toStringSafe(item?.contract_code),
+    corporate_name: corporateName || undefined,
     client_name: toStringSafe(item?.client_name),
     legal_name: (() => {
       // API returns social_reason, but we use legal_name internally
@@ -143,6 +147,46 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     compliance_invoice: item?.compliance_invoice ?? coerceNumber(item?.compliance_invoice),
     compliance_charges: item?.compliance_charges ?? coerceNumber(item?.compliance_charges),
     compliance_overall: item?.compliance_overall ?? coerceNumber(item?.compliance_overall),
+    // Preços por período (pode vir direto ou dentro de periodPrice)
+    price_periods: (() => {
+      // Tenta pegar de periodPrice primeiro
+      const periodPrice = item?.periodPrice;
+      if (periodPrice && typeof periodPrice === 'object') {
+        const pricePeriodsFromPeriodPrice = (periodPrice as { price_periods?: unknown }).price_periods;
+        if (typeof pricePeriodsFromPeriodPrice === 'string') {
+          return pricePeriodsFromPeriodPrice;
+        }
+      }
+      // Se não encontrou em periodPrice, tenta direto
+      const pricePeriodsDirect = item?.price_periods;
+      return typeof pricePeriodsDirect === 'string' ? pricePeriodsDirect : null;
+    })(),
+    flat_price_mwh: (() => {
+      // Tenta pegar de periodPrice primeiro
+      const periodPrice = item?.periodPrice;
+      if (periodPrice && typeof periodPrice === 'object') {
+        const flatPriceFromPeriodPrice = (periodPrice as { flat_price_mwh?: unknown }).flat_price_mwh;
+        if (typeof flatPriceFromPeriodPrice === 'number' && Number.isFinite(flatPriceFromPeriodPrice)) {
+          return flatPriceFromPeriodPrice;
+        }
+      }
+      // Se não encontrou em periodPrice, tenta direto
+      const flatPriceDirect = item?.flat_price_mwh;
+      return typeof flatPriceDirect === 'number' && Number.isFinite(flatPriceDirect) ? flatPriceDirect : null;
+    })(),
+    flat_years: (() => {
+      // Tenta pegar de periodPrice primeiro
+      const periodPrice = item?.periodPrice;
+      if (periodPrice && typeof periodPrice === 'object') {
+        const flatYearsFromPeriodPrice = (periodPrice as { flat_years?: unknown }).flat_years;
+        if (typeof flatYearsFromPeriodPrice === 'number' && Number.isFinite(flatYearsFromPeriodPrice)) {
+          return flatYearsFromPeriodPrice;
+        }
+      }
+      // Se não encontrou em periodPrice, tenta direto
+      const flatYearsDirect = item?.flat_years;
+      return typeof flatYearsDirect === 'number' && Number.isFinite(flatYearsDirect) ? flatYearsDirect : null;
+    })(),
     created_at: toStringSafe(item?.created_at),
     updated_at: toStringSafe(item?.updated_at),
   };
@@ -167,10 +211,31 @@ const normalizeContracts = (payload: unknown): Contract[] => {
 const resourcePath = (id: string) => `${collectionPath}/${id}`;
 
 export async function listContracts(options: ListOptions = {}): Promise<Contract[]> {
+  console.log('[services/contracts] listContracts - Iniciando busca em:', collectionPath);
+  console.log('[services/contracts] listContracts - URL completa será: https://f2336283d9e5.ngrok-free.app/contracts');
+  
   const payload = await getJson<ContractsLikePayload | Contract>(collectionPath, {
     signal: options.signal,
   });
-  return normalizeContracts(payload);
+  
+  console.log('[services/contracts] listContracts - Payload recebido da API:', payload);
+  console.log('[services/contracts] listContracts - Tipo do payload:', typeof payload, Array.isArray(payload) ? 'Array' : 'Object');
+  
+  const normalized = normalizeContracts(payload);
+  console.log('[services/contracts] listContracts - Contratos normalizados:', normalized.length, 'itens');
+  
+  // Log de cada contrato para verificar price_periods
+  normalized.forEach((contract, index) => {
+    console.log(`[services/contracts] listContracts - Contrato ${index + 1}:`, {
+      id: contract.id,
+      codigo: contract.contract_code,
+      price_periods: contract.price_periods,
+      flat_price_mwh: contract.flat_price_mwh,
+      flat_years: contract.flat_years,
+    });
+  });
+  
+  return normalized;
 }
 
 export async function fetchContracts(signal?: AbortSignal) {

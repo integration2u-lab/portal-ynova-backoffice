@@ -2,11 +2,43 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ContractDetail } from './ContractDetail';
 import { useContracts } from './ContractsContext';
+import type { PricePeriods } from './PricePeriodsModal';
 
 export default function DetalheContratoPage() {
   const { id } = useParams();
-  const { getContractById } = useContracts();
-  const contrato = React.useMemo(() => (id ? getContractById(id) : undefined), [getContractById, id]);
+  const { getContractById, updateContract } = useContracts();
+  
+  console.log('[DetalheContrato] Render - ID do contrato:', id);
+  
+  const contrato = React.useMemo(() => {
+    if (!id) {
+      console.log('[DetalheContrato] useMemo - Sem ID, retornando undefined');
+      return undefined;
+    }
+    const found = getContractById(id);
+    console.log('[DetalheContrato] useMemo - Contrato encontrado:', found);
+    if (found) {
+      console.log('[DetalheContrato] useMemo - periodPrice do contrato:', (found as { periodPrice?: unknown }).periodPrice);
+      console.log('[DetalheContrato] useMemo - price_periods direto:', (found as { price_periods?: unknown }).price_periods);
+    }
+    return found;
+  }, [getContractById, id]);
+
+  const handleUpdatePricePeriods = React.useCallback(
+    async (periods: PricePeriods) => {
+      if (!contrato || !id) return;
+      try {
+        await updateContract(id, (current) => ({
+          ...current,
+          pricePeriods: periods,
+        }));
+      } catch (error) {
+        console.error('[DetalheContrato] Falha ao atualizar preços por período:', error);
+        throw error;
+      }
+    },
+    [contrato, id, updateContract]
+  );
 
   if (!contrato) {
     return (
@@ -42,7 +74,7 @@ export default function DetalheContratoPage() {
         </div>
       </header>
 
-      <ContractDetail contrato={contrato} />
+      <ContractDetail contrato={contrato} onUpdatePricePeriods={handleUpdatePricePeriods} />
     </div>
   );
 }

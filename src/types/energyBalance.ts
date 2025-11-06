@@ -8,6 +8,9 @@ export interface EnergyBalanceListItem {
   geracaoKWh: string;
   saldoKWh: string;
   saldoValor?: number | null;
+  sentOk?: boolean | null;
+  referenceBaseLabel?: string;
+  proinfa?: string | number | null;
 }
 
 export interface EnergyBalanceDetailMetrics {
@@ -61,6 +64,7 @@ export interface EnergyBalanceDetail {
   metrics: EnergyBalanceDetailMetrics;
   months: EnergyBalanceDetailMonthRow[];
   cliente: string;
+  statusMeasurement?: string | null;
 }
 
 export interface EnergyBalanceEvent {

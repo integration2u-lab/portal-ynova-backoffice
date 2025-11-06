@@ -1,163 +1,11 @@
 import React from 'react';
 import { Check, Loader2, RefreshCw, Search, X, Calendar, ChevronRight, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { getEmailRows, updateEmailRow } from '../services/emailApi';
+// Email page está temporariamente desabilitada
+// import { getEmailRows, updateEmailRow } from '../services/emailApi';
 import { normalizeEmailRow } from '../utils/normalizers/energyBalance';
 import type { EmailRow } from '../types/email';
-
-// Helper function to convert EmailRow to API payload format
-const convertEmailRowToApiFormat = (row: EmailRow, originalRawData?: Record<string, unknown>): Record<string, unknown> => {
-  // Helper to parse number strings
-  const parseNumber = (value: string): number | null => {
-    if (!value || value === 'Não informado' || value === '-') return null;
-    // Remove currency symbols, spaces, and convert BR format (1.234,56) to number
-    const cleaned = value.replace(/[R$\s\.]/g, '').replace(',', '.');
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
-  };
-
-  // Helper to parse MWh values (remove "MWh" and parse)
-  const parseMwh = (value: string): number | null => {
-    if (!value || value === 'Não informado' || value === '-') return null;
-    const cleaned = value.replace(/MWh\s*/g, '').trim();
-    const num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
-    return isNaN(num) ? null : num;
-  };
-
-  // Helper to parse percentage values
-  const parsePercent = (value: string): number | null => {
-    if (!value || value === 'Não informado' || value === '-') return null;
-    const cleaned = value.replace(/%\s*/g, '').trim();
-    const num = parseFloat(cleaned.replace(',', '.'));
-    return isNaN(num) ? null : num / 100;
-  };
-
-  // Helper to convert date from BR format to ISO
-  const parseDate = (value: string, isDateTime = false): string | null => {
-    if (!value || value === 'Não informado' || value === '') return null;
-    
-    // Try to parse BR format (dd/mm/yyyy HH:mm or dd/mm/yyyy)
-    if (value.includes('/')) {
-      const parts = value.split(' ');
-      const datePart = parts[0];
-      let timePart = '00:00:00';
-      
-      if (parts.length > 1) {
-        timePart = parts[1].length === 5 ? `${parts[1]}:00` : parts[1];
-      }
-      
-      if (datePart.includes('/')) {
-        const [day, month, year] = datePart.split('/');
-        // Format as ISO 8601 with timezone (e.g., "2025-10-03T00:00:00.000Z")
-        if (isDateTime) {
-          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}.000Z`;
-        } else {
-          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00.000Z`;
-        }
-      }
-    }
-    
-    // If already in datetime-like format, ensure proper ISO format
-    if (value.includes('T')) {
-      // If missing Z suffix and timezone
-      if (!value.includes('Z') && !value.includes('+') && !value.includes('--')) {
-        // Remove any milliseconds if present
-        const cleaned = value.replace(/\.\d{3}Z?$/, '');
-        return `${cleaned}.000Z`;
-      }
-      return value;
-    }
-    
-    // If already ISO format or other format, return as is
-    return value;
-  };
-
-  // Helper to parse boolean from "Sim"/"Não" to true/false
-  const parseBoolean = (value: string): boolean | null => {
-    if (!value || value === 'Não informado' || value === '') return null;
-    const normalized = value.toLowerCase().trim();
-    
-    // Handle positive values
-    if (normalized === 'sim' || normalized === 'true' || normalized === '1' || normalized === 'yes') {
-      return true;
-    }
-    
-    // Handle negative values
-    if (normalized === 'não' || normalized === 'nao' || normalized === 'n' || normalized === 'false' || normalized === '0' || normalized === 'no') {
-      return false;
-    }
-    
-    // Default to false for unknown values
-    console.warn('[EmailPage] Unknown boolean value:', value, 'defaulting to false');
-    return false;
-  };
-
-  // Build API payload
-  const payload: Record<string, unknown> = {};
-
-  // Map fields according to API specification
-  payload.meter = row.medidor !== 'Não informado' ? row.medidor : null;
-  payload.clientName = row.clientes !== 'Não informado' ? row.clientes : null;
-  
-  // Preserve referenceBase from original data since dataBase is a formatted display value
-  if (originalRawData?.referenceBase !== undefined) {
-    payload.referenceBase = originalRawData.referenceBase;
-  }
-  
-  payload.price = parseNumber(row.preco);
-  payload.supplier = row.fornecedor !== 'Não informado' ? row.fornecedor : null;
-  payload.email = row.email !== 'Não informado' ? row.email : null;
-  
-  // consumptionKwh - need to convert from MWh displayed value
-  const consumoMwh = parseMwh(row.consumo);
-  payload.consumptionKwh = consumoMwh ? (consumoMwh * 1000).toFixed(8) : null;
-  
-  payload.loss = parsePercent(row.perdas3);
-  // requirement is a number field, parse it
-  const requirementNum = parseNumber(row.requisito);
-  payload.requirement = requirementNum !== null ? String(requirementNum) : null;
-  payload.net = parseNumber(row.net);
-  payload.proinfaContribution = parseNumber(row.proinfa);
-  payload.contract = row.contrato !== 'Não informado' ? row.contrato : null;
-  payload.minDemand = parseMwh(row.minimo);
-  payload.maxDemand = parseMwh(row.maximo);
-  payload.billable = parseNumber(row.faturar);
-  payload.cpCode = row.cp !== 'Não informado' ? row.cp : null;
-  
-  // Convert boolean fields
-  let adjustedValue = parseBoolean(row.reajustado);
-  let sentOkValue = parseBoolean(row.envioOk);
-  
-  // If the value is "Não informado", try to get from original raw data
-  if (adjustedValue === null && originalRawData?.adjusted !== undefined) {
-    adjustedValue = Boolean(originalRawData.adjusted);
-  }
-  if (sentOkValue === null && originalRawData?.sentOk !== undefined) {
-    sentOkValue = Boolean(originalRawData.sentOk);
-  }
-  
-  console.log('[EmailPage] Converting booleans - reajustado:', row.reajustado, '->', adjustedValue);
-  console.log('[EmailPage] Converting booleans - envioOk:', row.envioOk, '->', sentOkValue);
-  
-  payload.adjusted = adjustedValue;
-  payload.sentOk = sentOkValue;
-  
-  // Don't send sendDate - it's readonly and shouldn't be updated
-  // payload.sendDate = parseDate(row.disparo);
-  
-  payload.billsDate = parseDate(row.dataVencimentoBoleto, true); // isDateTime = true
-
-  // Include original fields that might be needed by the API
-  if (originalRawData) {
-    ['clientId', 'contractId', 'contactActive', 'createdAt', 'updatedAt'].forEach(key => {
-      if (originalRawData[key] !== undefined) {
-        payload[key] = originalRawData[key];
-      }
-    });
-  }
-
-  return payload;
-};
+import { convertDisplayRowToEnergyBalancePayload } from '../utils/energyBalancePayload';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -375,7 +223,8 @@ export default function EmailPage() {
     setError('');
 
     try {
-      const payload = await getEmailRows(controller.signal);
+      // Email page está temporariamente desabilitada
+      const payload: unknown[] = []; // await getEmailRows(controller.signal);
       const normalized = (Array.isArray(payload) ? payload : [])
         .map((item, index) => {
           try {
@@ -498,11 +347,13 @@ export default function EmailPage() {
         console.log('[EmailPage] Draft data before conversion:', draft);
         console.log('[EmailPage] Original raw data:', originalData);
         
-        const updateData = convertEmailRowToApiFormat(draft, originalData);
+        const updateData = convertDisplayRowToEnergyBalancePayload(draft, originalData);
         
         console.log('[EmailPage] Updating row with API data:', updateData);
         
-        await updateEmailRow(rowId, updateData);
+        // Email page está temporariamente desabilitada
+        // await updateEmailRow(rowId, updateData);
+        await Promise.resolve(); // Placeholder
 
         // Clear editing state immediately after successful API call
         setEditingId((current) => (current === rowId ? null : current));
@@ -781,7 +632,7 @@ export default function EmailPage() {
                                           }
                                           // For number fields, we store as-is (will be parsed on API call)
                                           else if (column.fieldType === 'number') {
-                                            // Store the number as string, will be parsed in convertEmailRowToApiFormat
+                                            // Store the number as string; conversion happens when building the API payload
                                             newValue = newValue;
                                           }
                                           handleDraftChange(row.id, column.key, newValue);

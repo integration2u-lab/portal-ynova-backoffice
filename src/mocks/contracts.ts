@@ -1,4 +1,5 @@
-export type StatusResumo = 'Conforme' | 'Divergente' | 'Em análise';
+import type { ContractPricePeriods } from '../types/pricePeriods';
+﻿export type StatusResumo = 'Conforme' | 'Divergente' | 'Em anÃ¡lise';
 export type AnaliseStatus = 'verde' | 'amarelo' | 'vermelho';
 
 export type KPIItem = {
@@ -36,13 +37,13 @@ export type ObrigacaoRow = {
 export type AnaliseArea = {
   area: string;
   etapas: Array<{
-    nome: 'Dados' | 'Cálculo' | 'Análise';
+    nome: 'Dados' | 'CÃ¡lculo' | 'AnÃ¡lise';
     status: AnaliseStatus;
     observacao?: string;
   }>;
 };
 
-export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise' | 'Vencida';
+export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em anÃ¡lise' | 'Vencida';
 
 export type ContractInvoice = {
   id: string;
@@ -63,6 +64,7 @@ export type ContractVolumeByYear = {
 export type ContractMock = {
   id: string;
   codigo: string;
+  razaoSocial?: string;
   cliente: string;
   razaoSocial?: string; // Razão social do cliente (diferente do nome interno)
   cnpj: string;
@@ -94,6 +96,9 @@ export type ContractMock = {
   obrigacoes: ObrigacaoRow[];
   analises: AnaliseArea[];
   faturas: ContractInvoice[];
+  pricePeriods?: ContractPricePeriods;
+  precoReajustado?: number | null;
+  situacaoVigencia?: 'Vigente' | 'Encerrado';
 };
 
 const meses = ['2023-12', '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'];
@@ -104,16 +109,16 @@ const baseObrigacoesCols = [
   'Fatura',
   'Encargos',
   'Conformidade',
-  'Divergências',
-  'Projeções',
+  'DivergÃªncias',
+  'ProjeÃ§Ãµes',
   'Riscos',
-  'Liquidação',
+  'LiquidaÃ§Ã£o',
   'Pagamentos',
-  'Preços',
+  'PreÃ§os',
   'Flex',
   'Limites',
   'Documentos',
-  'Observações',
+  'ObservaÃ§Ãµes',
 ];
 
 const obrigacoesRow = (periodo: string, statuses: StatusResumo[]): ObrigacaoRow => ({
@@ -124,7 +129,7 @@ const obrigacoesRow = (periodo: string, statuses: StatusResumo[]): ObrigacaoRow 
   }, {}),
 });
 
-export const obrigacaoColunas = ['Período', ...baseObrigacoesCols];
+export const obrigacaoColunas = ['PerÃ­odo', ...baseObrigacoesCols];
 
 export const mockContracts: ContractMock[] = [
   {
@@ -132,11 +137,11 @@ export const mockContracts: ContractMock[] = [
     codigo: 'US-11',
     cliente: 'UniSolar Energia',
     cnpj: '12.345.678/0001-90',
-    segmento: 'Indústria Automotiva',
+    segmento: 'IndÃºstria Automotiva',
     contato: 'Mariana Figueiredo',
     status: 'Ativo',
     fonte: 'Convencional',
-    modalidade: 'PLD Horário',
+    modalidade: 'PLD HorÃ¡rio',
     inicioVigencia: '2023-07-01',
     fimVigencia: '2025-06-30',
     limiteSuperior: '105%',
@@ -150,27 +155,27 @@ export const mockContracts: ContractMock[] = [
     periodos: meses.slice(1),
     resumoConformidades: {
       Consumo: 'Conforme',
-      NF: 'Em análise',
+      NF: 'Em anÃ¡lise',
       Fatura: 'Conforme',
       Encargos: 'Conforme',
-      Conformidade: 'Em análise',
+      Conformidade: 'Em anÃ¡lise',
     },
     kpis: [
       { label: 'Consumo acumulado', value: '18.420 MWh', helper: 'Jan-Jun/2024' },
       { label: 'Receita Prevista', value: 'R$ 5.9 mi', variation: { value: '+3,8%', direction: 'up' } },
       { label: 'Economia vs Cativo', value: 'R$ 1.2 mi', variation: { value: '+12%', direction: 'up' } },
-      { label: 'Variação mensal', value: 'R$ 312 mil', variation: { value: '-1,5%', direction: 'down' } },
+      { label: 'VariaÃ§Ã£o mensal', value: 'R$ 312 mil', variation: { value: '-1,5%', direction: 'down' } },
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Neoenergia Comercializadora' },
       { label: 'Vigência', value: 'Jul/2023 - Jun/2025' },
       { label: 'Modalidade', value: 'Preço Fixo com Ajuste PLD' },
       { label: 'Fonte', value: 'Convencional' },
-      { label: 'Volume Contratado', value: '3.200 MWh/mês' },
-      { label: 'Flex / Limites', value: '±5% (95% - 105%)' },
-      { label: 'Preço Médio', value: 'R$ 274,32 / MWh' },
+      { label: 'Volume Contratado', value: '3.200 MWh/mÃªs' },
+      { label: 'Flex / Limites', value: 'Â±5% (95% - 105%)' },
+      { label: 'PreÃ§o MÃ©dio', value: 'R$ 274,32 / MWh' },
       { label: 'Centro de Custo', value: 'Unidade Industrial SP' },
-      { label: 'Responsável', value: 'Mariana Figueiredo' },
+      { label: 'ResponsÃ¡vel', value: 'Mariana Figueiredo' },
     ],
     historicoDemanda: meses.slice(2).map((mes, index) => ({
       mes,
@@ -185,10 +190,10 @@ export const mockContracts: ContractMock[] = [
     obrigacoes: [
       obrigacoesRow('Fev/2024', [
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -206,16 +211,16 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Divergente',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
       ]),
       obrigacoesRow('Abr/2024', [
         'Conforme',
@@ -225,7 +230,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -240,32 +245,32 @@ export const mockContracts: ContractMock[] = [
         area: 'Consumo',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'amarelo', observacao: 'Aguardando medição da distribuidora' },
-          { nome: 'Análise', status: 'amarelo' },
+          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Aguardando mediÃ§Ã£o da distribuidora' },
+          { nome: 'AnÃ¡lise', status: 'amarelo' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'vermelho', observacao: 'Diferença ICMS em revisão' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'vermelho', observacao: 'DiferenÃ§a ICMS em revisÃ£o' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'Cálculo', status: 'amarelo', observacao: 'Verificando ajustes MCP' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Verificando ajustes MCP' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
     ],
@@ -283,7 +288,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-12',
         valor: 905120.75,
-        status: 'Em análise',
+        status: 'Em anÃ¡lise',
       },
       {
         id: 'US-11-2024-06',
@@ -300,7 +305,7 @@ export const mockContracts: ContractMock[] = [
     cliente: 'Brasil Foods LTDA',
     cnpj: '98.765.432/0001-10',
     segmento: 'Alimentos',
-    contato: 'Renato Magalhães',
+    contato: 'Renato MagalhÃ£es',
     status: 'Ativo',
     fonte: 'Incentivada',
     modalidade: 'Desconto TUSD Verde',
@@ -318,7 +323,7 @@ export const mockContracts: ContractMock[] = [
     resumoConformidades: {
       Consumo: 'Conforme',
       NF: 'Conforme',
-      Fatura: 'Em análise',
+      Fatura: 'Em anÃ¡lise',
       Encargos: 'Conforme',
       Conformidade: 'Conforme',
     },
@@ -326,18 +331,18 @@ export const mockContracts: ContractMock[] = [
       { label: 'Consumo acumulado', value: '14.760 MWh', helper: 'Jan-Mai/2024' },
       { label: 'Receita Prevista', value: 'R$ 4.4 mi', variation: { value: '+1,2%', direction: 'up' } },
       { label: 'Economia vs Cativo', value: 'R$ 980 mil', variation: { value: '+6,3%', direction: 'up' } },
-      { label: 'Variação mensal', value: 'R$ 214 mil', variation: { value: '+0,4%', direction: 'neutral' } },
+      { label: 'VariaÃ§Ã£o mensal', value: 'R$ 214 mil', variation: { value: '+0,4%', direction: 'neutral' } },
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Raízen Energia' },
       { label: 'Vigência', value: 'Jan/2022 - Dez/2024' },
       { label: 'Modalidade', value: 'TUSD Verde' },
       { label: 'Fonte', value: 'Incentivada' },
-      { label: 'Volume Contratado', value: '2.450 MWh/mês' },
-      { label: 'Flex / Limites', value: '±8% (92% - 110%)' },
-      { label: 'Preço Médio', value: 'R$ 219,50 / MWh' },
+      { label: 'Volume Contratado', value: '2.450 MWh/mÃªs' },
+      { label: 'Flex / Limites', value: 'Â±8% (92% - 110%)' },
+      { label: 'PreÃ§o MÃ©dio', value: 'R$ 219,50 / MWh' },
       { label: 'Centro de Custo', value: 'Planta RS' },
-      { label: 'Responsável', value: 'Renato Magalhães' },
+      { label: 'ResponsÃ¡vel', value: 'Renato MagalhÃ£es' },
     ],
     historicoDemanda: meses.slice(1, 6).map((mes, index) => ({
       mes,
@@ -353,16 +358,16 @@ export const mockContracts: ContractMock[] = [
       obrigacoesRow('Jan/2024', [
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
-        'Em análise',
-        'Conforme',
-        'Conforme',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Conforme',
+        'Conforme',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -374,7 +379,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -385,21 +390,21 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
       ]),
       obrigacoesRow('Mar/2024', [
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
-        'Em análise',
-        'Em análise',
-        'Conforme',
-        'Conforme',
+        'Em anÃ¡lise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
+        'Conforme',
+        'Conforme',
+        'Em anÃ¡lise',
       ]),
     ],
     analises: [
@@ -407,32 +412,32 @@ export const mockContracts: ContractMock[] = [
         area: 'Consumo',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'Cálculo', status: 'amarelo', observacao: 'Recalculando demanda contratada' },
-          { nome: 'Análise', status: 'amarelo' },
+          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Recalculando demanda contratada' },
+          { nome: 'AnÃ¡lise', status: 'amarelo' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
     ],
@@ -456,7 +461,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-08',
         valor: 671204.11,
-        status: 'Em análise',
+        status: 'Em anÃ¡lise',
       },
     ],
   },
@@ -469,7 +474,7 @@ export const mockContracts: ContractMock[] = [
     contato: 'Larissa Campos',
     status: 'Ativo',
     fonte: 'Convencional',
-    modalidade: 'Preço Fixo',
+    modalidade: 'PreÃ§o Fixo',
     inicioVigencia: '2024-01-01',
     fimVigencia: '2026-12-31',
     limiteSuperior: '108%',
@@ -482,28 +487,28 @@ export const mockContracts: ContractMock[] = [
     billingEmail: 'faturamento@minasgusa.com.br',
     periodos: meses.slice(2),
     resumoConformidades: {
-      Consumo: 'Em análise',
+      Consumo: 'Em anÃ¡lise',
       NF: 'Conforme',
       Fatura: 'Conforme',
-      Encargos: 'Em análise',
-      Conformidade: 'Em análise',
+      Encargos: 'Em anÃ¡lise',
+      Conformidade: 'Em anÃ¡lise',
     },
     kpis: [
       { label: 'Consumo acumulado', value: '9.870 MWh', helper: 'Jan-Jun/2024' },
       { label: 'Receita Prevista', value: 'R$ 3.1 mi', variation: { value: '+2,1%', direction: 'up' } },
       { label: 'Economia vs Cativo', value: 'R$ 640 mil', variation: { value: '+4,4%', direction: 'up' } },
-      { label: 'Variação mensal', value: 'R$ 198 mil', variation: { value: '+0,8%', direction: 'up' } },
+      { label: 'VariaÃ§Ã£o mensal', value: 'R$ 198 mil', variation: { value: '+0,8%', direction: 'up' } },
     ],
     dadosContrato: [
       { label: 'Fornecedor', value: 'Brookfield Energia' },
       { label: 'Vigência', value: 'Jan/2024 - Dez/2026' },
       { label: 'Modalidade', value: 'Preço Fixo' },
       { label: 'Fonte', value: 'Convencional' },
-      { label: 'Volume Contratado', value: '1.650 MWh/mês' },
-      { label: 'Flex / Limites', value: '±7% (93% - 108%)' },
-      { label: 'Preço Médio', value: 'R$ 252,90 / MWh' },
+      { label: 'Volume Contratado', value: '1.650 MWh/mÃªs' },
+      { label: 'Flex / Limites', value: 'Â±7% (93% - 108%)' },
+      { label: 'PreÃ§o MÃ©dio', value: 'R$ 252,90 / MWh' },
       { label: 'Centro de Custo', value: 'Planta MG' },
-      { label: 'Responsável', value: 'Larissa Campos' },
+      { label: 'ResponsÃ¡vel', value: 'Larissa Campos' },
     ],
     historicoDemanda: meses.slice(2).map((mes, index) => ({
       mes,
@@ -517,38 +522,38 @@ export const mockContracts: ContractMock[] = [
     })),
     obrigacoes: [
       obrigacoesRow('Fev/2024', [
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
-        'Em análise',
-        'Em análise',
-        'Em análise',
+        'Em anÃ¡lise',
+        'Em anÃ¡lise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
       ]),
       obrigacoesRow('Mar/2024', [
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
-        'Em análise',
-        'Em análise',
-        'Em análise',
-        'Conforme',
-        'Conforme',
-        'Conforme',
-        'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
+        'Em anÃ¡lise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Conforme',
+        'Em anÃ¡lise',
+        'Conforme',
+        'Conforme',
+        'Conforme',
+        'Em anÃ¡lise',
       ]),
       obrigacoesRow('Abr/2024', [
         'Conforme',
@@ -558,7 +563,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em análise',
+        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -572,33 +577,33 @@ export const mockContracts: ContractMock[] = [
       {
         area: 'Consumo',
         etapas: [
-          { nome: 'Dados', status: 'amarelo', observacao: 'Medição parcial recebida' },
-          { nome: 'Cálculo', status: 'amarelo' },
-          { nome: 'Análise', status: 'amarelo' },
+          { nome: 'Dados', status: 'amarelo', observacao: 'MediÃ§Ã£o parcial recebida' },
+          { nome: 'CÃ¡lculo', status: 'amarelo' },
+          { nome: 'AnÃ¡lise', status: 'amarelo' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'Cálculo', status: 'verde' },
-          { nome: 'Análise', status: 'verde' },
+          { nome: 'CÃ¡lculo', status: 'verde' },
+          { nome: 'AnÃ¡lise', status: 'verde' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'Cálculo', status: 'amarelo', observacao: 'Ajuste GFOM' },
-          { nome: 'Análise', status: 'vermelho', observacao: 'Pendências MCP' },
+          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Ajuste GFOM' },
+          { nome: 'AnÃ¡lise', status: 'vermelho', observacao: 'PendÃªncias MCP' },
         ],
       },
     ],
@@ -622,7 +627,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-15',
         valor: 501432.44,
-        status: 'Em análise',
+        status: 'Em anÃ¡lise',
       },
     ],
   },
@@ -636,3 +641,4 @@ export function formatMesLabel(periodo: string) {
     year: 'numeric',
   });
 }
+

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Percent, Search, Zap, Leaf } from 'lucide-react';
+import { Search, Zap, Check, AlertTriangle, Circle, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
 import UploadCsvModal from '../../components/balancos/UploadCsvModal';
 import { getList } from '../../services/energyBalanceApi';
 import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
@@ -12,6 +12,68 @@ const removeDiacritics = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 type UploadResult = { balanceId?: string; shouldRefresh?: boolean };
+
+type SentOkBadgeProps = {
+  sentOk?: boolean | null;
+};
+
+function SentOkBadge({ sentOk }: SentOkBadgeProps) {
+  const baseClassName =
+    'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold';
+
+  if (sentOk === true) {
+    return (
+      <span className={`${baseClassName} border-green-200 bg-green-100 text-green-700`}>
+        <Check size={14} />
+        Email liberado
+      </span>
+    );
+  }
+
+  if (sentOk === false) {
+    return (
+      <span className={`${baseClassName} border-amber-200 bg-amber-100 text-amber-700`}>
+        <AlertTriangle size={14} />
+        Open para liberar
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${baseClassName} border-gray-200 bg-gray-100 text-gray-600`}>
+      <Circle size={14} />
+      Sem status
+    </span>
+  );
+}
+
+type ProinfaBadgeProps = {
+  proinfa?: string | number | null;
+};
+
+function ProinfaBadge({ proinfa }: ProinfaBadgeProps) {
+  const baseClassName =
+    'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold';
+
+  // Verificar se PROINFA está preenchido (tem valor maior que 0)
+  const isFilled = proinfa !== null && proinfa !== undefined && proinfa !== '' && Number(proinfa) > 0;
+
+  if (isFilled) {
+    return (
+      <span className={`${baseClassName} border-green-200 bg-green-100 text-green-700`}>
+        <Check size={14} />
+        PROINFA
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${baseClassName} border-red-200 bg-red-100 text-red-700`}>
+      <AlertTriangle size={14} />
+      PROINFA
+    </span>
+  );
+}
 
 export default function EnergyBalanceListPage() {
   const navigate = useNavigate();
@@ -26,6 +88,7 @@ export default function EnergyBalanceListPage() {
   const previousSearchRef = React.useRef('');
   const controllerRef = React.useRef<AbortController | null>(null);
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<string>('');
 
   const fetchBalances = React.useCallback(async () => {
     controllerRef.current?.abort();
@@ -126,6 +189,36 @@ export default function EnergyBalanceListPage() {
   }, [items, normalizedQueryText, numericQuery]);
 
   const hasData = filteredItems.length > 0;
+  const totalFiltered = filteredItems.length;
+
+  const groupedItems = React.useMemo(() => {
+    if (!hasData) {
+      return [];
+    }
+    const order: string[] = [];
+    const map = new Map<string, EnergyBalanceListItem[]>();
+    filteredItems.forEach((item) => {
+      const label = item.referenceBaseLabel || 'Sem referência';
+      if (!map.has(label)) {
+        map.set(label, []);
+        order.push(label);
+      }
+      map.get(label)!.push(item);
+    });
+    return order.map((label, index) => ({
+      id: `${label}-${index}`,
+      label,
+      items: map.get(label) ?? [],
+    }));
+  }, [filteredItems, hasData]);
+
+  // Definir a primeira aba como ativa quando os dados carregarem
+  React.useEffect(() => {
+    if (groupedItems.length > 0 && !activeTab) {
+      setActiveTab(groupedItems[0].label);
+    }
+  }, [groupedItems, activeTab]);
+
   const showLoadingState = loading && itemsRef.current.length === 0;
 
   return (
@@ -172,25 +265,41 @@ export default function EnergyBalanceListPage() {
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsUploadOpen(true)}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
-            >
-              Enviar planilha
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void fetchBalances()}
+                disabled={isRefreshing || loading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 shadow-sm transition hover:border-yn-orange hover:bg-gray-50 hover:text-yn-orange disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Atualizar dados"
+              >
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsUploadOpen(true)}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+              >
+                Enviar planilha
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <section aria-labelledby="lista-balancos" className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 id="lista-balancos" className="text-lg font-bold text-gray-900 dark:text-white">
-            Lista de balanços
-          </h2>
-          {isRefreshing && (
-            <span className="text-xs font-semibold uppercase tracking-wide text-yn-orange">Atualizando...</span>
-          )}
+          <div className="flex items-center gap-3">
+            <h2 id="lista-balancos" className="text-lg font-bold text-gray-900 dark:text-white">
+              Lista de balanços
+            </h2>
+            {hasData && (
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                {totalFiltered === 1 ? '1 balanço encontrado' : `${totalFiltered} balanços encontrados`}
+              </span>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -218,50 +327,78 @@ export default function EnergyBalanceListPage() {
             Nenhum balanço encontrado.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-            <ul className="divide-y divide-gray-100">
-              {filteredItems.map((item) => {
-                const saldoClassName = item.saldoValor == null
-                  ? 'bg-gray-100 text-gray-700 border border-gray-200'
-                  : item.saldoValor >= 0
-                    ? 'bg-green-100 text-green-700 border border-green-200'
-                    : 'bg-red-100 text-red-700 border border-red-200';
+          <div className="space-y-6">
+            {/* Abas dos meses */}
+            <div className="flex flex-wrap gap-2 border-b border-gray-200">
+              {groupedItems.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => setActiveTab(group.label)}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition ${
+                    activeTab === group.label
+                      ? 'bg-yn-orange text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Calendar className="h-4 w-4" />
+                  <span>{group.label}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs ${
+                    activeTab === group.label
+                      ? 'bg-white/20 text-white'
+                      : 'bg-yn-orange text-white'
+                  }`}>
+                    {group.items.length}
+                  </span>
+                  {activeTab === group.label && <ChevronRight className="h-4 w-4" />}
+                </button>
+              ))}
+            </div>
 
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/balancos/${item.id}`)}
-                      className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-yn-orange/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange/40 sm:flex-row sm:items-center sm:justify-between"
-                      aria-label={`Abrir balanço energético de ${item.cliente}`}
-                    >
-                      <div className="flex flex-col gap-1">
-                        <span className="text-base font-bold text-gray-900">{item.cliente}</span>
-                        <span className="text-xs font-bold text-gray-500">CNPJ {item.cnpj}</span>
-                        <span className="text-xs font-bold text-gray-500">Medidor {item.meterCode}</span>
-                      </div>
-                      <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                          <Percent size={14} />
-                          {item.impostoPercent}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                          <Zap size={14} />
-                          {item.consumoKWh}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                          <Leaf size={14} />
-                          {item.geracaoKWh}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${saldoClassName}`}>
-                          Saldo {item.saldoKWh}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            {/* Conteúdo da aba ativa */}
+            {groupedItems.map((group) => {
+              if (activeTab !== group.label) return null;
+              
+              return (
+                <div key={group.id} className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+                  {/* Cabeçalho do mês ativo */}
+                  <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4">
+                    <Calendar className="h-5 w-5 text-yn-orange" />
+                    <h3 className="text-lg font-bold text-gray-900">{group.label}</h3>
+                    <span className="rounded-full bg-yn-orange px-3 py-1 text-xs font-bold text-white">
+                      {group.items.length} {group.items.length === 1 ? 'balanço' : 'balanços'}
+                    </span>
+                  </div>
+                  
+                  {/* Lista de balanços do mês */}
+                  <ul className="divide-y divide-gray-100">
+                    {group.items.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/balancos/${item.id}`)}
+                          className="flex w-full flex-col gap-4 p-4 text-left transition hover:bg-yn-orange/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-yn-orange/40 sm:flex-row sm:items-center sm:justify-between"
+                          aria-label={`Abrir balanço energético de ${item.cliente}`}
+                        >
+                          <div className="flex flex-col gap-1">
+                            <span className="text-base font-bold text-gray-900">{item.cliente}</span>
+                            <span className="text-xs font-bold text-gray-500">CNPJ {item.cnpj}</span>
+                            <span className="text-xs font-bold text-gray-500">Medidor {item.meterCode}</span>
+                          </div>
+                          <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                              <Zap size={14} />
+                              {item.consumoKWh}
+                            </span>
+                            <ProinfaBadge proinfa={item.proinfa} />
+                            <SentOkBadge sentOk={item.sentOk} />
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

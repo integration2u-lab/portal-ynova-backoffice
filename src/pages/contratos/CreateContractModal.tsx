@@ -4,19 +4,13 @@ import type {
   ContractDetails as ContractMock,
   ContractInvoiceStatus,
   StatusResumo,
-  ContractVolumeByYear,
 } from '../../types/contracts';
 import { formatMesLabel, obrigacaoColunas } from '../../types/contracts';
 import PricePeriodsModal, { PricePeriods, summarizePricePeriods } from './PricePeriodsModal';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 import { monthsBetween } from '../../utils/dateRange';
-import { SUPPLIERS, SUPPLIER_NAMES, getSupplierEmails } from '../../utils/suppliers';
 
-// Status options for contract creation
-const contractStatusOptions = [
-  { value: 'Ativo', label: 'Contrato Vigente' },
-  { value: 'Inativo', label: 'Contrato encerrado' },
-] as const;
+const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 
 const energySourceOptions = ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%'] as const;
 type EnergySourceOption = (typeof energySourceOptions)[number];
@@ -29,24 +23,21 @@ const volumeUnitOptions = [
 type VolumeUnit = (typeof volumeUnitOptions)[number]['value'];
 
 type FormErrors = Partial<
-  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'billingEmail', string>
+  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'email', string>
 >;
 
 type FormState = {
   client: string;
-  razaoSocial: string; // Razão social do cliente
   cnpj: string;
   segment: string;
   contact: string;
-  balanceEmail: string; // E-mail do balanço
-  billingEmail: string; // E-mail de faturamento
+  email: string; // Novo campo para emails múltiplos
   volume: string;
   volumeUnit: VolumeUnit;
   energySource: EnergySourceOption;
   modality: string;
   supplier: string;
-  supplierCustom: string; // Para cadastrar novo fornecedor
-  isCustomSupplier: boolean;
+  proinfa: string;
   startDate: string;
   endDate: string;
   upperLimit: string;
@@ -59,8 +50,7 @@ type FormState = {
   flatYears: number;
   // Price periods (per-month/periods) — optional detailed pricing
   pricePeriods: PricePeriods;
-  // Volume contratado desmembrado por ano
-  volumeByYear: ContractVolumeByYear[];
+  resumoConformidades: ContractMock['resumoConformidades'];
   status: ContractMock['status'];
 };
 
@@ -152,19 +142,16 @@ const buildAnalises = (): ContractMock['analises'] => [
 
 const buildInitialFormState = (): FormState => ({
   client: '',
-  razaoSocial: '',
   cnpj: '',
   segment: '',
   contact: '',
-  balanceEmail: '',
-  billingEmail: '',
+  email: '', // Novo campo para emails múltiplos
   volume: '',
   volumeUnit: 'MWH',
   energySource: 'Incentivada 0%',
   modality: '',
   supplier: '',
-  supplierCustom: '',
-  isCustomSupplier: false,
+  proinfa: '',
   startDate: '',
   endDate: '',
   upperLimit: '200',
@@ -174,7 +161,13 @@ const buildInitialFormState = (): FormState => ({
   flatPrice: '',
   flatYears: 1,
   pricePeriods: { periods: [] },
-  volumeByYear: [],
+  resumoConformidades: {
+    Consumo: 'Em análise',
+    NF: 'Em análise',
+    Fatura: 'Em análise',
+    Encargos: 'Em análise',
+    Conformidade: 'Em análise',
+  },
   status: 'Ativo',
 });
 
@@ -204,6 +197,11 @@ const deriveReferenceMonths = (formState: FormState): string[] => {
 
 const ensureId = (value?: string) => (value && value.trim().length ? value.trim() : `CT-${Date.now()}`);
 
+const parseProinfa = (value: string): number | null => {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace('.', '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 type CreateContractModalProps = {
   open: boolean;
@@ -232,7 +230,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   const priceSummary = React.useMemo(() => summarizePricePeriods(formState.pricePeriods), [formState.pricePeriods]);
 
   const handleInputChange = (
-    field: keyof Pick<FormState, 'client' | 'razaoSocial' | 'segment' | 'contact' | 'balanceEmail' | 'billingEmail' | 'volume' | 'modality' | 'supplier' | 'supplierCustom' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
+    field: keyof Pick<FormState, 'client' | 'segment' | 'contact' | 'email' | 'volume' | 'modality' | 'supplier' | 'proinfa' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const { value } = event.target;
@@ -244,41 +242,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
         return next;
       });
     };
-  
-  const handleSupplierChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value;
-    if (value === '__CUSTOM__') {
-      setFormState((prev) => ({ ...prev, isCustomSupplier: true, supplier: '', supplierCustom: '' }));
-    } else {
-      const emails = getSupplierEmails(value);
-      const emailsStr = emails.join(', ');
-      setFormState((prev) => ({
-        ...prev,
-        isCustomSupplier: false,
-        supplier: value,
-        supplierCustom: '',
-        // Preencher emails automaticamente se não estiverem preenchidos
-        balanceEmail: prev.balanceEmail || emailsStr,
-        billingEmail: prev.billingEmail || emailsStr,
-      }));
-    }
-  };
-
-  const handleCustomSupplierSubmit = () => {
-    if (!formState.supplierCustom.trim() || !formState.billingEmail.trim()) {
-      setErrors((prev) => ({
-        ...prev,
-        billingEmail: 'E-mail é obrigatório ao cadastrar novo fornecedor',
-      }));
-      return;
-    }
-    // Adicionar novo fornecedor à lista (em produção, isso faria uma chamada ao backend)
-    setFormState((prev) => ({
-      ...prev,
-      supplier: prev.supplierCustom,
-      isCustomSupplier: false,
-    }));
-  };
 
   const handleEnergySourceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setFormState((prev) => ({ ...prev, energySource: event.target.value as EnergySourceOption }));
@@ -299,13 +262,17 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     });
   };
 
-  const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value as ContractMock['status'];
-    setFormState((prev) => ({
-      ...prev,
-      status: value,
-    }));
-  };
+  const handleResumoChange = (chave: keyof ContractMock['resumoConformidades']) =>
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value as StatusResumo;
+      setFormState((prev) => ({
+        ...prev,
+        resumoConformidades: {
+          ...prev.resumoConformidades,
+          [chave]: value,
+        },
+      }));
+    };
 
   // Flat price handlers
   const handleFlatPriceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -362,11 +329,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       }
     }
 
-    // Validar e-mail de faturamento se fornecedor customizado
-    if (formState.isCustomSupplier && !formState.billingEmail.trim()) {
-      nextErrors.billingEmail = 'E-mail é obrigatório ao cadastrar novo fornecedor';
-    }
-
     const upper = Number(formState.upperLimit);
     const lower = Number(formState.lowerLimit);
     const flex = Number(formState.flexibility);
@@ -421,19 +383,27 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       formState.volumeUnit === 'MW_MEDIO' ? volumeValue * HOURS_IN_MONTH : volumeValue;
     const volumeBase = Number.isFinite(normalizedVolume) ? normalizedVolume : 0;
 
-    const supplierValue = formState.isCustomSupplier ? formState.supplierCustom.trim() : formState.supplier.trim();
+    const supplierValue = formState.supplier.trim();
+    const proinfaNumber = parseProinfa(formState.proinfa);
+    const proinfaDisplay =
+      proinfaNumber === null
+        ? 'Não informado'
+        : proinfaNumber.toLocaleString('pt-BR', {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3,
+          });
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
 
     const dadosContrato = [
       { label: 'Cliente', value: formState.client.trim() || 'Não informado' },
-      { label: 'Razão Social', value: formState.razaoSocial.trim() || formState.client.trim() || 'Não informado' },
       { label: 'CNPJ', value: formState.cnpj.trim() || 'Não informado' },
       { label: 'Segmento', value: formState.segment.trim() || 'Não informado' },
       { label: 'Modalidade', value: formState.modality.trim() || 'Não informado' },
       { label: 'Fonte', value: formState.energySource },
       { label: 'Fornecedor', value: supplierValue || 'Não informado' },
+      { label: 'Proinfa', value: proinfaDisplay },
       {
         label: 'Vigência',
         value:
@@ -441,6 +411,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             ? `${formatMesLabel(startMonth)} - ${formatMesLabel(endMonth)}`
             : 'Não informado',
       },
+  // ciclo de faturamento removed
       { label: 'Medidor', value: formState.medidor.trim() || 'Não informado' },
       {
         label: 'Flex / Limites',
@@ -454,9 +425,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             }`
           : 'Não informado',
       },
-      { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
-      { label: 'E-mail Balanço', value: formState.balanceEmail.trim() || 'Não informado' },
-      { label: 'E-mail Faturamento', value: formState.billingEmail.trim() || 'Não informado' },
+  { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
       { label: 'Responsável', value: formState.contact.trim() || 'Não informado' },
     ];
 
@@ -475,12 +444,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       id,
       codigo: id,
       cliente: formState.client.trim(),
-      razaoSocial: formState.razaoSocial.trim() || undefined, // Will be sent as social_reason to API - empty string becomes undefined
       cnpj: formState.cnpj.trim(),
       segmento: formState.segment.trim(),
       contato: formState.contact.trim(),
       status: formState.status,
-      fonte: formState.energySource,
+      fonte: formState.energySource.includes('0%') ? 'Convencional' : 'Incentivada',
       modalidade: formState.modality.trim(),
       inicioVigencia: formState.startDate,
       fimVigencia: formState.endDate,
@@ -489,18 +457,10 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       flex: `${formState.flexibility || '0'}%`,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
-      cicloFaturamento: '',
-      balanceEmail: formState.balanceEmail.trim() || undefined,
-      billingEmail: formState.billingEmail.trim() || undefined,
-      volumeByYear: formState.volumeByYear.length > 0 ? formState.volumeByYear : undefined,
+      proinfa: proinfaNumber,
+  cicloFaturamento: '',
       periodos: referenceMonths,
-      resumoConformidades: {
-        Consumo: 'Em análise',
-        NF: 'Em análise',
-        Fatura: 'Em análise',
-        Encargos: 'Em análise',
-        Conformidade: 'Em análise',
-      },
+      resumoConformidades: { ...formState.resumoConformidades },
       kpis: [
         { label: 'Consumo acumulado', value: `${volumeFormatter.format(0)} MWh`, helper: 'Contrato recém-criado' },
         { label: 'Receita Prevista', value: formatCurrencyBRL(0) },
@@ -516,7 +476,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       })),
       analises: buildAnalises(),
       faturas: invoices,
-    };
+      // Adiciona pricePeriods e flatPrice para serem enviados ao backend
+      pricePeriods: formState.pricePeriods,
+      flatPrice: parseCurrencyInput(formState.flatPrice) ?? null,
+      flatYears: formState.flatYears,
+    } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number };
 
     setSubmitError(null);
     setIsSubmitting(true);
@@ -593,18 +557,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                     placeholder="Nome do cliente"
                   />
                   {errors.client && <span className="text-xs font-medium text-red-500">{errors.client}</span>}
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Razão Social
-                  <input
-                    type="text"
-                    value={formState.razaoSocial}
-                    onChange={handleInputChange('razaoSocial')}
-                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="Razão social do cliente"
-                  />
-                  <span className="text-xs text-slate-500">Diferente do nome interno</span>
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -701,37 +653,13 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Fornecedor
-                  <select
-                    value={formState.isCustomSupplier ? '__CUSTOM__' : formState.supplier}
-                    onChange={handleSupplierChange}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                  >
-                    <option value="">Selecione um fornecedor</option>
-                    {SUPPLIER_NAMES.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                    <option value="__CUSTOM__">Cadastrar novo fornecedor</option>
-                  </select>
-                  {formState.isCustomSupplier && (
-                    <div className="mt-2 space-y-2">
-                      <input
-                        type="text"
-                        value={formState.supplierCustom}
-                        onChange={handleInputChange('supplierCustom')}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                        placeholder="Nome do novo fornecedor"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCustomSupplierSubmit}
-                        className="w-full rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110"
-                      >
-                        Confirmar novo fornecedor
-                      </button>
-                    </div>
-                  )}
+                  <input
+                    type="text"
+                    value={formState.supplier}
+                    onChange={handleInputChange('supplier')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                    placeholder="Nome do fornecedor"
+                  />
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -746,30 +674,28 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  E-mail do Balanço
+                  Proinfa (MWh)
                   <input
-                    type="email"
-                    value={formState.balanceEmail}
-                    onChange={handleInputChange('balanceEmail')}
+                    type="text"
+                    inputMode="decimal"
+                    value={formState.proinfa}
+                    onChange={handleInputChange('proinfa')}
                     className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="balanco@exemplo.com"
+                    placeholder="0,000"
                   />
-                  <span className="text-xs text-slate-500">Usado para envio de relatórios</span>
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  E-mail de Faturamento
+                  Email
                   <input
                     type="email"
-                    value={formState.billingEmail}
-                    onChange={handleInputChange('billingEmail')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.billingEmail ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="faturamento@exemplo.com"
+                    value={formState.email}
+                    onChange={handleInputChange('email')}
+                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                    placeholder="email1@exemplo.com, email2@exemplo.com"
+                    multiple
                   />
-                  <span className="text-xs text-slate-500">Obrigatório para clientes de atacado</span>
-                  {errors.billingEmail && <span className="text-xs font-medium text-red-500">{errors.billingEmail}</span>}
+                  <span className="text-xs text-slate-500">Separe múltiplos emails com vírgula</span>
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -893,30 +819,34 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
               </div>
             </section>
 
-            <section aria-labelledby="status-contrato" className="space-y-4">
+            <section aria-labelledby="resumo-conformidades" className="space-y-4">
               <div>
-                <h3 id="status-contrato" className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  Status do Contrato
+                <h3 id="resumo-conformidades" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Resumo de conformidades
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Selecione o status do contrato.
+                  Ajuste o status inicial dos principais indicadores de conformidade do contrato.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Status
-                  <select
-                    value={formState.status}
-                    onChange={handleStatusChange}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                  >
-                    {contractStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {(Object.keys(formState.resumoConformidades) as Array<keyof ContractMock['resumoConformidades']>).map(
+                  (chave) => (
+                    <label key={chave} className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                      {chave}
+                      <select
+                        value={formState.resumoConformidades[chave]}
+                        onChange={handleResumoChange(chave)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {resumoStatusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                )}
               </div>
             </section>
 
