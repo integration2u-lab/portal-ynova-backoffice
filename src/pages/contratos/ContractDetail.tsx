@@ -64,7 +64,7 @@ type EditableFieldCardProps = {
   onCancel: () => void;
   onInputChange: (value: string) => void;
   inputValue: string;
-  inputRef?: React.RefObject<HTMLInputElement | HTMLSelectElement>;
+  inputRef?: React.RefObject<HTMLInputElement | HTMLSelectElement | null>;
   inputType?: 'text' | 'number' | 'select';
   selectOptions?: Array<{ value: string; label: string }>;
   onKeyDown?: (e: React.KeyboardEvent) => void;
@@ -249,11 +249,16 @@ const parsePricePeriods = (pricePeriodsJson: string | null | undefined): PricePe
       });
 
       if (currentPeriod) {
+        const snapshot = currentPeriod as {
+          start: string;
+          end: string;
+          months: Array<{ ym: string; price: number }>;
+        };
         periods.push({
           id: `period-${periods.length + 1}`,
-          start: currentPeriod.start,
-          end: currentPeriod.end,
-          months: currentPeriod.months,
+          start: snapshot.start,
+          end: snapshot.end,
+          months: snapshot.months,
         });
       }
 
@@ -362,6 +367,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
 
   const { flatPrice, flatYears } = extractPeriodPrice();
   const priceSummary = pricePeriods ? summarizePricePeriods(pricePeriods) : null;
+  const periods: PricePeriods['periods'] =
+    pricePeriods && Array.isArray(pricePeriods.periods)
+      ? pricePeriods.periods
+      : ([] as PricePeriods['periods']);
   
   console.log('[ContractDetail] Render - pricePeriods:', pricePeriods);
   console.log('[ContractDetail] Render - flatPrice:', flatPrice);
@@ -397,7 +406,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
         }
         
         // Mapeia campos específicos para atualizar também no contrato
-        const normalizedLabel = fieldLabel.toLowerCase();
+        const normalizedLabel = fieldLabel
+          .normalize('NFD')
+          .replace(/\p{Diacritic}/gu, '')
+          .toLowerCase();
         if (normalizedLabel.includes('volume') && normalizedLabel.includes('contratado')) {
           const volumeNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           if (Number.isFinite(volumeNum)) {
@@ -407,6 +419,13 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
           const priceNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           if (Number.isFinite(priceNum)) {
             updated.precoMedio = priceNum;
+            const existingPeriodPrice = (updated as { periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null } }).periodPrice;
+            (updated as { periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null } }).periodPrice = {
+              price_periods: existingPeriodPrice?.price_periods ?? null,
+              flat_price_mwh: priceNum,
+              flat_years: existingPeriodPrice?.flat_years ?? null,
+            };
+            (updated as { flatPrice?: number | null }).flatPrice = priceNum;
           }
         } else if (normalizedLabel.includes('fornecedor')) {
           updated.fornecedor = fieldInputValue.trim();
@@ -415,6 +434,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
         } else if (normalizedLabel.includes('proinfa')) {
           const proinfaNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           (updated as { proinfa?: number | null }).proinfa = Number.isFinite(proinfaNum) ? proinfaNum : null;
+        } else if (normalizedLabel.includes('balanco')) {
+          (updated as { balanceEmail?: string }).balanceEmail = fieldInputValue.trim();
+        } else if (normalizedLabel.includes('faturamento')) {
+          (updated as { billingEmail?: string }).billingEmail = fieldInputValue.trim();
         } else if (normalizedLabel.includes('email')) {
           (updated as { balanceEmail?: string }).balanceEmail = fieldInputValue.trim();
         } else if (normalizedLabel.includes('responsável')) {
@@ -424,7 +447,7 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
         } else if (normalizedLabel.includes('modalidade')) {
           updated.modalidade = fieldInputValue.trim();
         } else if (normalizedLabel.includes('fonte')) {
-          updated.fonte = fieldInputValue as ContractMock['fonte'];
+          updated.fonte = fieldInputValue.trim() as ContractMock['fonte'];
         }
         
         return updated;
@@ -460,10 +483,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   ];
 
   const fonteOptions = [
-    { value: 'Convencional', label: 'Convencional' },
-    { value: 'Incentivada', label: 'Incentivada' },
-    { value: 'Solar', label: 'Solar' },
-    { value: 'Eólica', label: 'Eólica' },
+    { value: 'Incentivada 0%', label: 'Incentivada 0%' },
+    { value: 'Incentivada 50%', label: 'Incentivada 50%' },
+    { value: 'Incentivada 100%', label: 'Incentivada 100%' },
   ];
 
   return (
@@ -565,9 +587,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
           )}
         </div>
         <div className="p-4">
-          {pricePeriods && pricePeriods.periods.length > 0 ? (
+          {periods.length > 0 ? (
             <div className="space-y-4">
-              {pricePeriods.periods.map((period, index) => {
+              {(periods as Array<PricePeriods['periods'][number]>).map((period, index) => {
                 const monthsWithPrice = period.months.filter((m) => Number.isFinite(m.price));
                 const periodAverage = monthsWithPrice.length > 0
                   ? monthsWithPrice.reduce((sum, m) => sum + m.price, 0) / monthsWithPrice.length

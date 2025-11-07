@@ -1,5 +1,5 @@
 import type { ContractPricePeriods } from '../types/pricePeriods';
-﻿export type StatusResumo = 'Conforme' | 'Divergente' | 'Em anÃ¡lise';
+﻿export type StatusResumo = 'Conforme' | 'Divergente' | 'Em análise';
 export type AnaliseStatus = 'verde' | 'amarelo' | 'vermelho';
 
 export type KPIItem = {
@@ -37,13 +37,13 @@ export type ObrigacaoRow = {
 export type AnaliseArea = {
   area: string;
   etapas: Array<{
-    nome: 'Dados' | 'CÃ¡lculo' | 'AnÃ¡lise';
+    nome: 'Dados' | 'Cálculo' | 'Análise';
     status: AnaliseStatus;
     observacao?: string;
   }>;
 };
 
-export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em anÃ¡lise' | 'Vencida';
+export type ContractInvoiceStatus = 'Paga' | 'Em aberto' | 'Em análise' | 'Vencida';
 
 export type ContractInvoice = {
   id: string;
@@ -80,12 +80,19 @@ export type ContractMock = {
   flex: string;
   precoMedio: number;
   fornecedor: string;
-  // Removido proinfa - agora está apenas no Balanço Energético
+  proinfa?: number | null;
   cicloFaturamento: string;
   periodos: string[]; // YYYY-MM
   // E-mails atrelados ao contrato
   balanceEmail?: string; // E-mail do balanço (para envio de relatórios)
   billingEmail?: string; // E-mail de faturamento (obrigatório para atacado)
+  periodPrice?: {
+    price_periods: string | null;
+    flat_price_mwh: number | null;
+    flat_years: number | null;
+  };
+  flatPrice?: number | null;
+  flatYears?: number | null;
   // Volume contratado desmembrado por ano
   volumeByYear?: ContractVolumeByYear[];
   resumoConformidades: Record<'Consumo' | 'NF' | 'Fatura' | 'Encargos' | 'Conformidade', StatusResumo>;
@@ -109,12 +116,12 @@ const baseObrigacoesCols = [
   'Fatura',
   'Encargos',
   'Conformidade',
-  'DivergÃªncias',
-  'ProjeÃ§Ãµes',
+  'Divergências',
+  'Projeções',
   'Riscos',
-  'LiquidaÃ§Ã£o',
+  'Liquidação',
   'Pagamentos',
-  'PreÃ§os',
+  'Preços',
   'Flex',
   'Limites',
   'Documentos',
@@ -155,10 +162,10 @@ export const mockContracts: ContractMock[] = [
     periodos: meses.slice(1),
     resumoConformidades: {
       Consumo: 'Conforme',
-      NF: 'Em anÃ¡lise',
+      NF: 'Em análise',
       Fatura: 'Conforme',
       Encargos: 'Conforme',
-      Conformidade: 'Em anÃ¡lise',
+      Conformidade: 'Em análise',
     },
     kpis: [
       { label: 'Consumo acumulado', value: '18.420 MWh', helper: 'Jan-Jun/2024' },
@@ -190,10 +197,10 @@ export const mockContracts: ContractMock[] = [
     obrigacoes: [
       obrigacoesRow('Fev/2024', [
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -211,16 +218,16 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Divergente',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
       ]),
       obrigacoesRow('Abr/2024', [
         'Conforme',
@@ -230,7 +237,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -245,32 +252,32 @@ export const mockContracts: ContractMock[] = [
         area: 'Consumo',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Aguardando mediÃ§Ã£o da distribuidora' },
-          { nome: 'AnÃ¡lise', status: 'amarelo' },
+          { nome: 'Cálculo', status: 'amarelo', observacao: 'Aguardando mediÃ§Ã£o da distribuidora' },
+          { nome: 'Análise', status: 'amarelo' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'vermelho', observacao: 'DiferenÃ§a ICMS em revisÃ£o' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'vermelho', observacao: 'DiferenÃ§a ICMS em revisÃ£o' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Verificando ajustes MCP' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'amarelo', observacao: 'Verificando ajustes MCP' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
     ],
@@ -288,7 +295,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-12',
         valor: 905120.75,
-        status: 'Em anÃ¡lise',
+        status: 'Em análise',
       },
       {
         id: 'US-11-2024-06',
@@ -323,7 +330,7 @@ export const mockContracts: ContractMock[] = [
     resumoConformidades: {
       Consumo: 'Conforme',
       NF: 'Conforme',
-      Fatura: 'Em anÃ¡lise',
+      Fatura: 'Em análise',
       Encargos: 'Conforme',
       Conformidade: 'Conforme',
     },
@@ -358,16 +365,16 @@ export const mockContracts: ContractMock[] = [
       obrigacoesRow('Jan/2024', [
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
-        'Em anÃ¡lise',
-        'Conforme',
-        'Conforme',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Conforme',
+        'Conforme',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -379,7 +386,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -390,21 +397,21 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
       ]),
       obrigacoesRow('Mar/2024', [
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
-        'Em anÃ¡lise',
-        'Em anÃ¡lise',
-        'Conforme',
-        'Conforme',
+        'Em análise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
+        'Conforme',
+        'Conforme',
+        'Em análise',
       ]),
     ],
     analises: [
@@ -412,32 +419,32 @@ export const mockContracts: ContractMock[] = [
         area: 'Consumo',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Recalculando demanda contratada' },
-          { nome: 'AnÃ¡lise', status: 'amarelo' },
+          { nome: 'Cálculo', status: 'amarelo', observacao: 'Recalculando demanda contratada' },
+          { nome: 'Análise', status: 'amarelo' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
     ],
@@ -461,7 +468,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-08',
         valor: 671204.11,
-        status: 'Em anÃ¡lise',
+        status: 'Em análise',
       },
     ],
   },
@@ -487,11 +494,11 @@ export const mockContracts: ContractMock[] = [
     billingEmail: 'faturamento@minasgusa.com.br',
     periodos: meses.slice(2),
     resumoConformidades: {
-      Consumo: 'Em anÃ¡lise',
+      Consumo: 'Em análise',
       NF: 'Conforme',
       Fatura: 'Conforme',
-      Encargos: 'Em anÃ¡lise',
-      Conformidade: 'Em anÃ¡lise',
+      Encargos: 'Em análise',
+      Conformidade: 'Em análise',
     },
     kpis: [
       { label: 'Consumo acumulado', value: '9.870 MWh', helper: 'Jan-Jun/2024' },
@@ -522,38 +529,38 @@ export const mockContracts: ContractMock[] = [
     })),
     obrigacoes: [
       obrigacoesRow('Fev/2024', [
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
-        'Em anÃ¡lise',
-        'Em anÃ¡lise',
+        'Em análise',
+        'Em análise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
       ]),
       obrigacoesRow('Mar/2024', [
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
-        'Em anÃ¡lise',
-        'Em anÃ¡lise',
-        'Conforme',
-        'Conforme',
-        'Conforme',
-        'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
+        'Em análise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Conforme',
+        'Em análise',
+        'Conforme',
+        'Conforme',
+        'Conforme',
+        'Em análise',
       ]),
       obrigacoesRow('Abr/2024', [
         'Conforme',
@@ -563,7 +570,7 @@ export const mockContracts: ContractMock[] = [
         'Conforme',
         'Conforme',
         'Conforme',
-        'Em anÃ¡lise',
+        'Em análise',
         'Conforme',
         'Conforme',
         'Conforme',
@@ -578,32 +585,32 @@ export const mockContracts: ContractMock[] = [
         area: 'Consumo',
         etapas: [
           { nome: 'Dados', status: 'amarelo', observacao: 'MediÃ§Ã£o parcial recebida' },
-          { nome: 'CÃ¡lculo', status: 'amarelo' },
-          { nome: 'AnÃ¡lise', status: 'amarelo' },
+          { nome: 'Cálculo', status: 'amarelo' },
+          { nome: 'Análise', status: 'amarelo' },
         ],
       },
       {
         area: 'NF',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
       {
         area: 'Fatura',
         etapas: [
           { nome: 'Dados', status: 'verde' },
-          { nome: 'CÃ¡lculo', status: 'verde' },
-          { nome: 'AnÃ¡lise', status: 'verde' },
+          { nome: 'Cálculo', status: 'verde' },
+          { nome: 'Análise', status: 'verde' },
         ],
       },
       {
         area: 'Encargos',
         etapas: [
           { nome: 'Dados', status: 'amarelo' },
-          { nome: 'CÃ¡lculo', status: 'amarelo', observacao: 'Ajuste GFOM' },
-          { nome: 'AnÃ¡lise', status: 'vermelho', observacao: 'PendÃªncias MCP' },
+          { nome: 'Cálculo', status: 'amarelo', observacao: 'Ajuste GFOM' },
+          { nome: 'Análise', status: 'vermelho', observacao: 'PendÃªncias MCP' },
         ],
       },
     ],
@@ -627,7 +634,7 @@ export const mockContracts: ContractMock[] = [
         competencia: '2024-05',
         vencimento: '2024-06-15',
         valor: 501432.44,
-        status: 'Em anÃ¡lise',
+        status: 'Em análise',
       },
     ],
   },

@@ -109,32 +109,32 @@ const buildAnalises = (): ContractMock['analises'] => [
     area: 'Dados Cadastrais',
     etapas: [
       { nome: 'Dados', status: 'amarelo' },
-      { nome: 'CÃ¡lculo', status: 'amarelo' },
-      { nome: 'AnÃ¡lise', status: 'amarelo' },
+      { nome: 'Cálculo', status: 'amarelo' },
+      { nome: 'Análise', status: 'amarelo' },
     ],
   },
   {
     area: 'Faturamento',
     etapas: [
       { nome: 'Dados', status: 'amarelo' },
-      { nome: 'CÃ¡lculo', status: 'amarelo' },
-      { nome: 'AnÃ¡lise', status: 'amarelo' },
+      { nome: 'Cálculo', status: 'amarelo' },
+      { nome: 'Análise', status: 'amarelo' },
     ],
   },
   {
     area: 'Riscos & Projeções',
     etapas: [
       { nome: 'Dados', status: 'amarelo' },
-      { nome: 'CÃ¡lculo', status: 'amarelo' },
-      { nome: 'AnÃ¡lise', status: 'amarelo' },
+      { nome: 'Cálculo', status: 'amarelo' },
+      { nome: 'Análise', status: 'amarelo' },
     ],
   },
   {
     area: 'Conformidade',
     etapas: [
       { nome: 'Dados', status: 'amarelo' },
-      { nome: 'CÃ¡lculo', status: 'amarelo' },
-      { nome: 'AnÃ¡lise', status: 'amarelo' },
+      { nome: 'Cálculo', status: 'amarelo' },
+      { nome: 'Análise', status: 'amarelo' },
     ],
   },
 ];
@@ -233,11 +233,14 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   const handleSupplierChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const supplierName = event.target.value;
     const supplierEmails = getSupplierEmails(supplierName);
-    const emailsString = supplierEmails.join('; ');
-    setFormState((prev) => ({ 
-      ...prev, 
+    const emailsString = supplierEmails
+      .map((email) => email.trim())
+      .filter(Boolean)
+      .join(', ');
+    setFormState((prev) => ({
+      ...prev,
       supplier: supplierName,
-      emailFaturamento: emailsString
+      emailFaturamento: emailsString,
     }));
   };
 
@@ -376,17 +379,29 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const volumeBase = Number.isFinite(normalizedVolume) ? normalizedVolume : 0;
 
     const supplierValue = formState.supplier.trim();
+    const normalizeEmails = (value: string) => value
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(', ');
+    const legalName = formState.razaoSocial.trim();
+    const balanceEmail = normalizeEmails(formState.emailBalanco);
+    const billingEmail = normalizeEmails(formState.emailFaturamento);
+    const medidorValue = formState.medidor.trim();
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
 
     const dadosContrato = [
       { label: 'Cliente', value: formState.client.trim() || 'Não informado' },
+      { label: 'Razão Social', value: legalName || 'Não informado' },
       { label: 'CNPJ', value: formState.cnpj.trim() || 'Não informado' },
       { label: 'Segmento', value: formState.segment.trim() || 'Não informado' },
       { label: 'Modalidade', value: formState.modality.trim() || 'Não informado' },
-      { label: 'Fonte', value: formState.energySource },
+      { label: 'Fonte de energia', value: formState.energySource },
       { label: 'Fornecedor', value: supplierValue || 'Não informado' },
+      { label: 'E-mail do Balanço', value: balanceEmail || 'Não informado' },
+      { label: 'E-mail de Faturamento', value: billingEmail || 'Não informado' },
       {
         label: 'Vigência',
         value:
@@ -395,7 +410,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
             : 'Não informado',
       },
   // ciclo de faturamento removed
-      { label: 'Medidor', value: formState.medidor.trim() || 'Não informado' },
+      { label: 'Medidor', value: medidorValue || 'Não informado' },
       {
         label: 'Flex / Limites',
         value: `${formState.flexibility || '0'}% (${formState.lowerLimit || '0'}% - ${formState.upperLimit || '0'}%)`,
@@ -413,7 +428,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     ];
 
     const defaultStatus = obrigacaoColunas.slice(1).reduce<Record<string, StatusResumo>>((acc, col) => {
-      acc[col] = 'Em anÃ¡lise';
+      acc[col] = 'Em análise';
       return acc;
     }, {} as Record<string, StatusResumo>);
 
@@ -440,15 +455,18 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       flex: `${formState.flexibility || '0'}%`,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
+      razaoSocial: legalName || undefined,
+      balanceEmail: balanceEmail || undefined,
+      billingEmail: billingEmail || undefined,
       proinfa: null,
   cicloFaturamento: '',
       periodos: referenceMonths,
       resumoConformidades: {
-        Consumo: 'Em anÃ¡lise' as StatusResumo,
-        NF: 'Em anÃ¡lise' as StatusResumo,
-        Fatura: 'Em anÃ¡lise' as StatusResumo,
-        Encargos: 'Em anÃ¡lise' as StatusResumo,
-        Conformidade: 'Em anÃ¡lise' as StatusResumo,
+        Consumo: 'Em análise' as StatusResumo,
+        NF: 'Em análise' as StatusResumo,
+        Fatura: 'Em análise' as StatusResumo,
+        Encargos: 'Em análise' as StatusResumo,
+        Conformidade: 'Em análise' as StatusResumo,
       },
       kpis: [
         { label: 'Consumo acumulado', value: `${volumeFormatter.format(0)} MWh`, helper: 'Contrato recém-criado' },

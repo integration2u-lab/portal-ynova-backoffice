@@ -246,7 +246,13 @@ export async function getContracts(signal?: AbortSignal) {
   return listContracts({ signal });
 }
 
-export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'>;
+export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'> & {
+  periodPrice?: {
+    price_periods: string | null;
+    flat_price_mwh: number | null;
+    flat_years: number | null;
+  };
+};
 
 const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;

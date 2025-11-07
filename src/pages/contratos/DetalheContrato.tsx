@@ -29,10 +29,21 @@ export default function DetalheContratoPage() {
     async (periods: PricePeriods) => {
       if (!contrato || !id) return;
       try {
-        await updateContract(id, (current) => ({
-          ...current,
-          pricePeriods: periods,
-        }));
+        await updateContract(id, (current) => {
+          const serialized = periods.periods.length ? JSON.stringify(periods) : null;
+          const existingPeriodPrice = (current as {
+            periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+          }).periodPrice;
+          return {
+            ...current,
+            pricePeriods: periods,
+            periodPrice: {
+              price_periods: serialized,
+              flat_price_mwh: existingPeriodPrice?.flat_price_mwh ?? (current as { flatPrice?: number | null }).flatPrice ?? current.precoMedio ?? null,
+              flat_years: existingPeriodPrice?.flat_years ?? (current as { flatYears?: number | null }).flatYears ?? null,
+            },
+          };
+        });
       } catch (error) {
         console.error('[DetalheContrato] Falha ao atualizar preços por período:', error);
         throw error;

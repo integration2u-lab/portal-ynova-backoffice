@@ -195,11 +195,22 @@ const normalizeContratoStatus = (value: unknown): ContractMock['status'] => {
 };
 
 const normalizeFonte = (value: unknown): ContractMock['fonte'] => {
-  const text = removeDiacritics(normalizeString(value));
-  if (['incentivada', 'incentivadao', 'incentivada50', 'subsidized'].includes(text)) return 'Incentivada';
-  if (['convencional', 'conventional'].includes(text)) return 'Convencional';
-  if (['renovavel', 'renewable'].includes(text)) return 'Incentivada';
-  return 'Convencional';
+  const raw = normalizeString(value);
+  const text = removeDiacritics(raw);
+  if (text.includes('incentivada 0')) return 'Incentivada 0%';
+  if (text.includes('incentivada 50')) return 'Incentivada 50%';
+  if (text.includes('incentivada 100')) return 'Incentivada 100%';
+  if (text === 'incentivada' || text === 'subsidized') return 'Incentivada 100%';
+  if (text.includes('convencional') || text === 'conventional') return 'Incentivada 0%';
+  if (raw) {
+    const numberMatch = raw.match(/(0|25|40|50|60|75|80|90|100)/);
+    if (numberMatch) {
+      const numeric = Number(numberMatch[0]);
+      if (numeric >= 75) return 'Incentivada 100%';
+      if (numeric >= 40) return 'Incentivada 50%';
+    }
+  }
+  return 'Incentivada 0%';
 };
 
 const normalizeResumo = (value: unknown): ContractMock['resumoConformidades'] => {
@@ -305,7 +316,10 @@ const normalizeKpis = (value: unknown): ContractMock['kpis'] => {
         (item as { value?: unknown; valor?: unknown }).value ?? (item as { valor?: unknown }).valor;
       const valueText = normalizeString(rawValue);
       if (!label || !valueText) return null;
-      const helper = normalizeString((item as { helper?: unknown; descricao?: unknown }).helper ?? (item as { descricao?: unknown }).descricao);
+      const helper = normalizeString(
+        (item as { helper?: unknown; descricao?: unknown }).helper ??
+          (item as { descricao?: unknown }).descricao
+      );
       const variationValue = normalizeString((item as { variation?: { value?: unknown } }).variation?.value ?? (item as { variacao?: unknown }).variacao);
       const directionRaw = normalizeString((item as { variation?: { direction?: unknown } }).variation?.direction);
       const directionText = removeDiacritics(directionRaw);
@@ -318,20 +332,14 @@ const normalizeKpis = (value: unknown): ContractMock['kpis'] => {
           ? 'neutral'
           : undefined;
 
-      return {
-        label,
-        value: valueText,
-        helper: helper || undefined,
-        variation:
-          variationValue && direction
-            ? {
-                value: variationValue,
-                direction,
-              }
-            : undefined,
-      };
+      const result: ContractMock['kpis'][number] = { label, value: valueText };
+      if (helper) result.helper = helper;
+      if (variationValue && direction) {
+        result.variation = { value: variationValue, direction };
+      }
+      return result;
     })
-    .filter((item): item is ContractMock['kpis'][number] => Boolean(item));
+    .filter((item): item is ContractMock['kpis'][number] => item !== null);
 };
 
 const normalizeHistoricoDemanda = (value: unknown): ContractMock['historicoDemanda'] => {
@@ -401,19 +409,35 @@ const normalizeAnalises = (value: unknown): ContractMock['analises'] => {
       const etapasRaw = (item as { etapas?: unknown; steps?: unknown }).etapas ?? (item as { steps?: unknown }).steps;
       const etapas = Array.isArray(etapasRaw)
         ? etapasRaw
-            .map((etapa) => ({
-              nome: normalizeEtapaNome((etapa as { nome?: unknown; etapa?: unknown }).nome ?? (etapa as { etapa?: unknown }).etapa),
-              status: normalizeAnaliseStatus((etapa as { status?: unknown }).status),
-              observacao: normalizeString((etapa as { observacao?: unknown; descricao?: unknown }).observacao ?? (etapa as { descricao?: unknown }).descricao) || undefined,
-            }))
-            .filter((etapa) => analiseStatusValues.includes(etapa.status))
+            .map((etapa) => {
+              const nome = normalizeEtapaNome(
+                (etapa as { nome?: unknown; etapa?: unknown }).nome ??
+                  (etapa as { etapa?: unknown }).etapa
+              );
+              const status = normalizeAnaliseStatus((etapa as { status?: unknown }).status);
+              if (!analiseStatusValues.includes(status)) return null;
+              const observacao = normalizeString(
+                (etapa as { observacao?: unknown; descricao?: unknown }).observacao ??
+                  (etapa as { descricao?: unknown }).descricao
+              );
+              const etapaResult: ContractMock['analises'][number]['etapas'][number] = {
+                nome,
+                status,
+              };
+              if (observacao) {
+                etapaResult.observacao = observacao;
+              }
+              return etapaResult;
+            })
+            .filter((etapa): etapa is ContractMock['analises'][number]['etapas'][number] => etapa !== null)
         : [];
-      return {
+      const result: ContractMock['analises'][number] = {
         area,
         etapas,
       };
+      return result;
     })
-    .filter((item): item is ContractMock['analises'][number] => Boolean(item));
+    .filter((item): item is ContractMock['analises'][number] => item !== null);
 };
 
 const normalizeFaturas = (value: unknown): ContractMock['faturas'] => {
@@ -544,6 +568,17 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { clienteId?: unknown }).clienteId ??
         (item as { clientId?: unknown }).clientId
     );
+    const balanceEmailValue = normalizeString(
+      (item as { balance_email?: unknown }).balance_email ??
+        (item as { balanceEmail?: unknown }).balanceEmail
+    );
+    const billingEmailValue = normalizeString(
+      (item as { billing_email?: unknown }).billing_email ??
+        (item as { billingEmail?: unknown }).billingEmail
+    );
+    const fonteValue = normalizeFonte(
+      (item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source
+    );
     
     // Add status field mapping
     const statusRaw = 
@@ -657,9 +692,11 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ensureField('Status', status);
     ensureField('Segmento', normalizeString(rawSegmento));
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
-    ensureField('Fonte de energia', normalizeString((item as { energy_source?: unknown }).energy_source) || 'Não informado');
+    ensureField('Fonte de energia', fonteValue || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
     ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
+    ensureField('Email de balanço energético', balanceEmailValue || 'Não informado');
+    ensureField('Email de faturamento', billingEmailValue || 'Não informado');
     
     // Add compliance fields
     ensureField('Conformidade consumo', normalizeString((item as { compliance_consumption?: unknown }).compliance_consumption) || 'Não informado');
@@ -700,15 +737,86 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ? status 
       : normalizeContratoStatus((item as { status?: unknown }).status);
 
+    const coercePricePeriodsString = (value: unknown): string | null => {
+      if (!value) return null;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : null;
+      }
+      if (typeof value === 'object') {
+        try {
+          const serialized = JSON.stringify(value);
+          return serialized.trim() ? serialized : null;
+        } catch (error) {
+          console.warn('[ContractsContext] Falha ao serializar price_periods', error, value);
+          return null;
+        }
+      }
+      return null;
+    };
+
+    const parseFiniteNumber = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string') {
+        const numeric = Number(value.replace(',', '.'));
+        return Number.isFinite(numeric) ? numeric : null;
+      }
+      return null;
+    };
+
+    const periodPriceNormalized = (() => {
+      const periodPriceRaw = (item as { periodPrice?: unknown }).periodPrice;
+      const pricePeriodsFromObject = periodPriceRaw && typeof periodPriceRaw === 'object'
+        ? (periodPriceRaw as { price_periods?: unknown }).price_periods
+        : undefined;
+      const flatPriceFromObject = periodPriceRaw && typeof periodPriceRaw === 'object'
+        ? (periodPriceRaw as { flat_price_mwh?: unknown }).flat_price_mwh
+        : undefined;
+      const flatYearsFromObject = periodPriceRaw && typeof periodPriceRaw === 'object'
+        ? (periodPriceRaw as { flat_years?: unknown }).flat_years
+        : undefined;
+
+      const pricePeriodsDirect = (item as { price_periods?: unknown }).price_periods;
+      const flatPriceDirect = (item as { flat_price_mwh?: unknown }).flat_price_mwh;
+      const flatYearsDirect = (item as { flat_years?: unknown }).flat_years;
+
+      const pricePeriodsValue = coercePricePeriodsString(pricePeriodsFromObject ?? pricePeriodsDirect);
+      const flatPriceValue = parseFiniteNumber(flatPriceFromObject ?? flatPriceDirect);
+      const flatYearsValue = parseFiniteNumber(flatYearsFromObject ?? flatYearsDirect);
+
+      return {
+        price_periods: pricePeriodsValue,
+        flat_price_mwh: flatPriceValue,
+        flat_years: flatYearsValue,
+      };
+    })();
+
+    let parsedPricePeriods: ContractMock['pricePeriods'] | undefined;
+    if (periodPriceNormalized.price_periods) {
+      try {
+        const parsed = JSON.parse(periodPriceNormalized.price_periods) as unknown;
+        if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { periods?: unknown }).periods)) {
+          parsedPricePeriods = parsed as ContractMock['pricePeriods'];
+        }
+      } catch (error) {
+        console.warn('[ContractsContext] Falha ao interpretar price_periods', error);
+      }
+    }
+
     return {
       id,
       codigo: normalizeString(rawCodigo),
+      razaoSocial: normalizeString(
+        (item as { legal_name?: unknown }).legal_name ??
+          (item as { social_reason?: unknown }).social_reason ??
+          (item as { razaoSocial?: unknown }).razaoSocial
+      ),
       cliente: normalizeString(rawCliente),
       cnpj: normalizeString((item as { cnpj?: unknown }).cnpj),
       segmento: normalizeString(rawSegmento),
       contato: contatoFinal,
       status: statusValor,
-      fonte: normalizeFonte((item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source),
+      fonte: fonteValue,
       modalidade:
         normalizeString(
           (item as { modalidade?: unknown }).modalidade ?? (item as { contracted_modality?: unknown }).contracted_modality
@@ -728,6 +836,12 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ),
       precoMedio,
       fornecedor: supplier,
+      balanceEmail: balanceEmailValue || undefined,
+      billingEmail: billingEmailValue || undefined,
+      pricePeriods: parsedPricePeriods,
+      periodPrice: periodPriceNormalized,
+      flatPrice: periodPriceNormalized.flat_price_mwh ?? undefined,
+      flatYears: periodPriceNormalized.flat_years ?? undefined,
       proinfa: proinfa ?? null,
       cicloFaturamento: ciclo,
       periodos,
@@ -739,48 +853,6 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       obrigacoes: normalizeObrigacoes((item as { obrigacoes?: unknown }).obrigacoes),
       analises: normalizeAnalises((item as { analises?: unknown; analisesConformidade?: unknown }).analises ?? (item as { analisesConformidade?: unknown }).analisesConformidade),
       faturas: normalizeFaturas((item as { faturas?: unknown; invoices?: unknown }).faturas ?? (item as { invoices?: unknown }).invoices),
-      // Normaliza periodPrice da API (pode vir como periodPrice ou price_periods direto)
-      periodPrice: (() => {
-        console.log(`[ContractsContext] normalizeContractsFromApi - Normalizando periodPrice para contrato ${id}`);
-        const periodPriceRaw = (item as { periodPrice?: unknown }).periodPrice;
-        const pricePeriodsRaw = (item as { price_periods?: unknown }).price_periods;
-        const flatPriceRaw = (item as { flat_price_mwh?: unknown }).flat_price_mwh;
-        const flatYearsRaw = (item as { flat_years?: unknown }).flat_years;
-
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - periodPriceRaw:`, periodPriceRaw);
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - price_periods (direto):`, pricePeriodsRaw);
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - flat_price_mwh (direto):`, flatPriceRaw);
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - flat_years (direto):`, flatYearsRaw);
-
-        // Se vier como objeto periodPrice
-        if (periodPriceRaw && typeof periodPriceRaw === 'object') {
-          const pricePeriodsValue = (periodPriceRaw as { price_periods?: unknown }).price_periods;
-          const flatPriceValue = (periodPriceRaw as { flat_price_mwh?: unknown }).flat_price_mwh;
-          const flatYearsValue = (periodPriceRaw as { flat_years?: unknown }).flat_years;
-          
-          const result = {
-            price_periods: typeof pricePeriodsValue === 'string' ? pricePeriodsValue : null,
-            flat_price_mwh: typeof flatPriceValue === 'number' && Number.isFinite(flatPriceValue) ? flatPriceValue : null,
-            flat_years: typeof flatYearsValue === 'number' && Number.isFinite(flatYearsValue) ? flatYearsValue : null,
-          };
-          console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - Usando periodPriceRaw, resultado:`, result);
-          return result;
-        }
-
-        // Se vier como campos diretos (formato mais comum do backend)
-        const pricePeriodsValue = pricePeriodsRaw;
-        const flatPriceValue = flatPriceRaw;
-        const flatYearsValue = flatYearsRaw;
-        
-        const result = {
-          price_periods: typeof pricePeriodsValue === 'string' ? pricePeriodsValue : null,
-          flat_price_mwh: typeof flatPriceValue === 'number' && Number.isFinite(flatPriceValue) ? flatPriceValue : null,
-          flat_years: typeof flatYearsValue === 'number' && Number.isFinite(flatYearsValue) ? flatYearsValue : null,
-        };
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - Usando campos diretos, resultado:`, result);
-        console.log(`[ContractsContext] normalizeContractsFromApi [${id}] - price_periods tipo:`, typeof pricePeriodsValue, 'valor:', pricePeriodsValue);
-        return result;
-      })(),
     } satisfies ContractMock & { periodPrice: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null } };
   });
 };
@@ -887,8 +959,15 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
   // Extrai pricePeriods, flatPrice e flatYears do contrato
   const pricePeriods = (contract as { pricePeriods?: unknown }).pricePeriods;
-  const flatPrice = (contract as { flatPrice?: unknown }).flatPrice;
-  const flatYears = (contract as { flatYears?: unknown }).flatYears;
+  const periodPriceFromContract = (contract as {
+    periodPrice?: {
+      price_periods?: unknown;
+      flat_price_mwh?: unknown;
+      flat_years?: unknown;
+    } | null;
+  }).periodPrice;
+  const flatPrice = (contract as { flatPrice?: unknown }).flatPrice ?? periodPriceFromContract?.flat_price_mwh;
+  const flatYears = (contract as { flatYears?: unknown }).flatYears ?? periodPriceFromContract?.flat_years;
 
   // Prepara price_periods como JSON string se existir
   let pricePeriodsJson: string | undefined = undefined;
@@ -916,9 +995,54 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     }
   }
 
+  if (!pricePeriodsJson && periodPriceFromContract?.price_periods) {
+    const raw = periodPriceFromContract.price_periods;
+    if (typeof raw === 'string' && raw.trim()) {
+      pricePeriodsJson = raw;
+    } else if (raw && typeof raw === 'object') {
+      try {
+        pricePeriodsJson = JSON.stringify(raw);
+      } catch (error) {
+        console.warn('[ContractsContext] Falha ao serializar periodPrice.price_periods para JSON:', error);
+      }
+    }
+  }
+
+  const normalizeFlatPrice = (value: unknown): number | null => {
+    const parsed = parseNumericInput(value);
+    if (parsed !== null && Number.isFinite(parsed)) {
+      return parsed;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    return null;
+  };
+
+  const normalizeFlatYears = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const rounded = Math.round(value);
+      return rounded >= 1 && rounded <= 10 ? rounded : null;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        const rounded = Math.round(parsed);
+        return rounded >= 1 && rounded <= 10 ? rounded : null;
+      }
+    }
+    return null;
+  };
+
+  const flatPriceValue = normalizeFlatPrice(flatPrice ?? contract.precoMedio);
+  const flatYearsValue = normalizeFlatYears(flatYears);
+
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
+    legal_name: normalizeString(contract.razaoSocial),
+    balance_email: normalizeString(contract.balanceEmail),
+    billing_email: normalizeString(contract.billingEmail),
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),
@@ -944,11 +1068,14 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     contact_active: Boolean(normalizeString(contract.contato)),
     adjusted: parsePercentInput(contract.flex) ? true : undefined,
     price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
+    price_periods: pricePeriodsJson ?? null,
+    flat_price_mwh: flatPriceValue ?? null,
+    flat_years: flatYearsValue ?? null,
     // Adiciona periodPrice como objeto (formato do backend)
     periodPrice: {
       price_periods: pricePeriodsJson ?? null,
-      flat_price_mwh: typeof flatPrice === 'number' && Number.isFinite(flatPrice) ? flatPrice : null,
-      flat_years: typeof flatYears === 'number' && Number.isFinite(flatYears) && flatYears >= 1 && flatYears <= 10 ? flatYears : null,
+      flat_price_mwh: flatPriceValue ?? null,
+      flat_years: flatYearsValue ?? null,
     },
   };
 
@@ -958,8 +1085,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
       if (key === 'supplier' || key === 'proinfa_contribution') {
         return true;
       }
-      // Sempre inclui periodPrice mesmo se null (o backend precisa saber se foi informado ou não)
-      if (key === 'periodPrice') {
+      // Sempre inclui campos de precificação mesmo se null (o backend precisa saber se foi informado ou não)
+      if (['periodPrice', 'price_periods', 'flat_price_mwh', 'flat_years'].includes(key)) {
         return true;
       }
       return value !== undefined && value !== null && value !== '';
@@ -983,50 +1110,90 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     if (typeof value === 'string') {
       return value;
     }
-    return value as string | number | null;
+    return null;
   };
 
-  return {
+  const servicePayload: CreateContractPayload = {
     contract_code: pickString('contract_code', contract.codigo || contract.id),
     client_name: pickString('client_name', contract.cliente),
+    legal_name: pickString('legal_name', contract.razaoSocial ?? ''),
     cnpj: pickString('cnpj', contract.cnpj),
     segment: pickString('segment', contract.segmento),
     contact_responsible: pickString('contact_responsible', contract.contato),
-    contracted_volume_mwh: record.contracted_volume_mwh ?? null,
+    contracted_volume_mwh: pickNullableValue('contracted_volume_mwh'),
     status: pickString('status', contract.status),
     energy_source: pickString('energy_source', contract.fonte),
     contracted_modality: pickString('contracted_modality', contract.modalidade),
     start_date: pickString('start_date', contract.inicioVigencia),
     end_date: pickString('end_date', contract.fimVigencia),
     billing_cycle: pickString('billing_cycle', contract.cicloFaturamento),
-    upper_limit_percent: record.upper_limit_percent ?? null,
-    lower_limit_percent: record.lower_limit_percent ?? null,
-    flexibility_percent: record.flexibility_percent ?? null,
-    average_price_mwh: record.average_price_mwh ?? null,
+    upper_limit_percent: pickNullableValue('upper_limit_percent'),
+    lower_limit_percent: pickNullableValue('lower_limit_percent'),
+    flexibility_percent: pickNullableValue('flexibility_percent'),
+    average_price_mwh: pickNullableValue('average_price_mwh'),
+    balance_email: pickString('balance_email', contract.balanceEmail ?? ''),
+    billing_email: pickString('billing_email', contract.billingEmail ?? ''),
     supplier: (record.supplier ?? null) as string | null,
-    proinfa_contribution: record.proinfa_contribution ?? null,
     groupName: pickString('groupName', 'default') || 'default',
-    spot_price_ref_mwh: record.spot_price_ref_mwh ?? null,
+    spot_price_ref_mwh: pickNullableValue('spot_price_ref_mwh'),
     compliance_consumption: pickNullableValue('compliance_consumption'),
     compliance_nf: pickNullableValue('compliance_nf'),
     compliance_invoice: pickNullableValue('compliance_invoice'),
     compliance_charges: pickNullableValue('compliance_charges'),
     compliance_overall: pickNullableValue('compliance_overall'),
+    price_periods: typeof record.price_periods === 'string' ? record.price_periods : null,
+    flat_price_mwh: pickNullableValue('flat_price_mwh'),
+    flat_years: pickNullableValue('flat_years'),
     // Adiciona periodPrice como objeto (formato do backend)
-    periodPrice: record.periodPrice && typeof record.periodPrice === 'object'
-      ? {
-          price_periods: typeof (record.periodPrice as { price_periods?: unknown }).price_periods === 'string'
-            ? (record.periodPrice as { price_periods: string }).price_periods
-            : null,
-          flat_price_mwh: (record.periodPrice as { flat_price_mwh?: unknown }).flat_price_mwh ?? null,
-          flat_years: (record.periodPrice as { flat_years?: unknown }).flat_years ?? null,
-        }
-      : {
-          price_periods: null,
-          flat_price_mwh: null,
-          flat_years: null,
-        },
+    periodPrice: (() => {
+      if (record.periodPrice && typeof record.periodPrice === 'object') {
+        const periodPriceRecord = record.periodPrice as {
+          price_periods?: unknown;
+          flat_price_mwh?: unknown;
+          flat_years?: unknown;
+        };
+        const pricePeriodsValue =
+          typeof periodPriceRecord.price_periods === 'string'
+            ? periodPriceRecord.price_periods
+            : typeof record.price_periods === 'string'
+            ? record.price_periods
+            : null;
+        const flatPriceValue =
+          typeof periodPriceRecord.flat_price_mwh === 'number' && Number.isFinite(periodPriceRecord.flat_price_mwh)
+            ? periodPriceRecord.flat_price_mwh
+            : typeof record.flat_price_mwh === 'number' && Number.isFinite(record.flat_price_mwh)
+            ? record.flat_price_mwh
+            : typeof record.flat_price_mwh === 'string'
+            ? (() => {
+                const parsed = Number(record.flat_price_mwh);
+                return Number.isFinite(parsed) ? parsed : null;
+              })()
+            : null;
+        const flatYearsValue =
+          typeof periodPriceRecord.flat_years === 'number' && Number.isFinite(periodPriceRecord.flat_years)
+            ? periodPriceRecord.flat_years
+            : typeof record.flat_years === 'number' && Number.isFinite(record.flat_years)
+            ? record.flat_years
+            : typeof record.flat_years === 'string'
+            ? (() => {
+                const parsed = Number(record.flat_years);
+                return Number.isFinite(parsed) ? parsed : null;
+              })()
+            : null;
+        return {
+          price_periods: pricePeriodsValue,
+          flat_price_mwh: flatPriceValue,
+          flat_years: flatYearsValue,
+        };
+      }
+      return {
+        price_periods: null,
+        flat_price_mwh: null,
+        flat_years: null,
+      };
+    })(),
   };
+  return servicePayload;
 };
 
 const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => ({
