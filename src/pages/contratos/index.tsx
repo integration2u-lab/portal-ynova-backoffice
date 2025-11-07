@@ -3,16 +3,11 @@ import { Link } from 'react-router-dom';
 import { Search, Plus } from 'lucide-react';
 import { ContractDetail, StatusBadge } from './ContractDetail';
 import type { ContractDetails as ContractMock, StatusResumo } from '../../types/contracts';
-import { formatMesLabel } from '../../types/contracts';
 import { useContracts } from './ContractsContext';
 import CreateContractModal from './CreateContractModal';
 
 const pageSize = 20;
 const statusOrder: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
-
-function formatMonthLabel(periodo: string) {
-  return formatMesLabel(periodo).replace('.', '');
-}
 
 type StatusSummaryItem = { status: StatusResumo; total: number };
 
@@ -55,6 +50,45 @@ function StatusPills({ summary }: { summary: StatusSummaryItem[] }) {
         </span>
       ))}
     </div>
+  );
+}
+
+const contractStatusStyles: Record<ContractMock['status'], { label: string; container: string; dot: string }> = {
+  Ativo: {
+    label: 'Contrato Vigente',
+    container:
+      'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+  },
+  Inativo: {
+    label: 'Contrato Encerrado',
+    container:
+      'border-red-200 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300',
+    dot: 'bg-red-500',
+  },
+  'Em análise': {
+    label: 'Em análise',
+    container:
+      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+};
+
+function ContractStatusBadge({ status }: { status: ContractMock['status'] }) {
+  const style = contractStatusStyles[status] ?? {
+    label: status,
+    container:
+      'border-gray-200 bg-gray-100 text-gray-700 dark:border-gray-600 dark:bg-gray-700/40 dark:text-gray-300',
+    dot: 'bg-gray-400',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${style.container}`}
+    >
+      <span className={`h-2 w-2 rounded-full ${style.dot}`} />
+      {style.label}
+    </span>
   );
 }
 
@@ -271,11 +305,10 @@ export default function ContratosPage() {
                   <tr>
                     <th className="px-4 py-3 text-left">Contrato</th>
                     <th className="px-4 py-3 text-left">Cliente</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Segmento</th>
-                    <th className="px-4 py-3 text-left">Ciclo</th>
                     <th className="px-4 py-3 text-left">Preço Médio</th>
                     <th className="px-4 py-3 text-left">Fonte</th>
-                    <th className="px-4 py-3 text-left">Resumo</th>
                     <th className="px-4 py-3 text-left">Ações</th>
                   </tr>
                 </thead>
@@ -293,13 +326,12 @@ export default function ContratosPage() {
                         <div className="font-bold text-gray-900">{contrato.cliente}</div>
                         <div className="text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
                       </td>
+                      <td className="px-4 py-3">
+                        <ContractStatusBadge status={contrato.status} />
+                      </td>
                       <td className="px-4 py-3 font-bold text-gray-600">{contrato.segmento}</td>
-                      <td className="px-4 py-3 font-bold text-gray-600">{formatMonthLabel(contrato.cicloFaturamento)}</td>
                       <td className="px-4 py-3 font-bold text-gray-600">R$ {contrato.precoMedio.toFixed(2)}</td>
                       <td className="px-4 py-3 font-bold text-gray-600">{contrato.fonte}</td>
-                      <td className="px-4 py-3">
-                        <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Link
@@ -337,14 +369,15 @@ export default function ContratosPage() {
                     onClick={() => setContratoSelecionado(contrato.id)}
                     className="w-full text-left"
                   >
-                    <div className="flex items-center justify-between text-sm font-bold text-gray-900">
+                    <div className="flex items-center justify-between gap-3 text-sm font-bold text-gray-900">
                       <span>{contrato.codigo}</span>
-                      <span className="text-xs font-bold text-gray-500">{formatMonthLabel(contrato.cicloFaturamento)}</span>
+                      <ContractStatusBadge status={contrato.status} />
                     </div>
                     <div className="mt-1 text-sm font-bold text-gray-700">{contrato.cliente}</div>
-                    <div className="mt-2">
-                      <StatusPills summary={summarizeResumo(contrato.resumoConformidades)} />
-                    </div>
+                    <div className="mt-1 text-xs font-bold text-gray-500">CNPJ {contrato.cnpj}</div>
+                    <div className="mt-2 text-xs font-bold text-gray-600">{contrato.segmento}</div>
+                    <div className="mt-2 text-sm font-bold text-gray-700">R$ {contrato.precoMedio.toFixed(2)}</div>
+                    <div className="text-xs font-bold text-gray-500">{contrato.fonte}</div>
                   </button>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <Link

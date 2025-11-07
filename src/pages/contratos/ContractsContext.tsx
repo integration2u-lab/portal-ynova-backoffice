@@ -248,6 +248,7 @@ const normalizeResumo = (value: unknown): ContractMock['resumoConformidades'] =>
 };
 
 const formatPercentValue = (value: unknown): string => {
+  const isNumberInput = typeof value === 'number';
   const numeric = Number(typeof value === 'string' ? value.replace(',', '.') : value);
   if (!Number.isFinite(numeric)) {
     const text = normalizeString(value);
@@ -255,7 +256,12 @@ const formatPercentValue = (value: unknown): string => {
     return text.includes('%') ? text : `${text}%`;
   }
 
-  const ratio = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  let ratio: number;
+  if (isNumberInput) {
+    ratio = Math.abs(numeric) > 10 ? numeric / 100 : numeric;
+  } else {
+    ratio = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  }
   try {
     return new Intl.NumberFormat('pt-BR', {
       style: 'percent',
