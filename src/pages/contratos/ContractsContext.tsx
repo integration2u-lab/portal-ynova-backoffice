@@ -75,6 +75,24 @@ const normalizeString = (value: unknown, fallback = '') => {
   return String(value).trim();
 };
 
+const splitEmailList = (value: string): string[] =>
+  value
+    .split(/[,;|\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item && /@/.test(item));
+
+const joinEmailList = (emails: string[]): string => emails.join('; ');
+
+const hasEmailAddress = (value: string): boolean => /@/.test(value);
+
+const normalizeEmailFieldValue = (value: unknown): string => {
+  const text = normalizeString(value);
+  if (!text) return '';
+  const emails = splitEmailList(text);
+  if (!emails.length) return text;
+  return joinEmailList(emails);
+};
+
 const normalizeIsoDate = (value: unknown): string => {
   const text = normalizeString(value);
   if (!text) return '';
@@ -127,6 +145,16 @@ const formatProinfa = (value: number | null | undefined): string => {
 
 const removeDiacritics = (value: string) =>
   value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+const toOptionalEmail = (value: string): string | undefined => {
+  const normalized = normalizeString(value);
+  if (!normalized) return undefined;
+  const canonical = removeDiacritics(normalized);
+  if (canonical === 'nao informado' || canonical === 'nao-informado') {
+    return undefined;
+  }
+  return normalized;
+};
 
 const parsePercentInput = (value: unknown): number | null => {
   const text = normalizeString(value);
@@ -587,14 +615,15 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { clienteId?: unknown }).clienteId ??
         (item as { clientId?: unknown }).clientId
     );
-    const balanceEmailValue = normalizeString(
+    let balanceEmailValue = normalizeEmailFieldValue(
       (item as { balance_email?: unknown }).balance_email ??
         (item as { balanceEmail?: unknown }).balanceEmail
     );
-    const billingEmailValue = normalizeString(
+    let billingEmailValue = normalizeEmailFieldValue(
       (item as { billing_email?: unknown }).billing_email ??
         (item as { billingEmail?: unknown }).billingEmail
     );
+    const combinedEmailRaw = normalizeString((item as { email?: unknown }).email);
     const fonteValue = normalizeFonte(
       (item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source
     );
@@ -669,14 +698,20 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ];
 
     const dadosContratoKeys = new Set(dadosContratoBase.map((field) => removeDiacritics(field.label)));
-    const ensureField = (label: string, value: string) => {
+    const ensureField = (label: string, value: string): number => {
       const normalizedLabel = removeDiacritics(label);
-      const finalValue = normalizeString(value);
-      if (!finalValue) return;
-      if (!dadosContratoKeys.has(normalizedLabel)) {
-        dadosContratoKeys.add(normalizedLabel);
-        dadosContratoBase.push({ label, value: finalValue });
+      const normalizedValue = normalizeString(value);
+      const finalValue = normalizedValue || 'Não informado';
+      const existingIndex = dadosContratoBase.findIndex(
+        (field) => removeDiacritics(field.label) === normalizedLabel
+      );
+      dadosContratoKeys.add(normalizedLabel);
+      if (existingIndex >= 0) {
+        dadosContratoBase[existingIndex] = { label, value: finalValue };
+        return existingIndex;
       }
+      dadosContratoBase.push({ label, value: finalValue });
+      return dadosContratoBase.length - 1;
     };
 
     const contractedVolume =
@@ -692,6 +727,47 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const lowerLimitRaw =
       (item as { limiteInferior?: unknown }).limiteInferior ??
       (item as { lower_limit_percent?: unknown }).lower_limit_percent;
+
+    const findEmailValueInDados = (keywords: string[]): string | undefined => {
+      const normalizedKeywords = keywords.map((keyword) => removeDiacritics(keyword));
+      const match = dadosContratoBase.find((field) => {
+        const normalizedLabel = removeDiacritics(field.label);
+        return normalizedKeywords.every((keyword) => normalizedLabel.includes(keyword));
+      });
+      if (!match) return undefined;
+      const normalizedValue = normalizeEmailFieldValue(match.value);
+      return hasEmailAddress(normalizedValue) ? normalizedValue : undefined;
+    };
+
+    const balanceEmailFromDados = findEmailValueInDados(['email', 'balanco']);
+    if (!hasEmailAddress(balanceEmailValue) && balanceEmailFromDados) {
+      balanceEmailValue = balanceEmailFromDados;
+    }
+    const billingEmailFromDados = findEmailValueInDados(['email', 'faturamento']);
+    if (!hasEmailAddress(billingEmailValue) && billingEmailFromDados) {
+      billingEmailValue = billingEmailFromDados;
+    }
+
+    if (combinedEmailRaw) {
+      const combinedSegments = combinedEmailRaw
+        .split(';')
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+
+      if (!hasEmailAddress(balanceEmailValue) && combinedSegments.length > 0) {
+        const normalizedBalance = normalizeEmailFieldValue(combinedSegments[0]);
+        if (hasEmailAddress(normalizedBalance)) {
+          balanceEmailValue = normalizedBalance;
+        }
+      }
+
+      if (!hasEmailAddress(billingEmailValue) && combinedSegments.length > 1) {
+        const normalizedBilling = normalizeEmailFieldValue(combinedSegments.slice(1).join('; '));
+        if (hasEmailAddress(normalizedBilling)) {
+          billingEmailValue = normalizedBilling;
+        }
+      }
+    }
 
     const supplierDisplay = supplier || 'Não informado';
     ensureField('Fornecedor', supplierDisplay);
@@ -711,8 +787,16 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
     ensureField('Fonte de energia', fonteValue || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
-    ensureField('Email de balanço energético', balanceEmailValue || 'Não informado');
-    ensureField('Email de faturamento', billingEmailValue || 'Não informado');
+
+    const balanceEmailDisplay = hasEmailAddress(balanceEmailValue) ? balanceEmailValue : 'Não informado';
+    const billingEmailDisplay = hasEmailAddress(billingEmailValue) ? billingEmailValue : 'Não informado';
+    const balanceEmailFieldIndex = ensureField('Email de balanço energético', balanceEmailDisplay);
+    const billingEmailFieldIndex = ensureField('Email de faturamento', billingEmailDisplay);
+
+    if (balanceEmailFieldIndex > billingEmailFieldIndex) {
+      const [balanceField] = dadosContratoBase.splice(balanceEmailFieldIndex, 1);
+      dadosContratoBase.splice(billingEmailFieldIndex, 0, balanceField);
+    }
 
     if (adjusted !== undefined) {
       ensureField('Ajustado', adjusted ? 'Sim' : 'Não');
@@ -845,8 +929,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       ),
       precoMedio,
       fornecedor: supplier,
-      balanceEmail: balanceEmailValue || undefined,
-      billingEmail: billingEmailValue || undefined,
+      balanceEmail: toOptionalEmail(balanceEmailValue),
+      billingEmail: toOptionalEmail(billingEmailValue),
       pricePeriods: parsedPricePeriods,
       periodPrice: periodPriceNormalized,
       flatPrice: periodPriceNormalized.flat_price_mwh ?? undefined,
@@ -991,6 +1075,17 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const balanceEmailValue = sanitizeEmail(contract.balanceEmail) || sanitizeEmail(balanceEmailFromDados);
   const billingEmailValue = sanitizeEmail(contract.billingEmail) || sanitizeEmail(billingEmailFromDados);
 
+  const combinedEmailSegments: string[] = [];
+  if (balanceEmailValue) {
+    combinedEmailSegments.push(balanceEmailValue);
+  }
+  if (billingEmailValue) {
+    combinedEmailSegments.push(billingEmailValue);
+  }
+  const combinedEmailValue = combinedEmailSegments.length
+    ? joinEmailList(combinedEmailSegments.filter((segment) => hasEmailAddress(segment)))
+    : undefined;
+
   // Extrai pricePeriods, flatPrice e flatYears do contrato
   const pricePeriods = (contract as { pricePeriods?: unknown }).pricePeriods;
   const periodPriceFromContract = (contract as {
@@ -1083,6 +1178,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     legal_name: normalizeString(contract.razaoSocial),
     balance_email: balanceEmailValue,
     billing_email: billingEmailValue,
+    ...(combinedEmailValue ? { email: combinedEmailValue } : {}),
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),
