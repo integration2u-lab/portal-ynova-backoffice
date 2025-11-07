@@ -957,6 +957,31 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
       ? contract.proinfa
       : proinfaFromDados;
 
+  const sanitizeEmail = (value: unknown): string => {
+    const normalized = normalizeString(value);
+    if (!normalized) return '';
+    const canonical = removeDiacritics(normalized).toLowerCase();
+    if (canonical === 'nao informado' || canonical === 'nao-informado') {
+      return '';
+    }
+    return normalized;
+  };
+
+  const balanceEmailFromDados = findDadosValue([
+    'email de balanco',
+    'email_balanco',
+    'balanco energetico',
+    'balanco',
+  ]);
+  const billingEmailFromDados = findDadosValue([
+    'email de faturamento',
+    'email_faturamento',
+    'faturamento',
+    'billing',
+  ]);
+  const balanceEmailValue = sanitizeEmail(contract.balanceEmail) || sanitizeEmail(balanceEmailFromDados);
+  const billingEmailValue = sanitizeEmail(contract.billingEmail) || sanitizeEmail(billingEmailFromDados);
+
   // Extrai pricePeriods, flatPrice e flatYears do contrato
   const pricePeriods = (contract as { pricePeriods?: unknown }).pricePeriods;
   const periodPriceFromContract = (contract as {
@@ -1041,8 +1066,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
     legal_name: normalizeString(contract.razaoSocial),
-    balance_email: normalizeString(contract.balanceEmail),
-    billing_email: normalizeString(contract.billingEmail),
+    balance_email: balanceEmailValue,
+    billing_email: billingEmailValue,
     groupName: groupName || 'default',
     supplier: supplierValue ? supplierValue : null,
     cnpj: normalizeString(contract.cnpj),

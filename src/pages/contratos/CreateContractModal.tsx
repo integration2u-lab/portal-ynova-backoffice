@@ -400,8 +400,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       { label: 'Modalidade', value: formState.modality.trim() || 'Não informado' },
       { label: 'Fonte de energia', value: formState.energySource },
       { label: 'Fornecedor', value: supplierValue || 'Não informado' },
-      { label: 'E-mail do Balanço', value: balanceEmail || 'Não informado' },
-      { label: 'E-mail de Faturamento', value: billingEmail || 'Não informado' },
+      { label: 'Email de balanço energético', value: balanceEmail || 'Não informado' },
+      { label: 'Email de faturamento', value: billingEmail || 'Não informado' },
       {
         label: 'Vigência',
         value:
@@ -446,7 +446,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       segmento: formState.segment.trim(),
       contato: formState.contact.trim(),
       status: formState.status,
-      fonte: formState.energySource.includes('0%') ? 'Convencional' : 'Incentivada',
+      fonte: formState.energySource,
       modalidade: formState.modality.trim(),
       inicioVigencia: formState.startDate,
       fimVigencia: formState.endDate,
@@ -487,6 +487,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       pricePeriods: formState.pricePeriods,
       flatPrice: parseCurrencyInput(formState.flatPrice) ?? null,
       flatYears: formState.flatYears,
+      periodPrice: {
+        price_periods: formState.pricePeriods.periods.length ? JSON.stringify(formState.pricePeriods) : null,
+        flat_price_mwh: parseCurrencyInput(formState.flatPrice) ?? null,
+        flat_years: formState.flatYears || null,
+      },
     } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number };
 
     setSubmitError(null);
