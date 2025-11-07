@@ -438,6 +438,21 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const invoices: ContractMock['faturas'] = [];
 
+    const normalizedFlatPrice = parseCurrencyInput(formState.flatPrice) ?? null;
+    const normalizedFlatYears = Number.isFinite(formState.flatYears) ? formState.flatYears : null;
+
+    const hasPricePeriodsData = formState.pricePeriods.periods.some((period) => {
+      const hasMonthsWithPrice = Array.isArray(period.months)
+        ? period.months.some((month) => typeof month.price === 'number' && Number.isFinite(month.price))
+        : false;
+      const hasDefaultPrice = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
+      return hasMonthsWithPrice || hasDefaultPrice;
+    });
+
+    const serializedPricePeriods = hasPricePeriodsData ? JSON.stringify(formState.pricePeriods) : null;
+    const resolvedFlatPrice = hasPricePeriodsData ? null : normalizedFlatPrice;
+    const resolvedFlatYears = hasPricePeriodsData ? null : normalizedFlatYears;
+
     const newContract: ContractMock = {
       id,
       codigo: id,
@@ -485,14 +500,14 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       faturas: invoices,
       // Adiciona pricePeriods e flatPrice para serem enviados ao backend
       pricePeriods: formState.pricePeriods,
-      flatPrice: parseCurrencyInput(formState.flatPrice) ?? null,
-      flatYears: formState.flatYears,
+      flatPrice: resolvedFlatPrice,
+      flatYears: resolvedFlatYears ?? null,
       periodPrice: {
-        price_periods: formState.pricePeriods.periods.length ? JSON.stringify(formState.pricePeriods) : null,
-        flat_price_mwh: parseCurrencyInput(formState.flatPrice) ?? null,
-        flat_years: formState.flatYears || null,
+        price_periods: serializedPricePeriods,
+        flat_price_mwh: resolvedFlatPrice,
+        flat_years: resolvedFlatYears,
       },
-    } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number };
+    } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number | null };
 
     setSubmitError(null);
     setIsSubmitting(true);

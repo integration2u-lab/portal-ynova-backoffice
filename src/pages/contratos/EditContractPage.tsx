@@ -16,17 +16,35 @@ export default function EditContractPage() {
       if (!contrato || !id) return;
       try {
         await updateContract(id, (current) => {
-          const serialized = periods.periods.length ? JSON.stringify(periods) : null;
+          const hasPeriodsData = periods.periods.some((period) => {
+            const hasMonths = Array.isArray(period.months)
+              ? period.months.some((month) => typeof month.price === 'number' && Number.isFinite(month.price))
+              : false;
+            const hasDefault = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
+            return hasMonths || hasDefault;
+          });
+
+          const serialized = hasPeriodsData ? JSON.stringify(periods) : null;
+
           const existingPeriodPrice = (current as {
             periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
           }).periodPrice;
+
+          const fallbackFlatPrice = existingPeriodPrice?.flat_price_mwh ?? (current as { flatPrice?: number | null }).flatPrice ?? current.precoMedio ?? null;
+          const fallbackFlatYears = existingPeriodPrice?.flat_years ?? (current as { flatYears?: number | null }).flatYears ?? null;
+
+          const resolvedFlatPrice = hasPeriodsData ? null : fallbackFlatPrice;
+          const resolvedFlatYears = hasPeriodsData ? null : fallbackFlatYears;
+
           return {
             ...current,
             pricePeriods: periods,
+            flatPrice: resolvedFlatPrice,
+            flatYears: resolvedFlatYears,
             periodPrice: {
               price_periods: serialized,
-              flat_price_mwh: existingPeriodPrice?.flat_price_mwh ?? (current as { flatPrice?: number | null }).flatPrice ?? current.precoMedio ?? null,
-              flat_years: existingPeriodPrice?.flat_years ?? (current as { flatYears?: number | null }).flatYears ?? null,
+              flat_price_mwh: resolvedFlatPrice,
+              flat_years: resolvedFlatYears,
             },
           };
         });

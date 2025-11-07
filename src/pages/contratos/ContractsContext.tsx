@@ -7,6 +7,7 @@ import {
   updateContract as updateContractService,
   type CreateContractPayload,
 } from '../../services/contracts';
+import { parseContractPricePeriods } from '../../utils/contractPricing';
 
 const DEFAULT_API_URL = 'https://api-balanco.ynovamarketplace.com';
 
@@ -799,17 +800,17 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       };
     })();
 
+    const flatPriceValue = periodPriceNormalized.flat_price_mwh;
+    ensureField(
+      'Preço Flat',
+      typeof flatPriceValue === 'number' && Number.isFinite(flatPriceValue)
+        ? formatCurrencyBRL(flatPriceValue)
+        : 'Não informado'
+    );
+
     let parsedPricePeriods: ContractMock['pricePeriods'] | undefined;
-    if (periodPriceNormalized.price_periods) {
-      try {
-        const parsed = JSON.parse(periodPriceNormalized.price_periods) as unknown;
-        if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { periods?: unknown }).periods)) {
-          parsedPricePeriods = parsed as ContractMock['pricePeriods'];
-        }
-      } catch (error) {
-        console.warn('[ContractsContext] Falha ao interpretar price_periods', error);
-      }
-    }
+    const parsedPricePeriodsValue = parseContractPricePeriods(periodPriceNormalized.price_periods ?? undefined);
+    parsedPricePeriods = parsedPricePeriodsValue ?? undefined;
 
     return {
       id,
@@ -1070,6 +1071,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const flatPriceValue = normalizeFlatPrice(flatPrice ?? contract.precoMedio);
   const flatYearsValue = normalizeFlatYears(flatYears);
 
+  const hasPricePeriods = Boolean(pricePeriodsJson && pricePeriodsJson.trim() && pricePeriodsJson.trim() !== 'null');
+
+  const payloadPricePeriods = hasPricePeriods ? pricePeriodsJson : null;
+  const payloadFlatPrice = hasPricePeriods ? null : flatPriceValue ?? null;
+  const payloadFlatYears = hasPricePeriods ? null : flatYearsValue ?? null;
+
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
@@ -1101,14 +1108,14 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     contact_active: Boolean(normalizeString(contract.contato)),
     adjusted: parsePercentInput(contract.flex) ? true : undefined,
     price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
-    price_periods: pricePeriodsJson ?? null,
-    flat_price_mwh: flatPriceValue ?? null,
-    flat_years: flatYearsValue ?? null,
+    price_periods: payloadPricePeriods,
+    flat_price_mwh: payloadFlatPrice,
+    flat_years: payloadFlatYears,
     // Adiciona periodPrice como objeto (formato do backend)
     periodPrice: {
-      price_periods: pricePeriodsJson ?? null,
-      flat_price_mwh: flatPriceValue ?? null,
-      flat_years: flatYearsValue ?? null,
+      price_periods: payloadPricePeriods,
+      flat_price_mwh: payloadFlatPrice,
+      flat_years: payloadFlatYears,
     },
   };
 

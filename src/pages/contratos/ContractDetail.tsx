@@ -19,6 +19,7 @@ import { obrigacaoColunas, formatMesLabel } from '../../types/contracts';
 import PricePeriodsModal, { PricePeriods, summarizePricePeriods } from './PricePeriodsModal';
 import { formatCurrencyBRL } from '../../utils/currency';
 import { useContracts } from './ContractsContext';
+import { parseContractPricePeriods } from '../../utils/contractPricing';
 
 const statusStyles: Record<StatusResumo, string> = {
   Conforme: 'bg-green-100 text-green-700 border border-green-200',
@@ -171,107 +172,42 @@ export function StatusBadge({ status }: { status: StatusResumo }) {
   );
 }
 
-// Função para parsear price_periods JSON string
-const parsePricePeriods = (pricePeriodsJson: string | null | undefined): PricePeriods | null => {
-  console.log('[ContractDetail] parsePricePeriods - Input:', { 
-    pricePeriodsJson, 
-    type: typeof pricePeriodsJson,
-    isNull: pricePeriodsJson === null,
-    isUndefined: pricePeriodsJson === undefined,
-    isEmpty: pricePeriodsJson === '',
-    length: typeof pricePeriodsJson === 'string' ? pricePeriodsJson.length : 'N/A'
+const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | null => {
+  const parsed = parseContractPricePeriods(rawValue ?? undefined);
+  if (!parsed || !Array.isArray(parsed.periods)) {
+    return null;
+  }
+
+  const normalizedPeriods: PricePeriods['periods'] = [];
+
+  parsed.periods.forEach((period, index) => {
+    const months = period.months
+      .filter((month): month is { ym: string; price: number } =>
+        typeof month.price === 'number' && Number.isFinite(month.price)
+      )
+      .map((month) => ({ ym: month.ym, price: month.price }));
+
+    const hasDefaultPrice = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
+    const defaultPriceValue = hasDefaultPrice ? (period.defaultPrice as number) : undefined;
+
+    if (!months.length && !hasDefaultPrice) {
+      return;
+    }
+
+    normalizedPeriods.push({
+      id: period.id || `period-${index + 1}`,
+      start: period.start,
+      end: period.end,
+      defaultPrice: defaultPriceValue,
+      months,
+    });
   });
-  
-  if (!pricePeriodsJson || typeof pricePeriodsJson !== 'string' || pricePeriodsJson.trim() === '') {
-    console.log('[ContractDetail] parsePricePeriods - Retornando null (vazio ou não é string)');
+
+  if (!normalizedPeriods.length) {
     return null;
   }
-  
-  try {
-    const parsed = JSON.parse(pricePeriodsJson);
-    console.log('[ContractDetail] parsePricePeriods - JSON.parse bem-sucedido:', parsed);
-    console.log('[ContractDetail] parsePricePeriods - Tipo do parsed:', typeof parsed);
-    console.log('[ContractDetail] parsePricePeriods - É objeto?', typeof parsed === 'object');
-    console.log('[ContractDetail] parsePricePeriods - Tem periods?', Array.isArray(parsed?.periods));
-    
-    // Se for o formato do backend com periods: { periods: [{ id, start, end, defaultPrice, months: [...] }] }
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.periods)) {
-      console.log('[ContractDetail] parsePricePeriods - Formato com periods encontrado:', parsed.periods.length, 'períodos');
-      return parsed as PricePeriods;
-    }
-    
-    // Se for o formato simples { "2025-05": 312.8, "2025-06": 309.4 }
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && !parsed.periods) {
-      console.log('[ContractDetail] parsePricePeriods - Formato simples detectado, convertendo...');
-      // Converte para formato PricePeriods
-      const periods: PricePeriods['periods'] = [];
-      const monthsByPeriod = new Map<string, Array<{ ym: string; price: number }>>();
-      
-      Object.entries(parsed).forEach(([ym, price]) => {
-        if (typeof price === 'number' && Number.isFinite(price)) {
-          const yearMonth = ym.slice(0, 7); // YYYY-MM
-          if (!monthsByPeriod.has(yearMonth)) {
-            monthsByPeriod.set(yearMonth, []);
-          }
-          monthsByPeriod.get(yearMonth)!.push({ ym, price });
-        }
-      });
 
-      // Agrupa meses consecutivos em períodos
-      const sortedMonths = Array.from(monthsByPeriod.keys()).sort();
-      let currentPeriod: { start: string; end: string; months: Array<{ ym: string; price: number }> } | null = null;
-
-      sortedMonths.forEach((yearMonth) => {
-        const months = monthsByPeriod.get(yearMonth)!;
-        if (!currentPeriod) {
-          currentPeriod = { start: yearMonth, end: yearMonth, months };
-        } else {
-          // Verifica se é mês consecutivo
-          const prevDate = new Date(currentPeriod.end + '-01');
-          const currentDate = new Date(yearMonth + '-01');
-          const diffMonths = (currentDate.getFullYear() - prevDate.getFullYear()) * 12 + (currentDate.getMonth() - prevDate.getMonth());
-          
-          if (diffMonths === 1) {
-            // É consecutivo, adiciona ao período atual
-            currentPeriod.end = yearMonth;
-            currentPeriod.months.push(...months);
-          } else {
-            // Não é consecutivo, cria novo período
-            periods.push({
-              id: `period-${periods.length + 1}`,
-              start: currentPeriod.start,
-              end: currentPeriod.end,
-              months: currentPeriod.months,
-            });
-            currentPeriod = { start: yearMonth, end: yearMonth, months };
-          }
-        }
-      });
-
-      if (currentPeriod) {
-        const snapshot = currentPeriod as {
-          start: string;
-          end: string;
-          months: Array<{ ym: string; price: number }>;
-        };
-        periods.push({
-          id: `period-${periods.length + 1}`,
-          start: snapshot.start,
-          end: snapshot.end,
-          months: snapshot.months,
-        });
-      }
-
-      console.log('[ContractDetail] parsePricePeriods - Conversão para periods concluída:', periods.length, 'períodos');
-      return { periods };
-    }
-    
-    console.log('[ContractDetail] parsePricePeriods - Formato não reconhecido, retornando null');
-    return null;
-  } catch (error) {
-    console.warn('[ContractDetail] Falha ao parsear price_periods:', error, 'Input:', pricePeriodsJson);
-    return null;
-  }
+  return { periods: normalizedPeriods } satisfies PricePeriods;
 };
 
 export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods }) => {
@@ -280,6 +216,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   
   const { updateContract } = useContracts();
   const [isPriceModalOpen, setIsPriceModalOpen] = React.useState(false);
+  const [isEditingFlatPrice, setIsEditingFlatPrice] = React.useState(false);
+  const [isSavingFlatPrice, setIsSavingFlatPrice] = React.useState(false);
+  const [flatPriceInputValue, setFlatPriceInputValue] = React.useState('');
   
   // Estado para edição de campos
   const [editingField, setEditingField] = React.useState<string | null>(null);
@@ -333,10 +272,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   
   const [pricePeriods, setPricePeriods] = React.useState<PricePeriods | null>(() => {
     const { pricePeriodsJson } = extractPeriodPrice();
-    console.log('[ContractDetail] useState inicial - pricePeriodsJson recebido:', pricePeriodsJson);
-    const parsed = parsePricePeriods(pricePeriodsJson);
-    console.log('[ContractDetail] useState inicial - pricePeriods parseado:', parsed);
-    console.log('[ContractDetail] useState inicial - pricePeriods tem períodos?', parsed?.periods?.length);
+    const parsed = toPricePeriods(pricePeriodsJson);
+    console.log('[ContractDetail] useState inicial - pricePeriods parseado via util:', parsed);
     return parsed;
   });
 
@@ -348,9 +285,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
     console.log('[ContractDetail] useEffect - pricePeriodsJson:', pricePeriodsJson);
     console.log('[ContractDetail] useEffect - flatPrice:', flatPrice);
     console.log('[ContractDetail] useEffect - flatYears:', flatYears);
-    const parsed = parsePricePeriods(pricePeriodsJson);
-    console.log('[ContractDetail] useEffect - Novo pricePeriods parseado:', parsed);
-    console.log('[ContractDetail] useEffect - Novo pricePeriods tem períodos?', parsed?.periods?.length);
+    const parsed = toPricePeriods(pricePeriodsJson);
+    console.log('[ContractDetail] useEffect - Novo pricePeriods parseado via util:', parsed);
     setPricePeriods(parsed);
   }, [contrato, extractPeriodPrice]);
 
@@ -386,6 +322,88 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
     }, 0);
   };
 
+  const normalizeLabel = (label: string) =>
+    label
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase();
+
+  const handleStartEditingFlatPrice = () => {
+    const formattedValue =
+      typeof flatPrice === 'number' && Number.isFinite(flatPrice)
+        ? flatPrice.toString().replace('.', ',')
+        : '';
+    setFlatPriceInputValue(formattedValue);
+    setIsEditingFlatPrice(true);
+  };
+
+  const handleCancelEditingFlatPrice = () => {
+    setIsEditingFlatPrice(false);
+    setFlatPriceInputValue('');
+  };
+
+  const handleSaveFlatPrice = async () => {
+    if (!contrato || isSavingFlatPrice) return;
+
+    const numericValueRaw = flatPriceInputValue.replace(/[^0-9,.-]/g, '').replace(/\.(?=.*\.)/g, '');
+    const normalizedValue = numericValueRaw.replace(/\./g, '').replace(',', '.');
+    const priceNum = Number(normalizedValue);
+
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      alert('Informe um preço flat válido.');
+      return;
+    }
+
+    setIsSavingFlatPrice(true);
+    try {
+      await updateContract(contrato.id, (current) => {
+        const updated = { ...current };
+
+        const existingPeriodPrice = (updated as {
+          periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+        }).periodPrice;
+
+        (updated as {
+          periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+        }).periodPrice = {
+          price_periods: existingPeriodPrice?.price_periods ?? null,
+          flat_price_mwh: priceNum,
+          flat_years: existingPeriodPrice?.flat_years ?? null,
+        };
+
+        (updated as { flatPrice?: number | null }).flatPrice = priceNum;
+
+        const formattedDisplay = formatCurrencyBRL(priceNum);
+        const flatLabelIndex = updated.dadosContrato.findIndex((field) => {
+          const normalized = normalizeLabel(field.label);
+          return normalized.includes('preco') && normalized.includes('flat');
+        });
+
+        if (flatLabelIndex >= 0) {
+          updated.dadosContrato[flatLabelIndex] = {
+            ...updated.dadosContrato[flatLabelIndex],
+            value: formattedDisplay,
+          };
+        } else {
+          updated.dadosContrato = [
+            ...updated.dadosContrato,
+            { label: 'Preço Flat', value: formattedDisplay },
+          ];
+        }
+
+        return updated;
+      });
+
+      setIsEditingFlatPrice(false);
+      setFlatPriceInputValue('');
+    } catch (error) {
+      console.error('[ContractDetail] Falha ao salvar preço flat:', error);
+      alert('Não foi possível salvar o preço flat. Tente novamente.');
+    } finally {
+      setIsSavingFlatPrice(false);
+    }
+  };
+
   // Função para cancelar edição
   const handleCancelEditing = () => {
     setEditingField(null);
@@ -406,16 +424,31 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
         }
         
         // Mapeia campos específicos para atualizar também no contrato
-        const normalizedLabel = fieldLabel
-          .normalize('NFD')
-          .replace(/\p{Diacritic}/gu, '')
-          .toLowerCase();
+        const normalizedLabel = normalizeLabel(fieldLabel);
         if (normalizedLabel.includes('volume') && normalizedLabel.includes('contratado')) {
           const volumeNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           if (Number.isFinite(volumeNum)) {
             (updated as { contractedVolume?: number }).contractedVolume = volumeNum;
           }
-        } else if (normalizedLabel.includes('preço') && normalizedLabel.includes('mwh')) {
+        } else if (normalizedLabel.includes('preco') && normalizedLabel.includes('flat')) {
+          const priceNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
+          if (Number.isFinite(priceNum)) {
+            const existingPeriodPrice = (updated as {
+              periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+            }).periodPrice;
+            (updated as {
+              periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+            }).periodPrice = {
+              price_periods: existingPeriodPrice?.price_periods ?? null,
+              flat_price_mwh: priceNum,
+              flat_years: existingPeriodPrice?.flat_years ?? null,
+            };
+            (updated as { flatPrice?: number | null }).flatPrice = priceNum;
+            updated.dadosContrato[fieldIndex].value = formatCurrencyBRL(priceNum);
+          } else {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
+        } else if (normalizedLabel.includes('preco') && normalizedLabel.includes('mwh')) {
           const priceNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           if (Number.isFinite(priceNum)) {
             updated.precoMedio = priceNum;
@@ -706,18 +739,76 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
             </div>
           ) : flatPrice && Number.isFinite(flatPrice) ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Preço Flat</h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {flatYears && Number.isFinite(flatYears) ? `${flatYears} ${flatYears === 1 ? 'ano' : 'anos'}` : 'Período indefinido'}
+              {isEditingFlatPrice ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Editar preço flat</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Informe o novo valor em R$/MWh para o preço flat aplicado ao contrato.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="relative max-w-xs flex-1">
+                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={flatPriceInputValue}
+                        onChange={(event) => setFlatPriceInputValue(event.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 pl-7 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveFlatPrice}
+                        disabled={isSavingFlatPrice}
+                        className="inline-flex items-center gap-2 rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSavingFlatPrice ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelEditingFlatPrice}
+                        disabled={isSavingFlatPrice}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-600 shadow-sm transition hover:border-gray-400 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Valor atual: <span className="font-semibold text-gray-900">{formatCurrencyBRL(flatPrice)}</span>
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-semibold text-gray-500">Preço</p>
-                  <p className="text-lg font-bold text-gray-900">{formatCurrencyBRL(flatPrice)}</p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Preço Flat</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {flatYears && Number.isFinite(flatYears) ? `${flatYears} ${flatYears === 1 ? 'ano' : 'anos'}` : 'Período indefinido'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-gray-500">Preço</p>
+                      <p className="text-lg font-bold text-gray-900">{formatCurrencyBRL(flatPrice)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleStartEditingFlatPrice}
+                      className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
+                    >
+                      <PencilLine size={16} /> Editar preço flat
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
