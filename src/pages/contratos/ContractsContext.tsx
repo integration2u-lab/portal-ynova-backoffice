@@ -248,20 +248,32 @@ const normalizeResumo = (value: unknown): ContractMock['resumoConformidades'] =>
 };
 
 const formatPercentValue = (value: unknown): string => {
-  const isNumberInput = typeof value === 'number';
-  const numeric = Number(typeof value === 'string' ? value.replace(',', '.') : value);
+  const text = normalizeString(value);
+  if (!text) return '';
+
+  const sanitized = text.replace(/\s+/g, '');
+  const hasPercentSymbol = sanitized.includes('%');
+  const numeric = Number(sanitized.replace(/%/g, '').replace(',', '.'));
+
   if (!Number.isFinite(numeric)) {
-    const text = normalizeString(value);
-    if (!text) return '';
-    return text.includes('%') ? text : `${text}%`;
+    return text;
   }
 
-  let ratio: number;
-  if (isNumberInput) {
-    ratio = Math.abs(numeric) > 10 ? numeric / 100 : numeric;
-  } else {
-    ratio = Math.abs(numeric) <= 1 ? numeric : numeric / 100;
+  if (hasPercentSymbol) {
+    const ratioFromPercent = numeric / 100;
+    try {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'percent',
+        maximumFractionDigits: 2,
+      }).format(ratioFromPercent);
+    } catch {
+      return `${numeric.toFixed(2)}%`;
+    }
   }
+
+  const absNumeric = Math.abs(numeric);
+  const ratio = absNumeric <= 2 ? numeric : numeric / 100;
+
   try {
     return new Intl.NumberFormat('pt-BR', {
       style: 'percent',
@@ -682,7 +694,6 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 
     const supplierDisplay = supplier || 'Não informado';
     ensureField('Fornecedor', supplierDisplay);
-    ensureField('Proinfa', formatProinfa(proinfa));
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
     ensureField('Contrato', normalizeString(rawCodigo));
@@ -694,23 +705,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         .filter(Boolean)
         .join(' · ')
     );
-    ensureField('Ciclo de faturamento', normalizeString(ciclo) || 'Não informado');
     ensureField('Status', status);
     ensureField('Segmento', normalizeString(rawSegmento));
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
     ensureField('Fonte de energia', fonteValue || 'Não informado');
     ensureField('Modalidade', normalizeString((item as { contracted_modality?: unknown }).contracted_modality) || 'Não informado');
-    ensureField('Preço spot referência', normalizeString((item as { spot_price_ref_mwh?: unknown }).spot_price_ref_mwh) || 'Não informado');
     ensureField('Email de balanço energético', balanceEmailValue || 'Não informado');
     ensureField('Email de faturamento', billingEmailValue || 'Não informado');
-    
-    // Add compliance fields
-    ensureField('Conformidade consumo', normalizeString((item as { compliance_consumption?: unknown }).compliance_consumption) || 'Não informado');
-    ensureField('Conformidade NF', normalizeString((item as { compliance_nf?: unknown }).compliance_nf) || 'Não informado');
-    ensureField('Conformidade fatura', normalizeString((item as { compliance_invoice?: unknown }).compliance_invoice) || 'Não informado');
-    ensureField('Conformidade encargos', normalizeString((item as { compliance_charges?: unknown }).compliance_charges) || 'Não informado');
-    ensureField('Conformidade geral', normalizeString((item as { compliance_overall?: unknown }).compliance_overall) || 'Não informado');
-    
+
     if (adjusted !== undefined) {
       ensureField('Ajustado', adjusted ? 'Sim' : 'Não');
     }

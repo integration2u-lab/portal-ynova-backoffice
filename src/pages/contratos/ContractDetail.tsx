@@ -427,6 +427,47 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
             };
             (updated as { flatPrice?: number | null }).flatPrice = priceNum;
           }
+        } else if (normalizedLabel.includes('flex') && normalizedLabel.includes('limite')) {
+          const matches = fieldInputValue.match(/-?\d+(?:[.,]\d+)?/g) ?? [];
+
+          const toPercentString = (value?: string): string | null => {
+            if (!value) return null;
+            const numeric = Number(value.replace(',', '.'));
+            if (!Number.isFinite(numeric)) return null;
+            return `${numeric}%`;
+          };
+
+          const formatDisplay = (raw: string | null): string | null => {
+            if (!raw) return null;
+            const numeric = Number(raw.replace('%', ''));
+            if (!Number.isFinite(numeric)) return raw;
+            const formatted = numeric.toString().replace('.', ',');
+            return `${formatted}%`;
+          };
+
+          const flexPercent = toPercentString(matches[0]);
+          const lowerPercent = toPercentString(matches[1]);
+          const upperPercent = toPercentString(matches[2]);
+
+          if (flexPercent) {
+            (updated as { flex?: string }).flex = flexPercent;
+          }
+          if (lowerPercent) {
+            (updated as { limiteInferior?: string }).limiteInferior = lowerPercent;
+          }
+          if (upperPercent) {
+            (updated as { limiteSuperior?: string }).limiteSuperior = upperPercent;
+          }
+
+          const displayParts = [flexPercent, lowerPercent, upperPercent]
+            .map((value) => formatDisplay(value))
+            .filter((value): value is string => Boolean(value));
+
+          if (displayParts.length > 0) {
+            updated.dadosContrato[fieldIndex].value = displayParts.join(' · ');
+          } else {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('fornecedor')) {
           updated.fornecedor = fieldInputValue.trim();
         } else if (normalizedLabel.includes('status')) {
@@ -527,9 +568,35 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
           {contrato.dadosContrato.map((field, index) => {
             const normalizedLabel = field.label.toLowerCase();
+            const normalizedLabelWithoutDiacritics = normalizedLabel
+              .normalize('NFD')
+              .replace(/\p{Diacritic}/gu, '');
             const isEditing = editingField === field.label;
             const isSaving = savingField === field.label;
             
+            const hiddenLabelFragments = [
+              'proinfa',
+              'preço spot referência',
+              'preco spot referencia',
+              'conformidade consumo',
+              'conformidade nf',
+              'conformidade fatura',
+              'conformidade encargos',
+              'conformidade geral',
+              'ciclo de faturamento',
+              'ciclo faturamento',
+            ];
+
+            if (
+              hiddenLabelFragments.some(
+                (fragment) =>
+                  normalizedLabel.includes(fragment) ||
+                  normalizedLabelWithoutDiacritics.includes(fragment)
+              )
+            ) {
+              return null;
+            }
+
             // Determina o tipo de input baseado no label
             let inputType: 'text' | 'number' | 'select' = 'text';
             let selectOptions: Array<{ value: string; label: string }> | undefined;
