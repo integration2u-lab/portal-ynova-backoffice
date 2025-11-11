@@ -73,13 +73,14 @@ const buildDraftFromPeriod = (period: PricePeriods['periods'][number]): PeriodDr
 const buildEmptyDraft = (): PeriodDraft => {
   const now = new Date();
   const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const start = `${year}-01`;
+  const end = `${year}-12`;
   return {
     id: ensureRandomId(),
-    start: `${year}-${month}`,
-    end: `${year}-${month}`,
+    start,
+    end,
     defaultPrice: '',
-    months: monthsBetween(`${year}-${month}`, `${year}-${month}`).map((ym) => ({ ym, value: '' })),
+    months: monthsBetween(start, end).map((ym) => ({ ym, value: '' })),
   };
 };
 
@@ -286,7 +287,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 py-6">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-6 sm:items-center">
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
           <div>
@@ -305,8 +306,8 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex h-full flex-col">
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+        <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+          <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
             {isSaved && (
               <div className="mb-6 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200">
                 <div className="flex items-center gap-2">
