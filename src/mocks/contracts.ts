@@ -64,9 +64,8 @@ export type ContractVolumeByYear = {
 export type ContractMock = {
   id: string;
   codigo: string;
-  razaoSocial?: string;
-  cliente: string;
   razaoSocial?: string; // Razão social do cliente (diferente do nome interno)
+  cliente: string;
   cnpj: string;
   segmento: string;
   contato: string;
@@ -82,6 +81,8 @@ export type ContractMock = {
   fornecedor: string;
   proinfa?: number | null;
   cicloFaturamento: string;
+  createdAt?: string;
+  updatedAt?: string;
   periodos: string[]; // YYYY-MM
   // E-mails atrelados ao contrato
   balanceEmail?: string; // E-mail do balanço (para envio de relatórios)

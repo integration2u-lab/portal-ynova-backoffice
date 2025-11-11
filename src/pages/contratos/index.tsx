@@ -124,7 +124,40 @@ export default function ContratosPage() {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const numericSearch = normalizedSearch.replace(/\D/g, '');
 
-    const filtrados = contracts.filter((contrato) => {
+    const parseDateSafe = (value?: string | null): number | null => {
+      if (!value) return null;
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    const toTimestamp = (contrato: ContractMock): number => {
+      const directCreated = parseDateSafe(contrato.createdAt);
+      if (directCreated !== null) return directCreated;
+
+      const directUpdated = parseDateSafe(contrato.updatedAt);
+      if (directUpdated !== null) return directUpdated;
+
+      const createdField = contrato.dadosContrato.find(
+        (field) => field.label && field.label.toLowerCase().includes('criado')
+      );
+      const createdFromField = parseDateSafe(createdField?.value);
+      if (createdFromField !== null) return createdFromField;
+
+      return Number.MIN_SAFE_INTEGER;
+    };
+
+    const sortedContracts = contracts
+      .map((contrato, originalIndex) => ({ contrato, originalIndex }))
+      .sort((a, b) => {
+        const timeDiff = toTimestamp(b.contrato) - toTimestamp(a.contrato);
+        if (timeDiff !== 0) {
+          return timeDiff;
+        }
+        return b.originalIndex - a.originalIndex;
+      })
+      .map(({ contrato }) => contrato);
+
+    const filtrados = sortedContracts.filter((contrato) => {
       if (!normalizedSearch) return true;
 
       const codigo = contrato.codigo.toLowerCase();

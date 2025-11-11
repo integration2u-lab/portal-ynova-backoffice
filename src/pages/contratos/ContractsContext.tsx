@@ -653,6 +653,17 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         (item as { end_date?: unknown }).end_date
     );
 
+    const createdAtRaw =
+      (item as { created_at?: unknown }).created_at ??
+      (item as { createdAt?: unknown }).createdAt ??
+      (item as { created?: unknown }).created;
+    const updatedAtRaw =
+      (item as { updated_at?: unknown }).updated_at ??
+      (item as { updatedAt?: unknown }).updatedAt ??
+      (item as { updated?: unknown }).updated;
+    const createdAt = normalizeIsoDate(createdAtRaw);
+    const updatedAt = normalizeIsoDate(updatedAtRaw);
+
     const periodosBase = normalizePeriodos(
       (item as { periodos?: unknown }).periodos ??
         (item as { meses?: unknown }).meses ??
@@ -806,8 +817,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     }
     ensureField('Início da vigência', inicioVigencia);
     ensureField('Fim da vigência', fimVigencia);
-    ensureField('Criado em', normalizeIsoDate((item as { created_at?: unknown }).created_at));
-    ensureField('Atualizado em', normalizeIsoDate((item as { updated_at?: unknown }).updated_at));
+    ensureField('Criado em', createdAt);
+    ensureField('Atualizado em', updatedAt);
 
     const kpisBase: ContractMock['kpis'] = [
       ...normalizeKpis((item as { kpis?: unknown; indicadores?: unknown }).kpis ?? (item as { indicadores?: unknown }).indicadores),
@@ -946,6 +957,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       obrigacoes: normalizeObrigacoes((item as { obrigacoes?: unknown }).obrigacoes),
       analises: normalizeAnalises((item as { analises?: unknown; analisesConformidade?: unknown }).analises ?? (item as { analisesConformidade?: unknown }).analisesConformidade),
       faturas: normalizeFaturas((item as { faturas?: unknown; invoices?: unknown }).faturas ?? (item as { invoices?: unknown }).invoices),
+      createdAt: createdAt || undefined,
+      updatedAt: updatedAt || undefined,
     } satisfies ContractMock & { periodPrice: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null } };
   });
 };
@@ -1578,6 +1591,17 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     const draft = cloneContract(contract);
     try {
       const saved = await createContractInApi(draft);
+      const savedWithTimestamps = (() => {
+        if (saved.createdAt && saved.updatedAt) {
+          return saved;
+        }
+        const nowIso = new Date().toISOString();
+        return {
+          ...saved,
+          createdAt: saved.createdAt ?? saved.updatedAt ?? nowIso,
+          updatedAt: saved.updatedAt ?? saved.createdAt ?? nowIso,
+        };
+      })();
       setContracts((prev) => {
         const next: ContractMock[] = [];
         const seen = new Set<string>();
@@ -1591,13 +1615,13 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
           next.push(cloneContract(item));
         };
 
-        register(saved);
+        register(savedWithTimestamps);
         prev.forEach(register);
 
         return next;
       });
       setError(null);
-      return saved;
+      return savedWithTimestamps;
     } catch (apiError) {
       console.error('[ContractsProvider] Falha ao criar contrato na API.', apiError);
       const message =
