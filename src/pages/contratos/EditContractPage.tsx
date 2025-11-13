@@ -15,10 +15,39 @@ export default function EditContractPage() {
     async (periods: PricePeriods) => {
       if (!contrato || !id) return;
       try {
-        await updateContract(id, (current) => ({
-          ...current,
-          pricePeriods: periods,
-        }));
+        await updateContract(id, (current) => {
+          const hasPeriodsData = periods.periods.some((period) => {
+            const hasMonths = Array.isArray(period.months)
+              ? period.months.some((month) => typeof month.price === 'number' && Number.isFinite(month.price))
+              : false;
+            const hasDefault = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
+            return hasMonths || hasDefault;
+          });
+
+          const serialized = hasPeriodsData ? JSON.stringify(periods) : null;
+
+          const existingPeriodPrice = (current as {
+            periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+          }).periodPrice;
+
+          const fallbackFlatPrice = existingPeriodPrice?.flat_price_mwh ?? (current as { flatPrice?: number | null }).flatPrice ?? current.precoMedio ?? null;
+          const fallbackFlatYears = existingPeriodPrice?.flat_years ?? (current as { flatYears?: number | null }).flatYears ?? null;
+
+          const resolvedFlatPrice = hasPeriodsData ? null : fallbackFlatPrice;
+          const resolvedFlatYears = hasPeriodsData ? null : fallbackFlatYears;
+
+          return {
+            ...current,
+            pricePeriods: periods,
+            flatPrice: resolvedFlatPrice,
+            flatYears: resolvedFlatYears,
+            periodPrice: {
+              price_periods: serialized,
+              flat_price_mwh: resolvedFlatPrice,
+              flat_years: resolvedFlatYears,
+            },
+          };
+        });
       } catch (error) {
         console.error('[EditContractPage] Falha ao atualizar preços por período:', error);
         throw error;

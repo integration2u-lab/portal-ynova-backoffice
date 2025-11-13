@@ -13,7 +13,6 @@ type FormState = {
   energy_source: string;
   contracted_modality: string;
   supplier: string;
-  proinfa_contribution: string;
   start_date: string;
   end_date: string;
   billing_cycle: string;
@@ -30,7 +29,6 @@ const initialFormState: FormState = {
   energy_source: '',
   contracted_modality: '',
   supplier: '',
-  proinfa_contribution: '',
   start_date: '',
   end_date: '',
   billing_cycle: '',
@@ -176,13 +174,9 @@ export default function ContractsPage() {
     setFormError(null);
     setIsSubmitting(true);
     try {
-      const proinfaText = form.proinfa_contribution.trim();
-      const proinfaParsed = proinfaText ? Number(proinfaText.replace(',', '.')) : null;
-      const proinfaValue = proinfaParsed !== null && !Number.isNaN(proinfaParsed) ? proinfaParsed : null;
       const payload = {
         ...form,
         supplier: form.supplier.trim() || null,
-        proinfa_contribution: proinfaValue,
         groupName: 'default',
         start_date: ensureIsoDate(form.start_date),
         end_date: ensureIsoDate(form.end_date),
@@ -302,18 +296,6 @@ export default function ContractsPage() {
               onChange={handleFormChange('supplier')}
               className="border rounded px-2 py-1"
               placeholder="Ex: Bolt"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span>Proinfa</span>
-            <input
-              type="number"
-              step="0.001"
-              min="0"
-              value={form.proinfa_contribution}
-              onChange={handleFormChange('proinfa_contribution')}
-              className="border rounded px-2 py-1"
-              placeholder="Ex: 0.219"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">

@@ -54,6 +54,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
   const [logoError, setLogoError] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const viewportScaleRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -63,6 +64,66 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    const BREAKPOINT_WIDTH = 1536;
+    const MIN_SCALE_WIDTH = 1024;
+    const TARGET_SCALE = 0.75;
+    const supportsZoom = 'zoom' in document.body.style;
+
+    const applyScale = (scale: number) => {
+      const body = document.body;
+
+      if (scale === 1) {
+        if (viewportScaleRef.current !== 1) {
+          root.style.transform = '';
+          root.style.transformOrigin = '';
+          root.style.width = '';
+          body.style.zoom = '';
+          body.style.overflowX = '';
+          viewportScaleRef.current = 1;
+        }
+        return;
+      }
+
+      if (viewportScaleRef.current !== scale) {
+        if (supportsZoom) {
+          body.style.zoom = `${scale * 100}%`;
+          root.style.transform = '';
+          root.style.transformOrigin = '';
+          root.style.width = '';
+          body.style.overflowX = '';
+        } else {
+          body.style.zoom = '';
+          root.style.transform = `scale(${scale})`;
+          root.style.transformOrigin = 'top center';
+          root.style.width = `${100 / scale}%`;
+          body.style.overflowX = 'hidden';
+        }
+
+        viewportScaleRef.current = scale;
+      }
+    };
+
+    const updateScale = () => {
+      const width = window.innerWidth;
+      const shouldScaleDown = width <= BREAKPOINT_WIDTH && width >= MIN_SCALE_WIDTH;
+      applyScale(shouldScaleDown ? TARGET_SCALE : 1);
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    window.addEventListener('orientationchange', updateScale);
+
+    return () => {
+      applyScale(1);
+      window.removeEventListener('resize', updateScale);
+      window.removeEventListener('orientationchange', updateScale);
+    };
   }, []);
 
   const user = mockUser;
@@ -98,7 +159,7 @@ export default function Layout({ onLogout, theme, toggleTheme }: LayoutProps) {
               <img
                 src="https://i.imgur.com/eFBlDDM.png"
                 alt="YNOVA"
-                className="h-40 md:h-40 w-auto"
+                className="h-12 w-auto sm:h-16 lg:h-20 xl:h-28 2xl:h-36"
                 loading="eager"
                 onError={() => setLogoError(true)}
               />

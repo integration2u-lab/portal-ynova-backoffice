@@ -13,14 +13,34 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
   const [password, setPassword] = useState('');
   const [tab, setTab] = useState<'login' | 'register' | 'confirm'>('login');
 
+  const [regFirstName, setRegFirstName] = useState('');
+  const [regLastName, setRegLastName] = useState('');
+  const [regBirthdate, setRegBirthdate] = useState('');
+  const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
-  const [regCnpj, setRegCnpj] = useState('');
   const [regError, setRegError] = useState('');
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!regFirstName.trim()) {
+      setRegError('Informe seu nome.');
+      return;
+    }
+    if (!regLastName.trim()) {
+      setRegError('Informe seu sobrenome.');
+      return;
+    }
+    if (!regBirthdate) {
+      setRegError('Informe sua data de nascimento.');
+      return;
+    }
+    const phoneDigits = regPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      setRegError('Informe um telefone válido.');
+      return;
+    }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(regEmail)) {
       setRegError('E-mail invalido');
@@ -89,6 +109,44 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
 
   const renderRegister = () => (
     <form onSubmit={handleRegister} className="space-y-4" noValidate>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input
+          type="text"
+          placeholder="Nome"
+          value={regFirstName}
+          onChange={(e) => setRegFirstName(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          required
+        />
+        <input
+          type="text"
+          placeholder="Sobrenome"
+          value={regLastName}
+          onChange={(e) => setRegLastName(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          required
+        />
+      </div>
+      <div>
+        <input
+          type="date"
+          placeholder="Data de nascimento"
+          value={regBirthdate}
+          onChange={(e) => setRegBirthdate(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          required
+        />
+      </div>
+      <div>
+        <input
+          type="tel"
+          placeholder="Telefone"
+          value={regPhone}
+          onChange={(e) => setRegPhone(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          required
+        />
+      </div>
       <div>
         <input
           type="email"
@@ -117,15 +175,6 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
           onChange={(e) => setRegConfirm(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           required
-        />
-      </div>
-      <div>
-        <input
-          type="text"
-          placeholder="CNPJ (opcional)"
-          value={regCnpj}
-          onChange={(e) => setRegCnpj(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-yn-orange dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
         />
       </div>
       {regError && <p className="text-red-600 text-sm">{regError}</p>}
