@@ -1,7 +1,7 @@
 import React from 'react';
-import { MailCheck, ShieldAlert, Loader2, RotateCcw } from 'lucide-react';
+import { MailCheck, ShieldAlert, Loader2, RotateCcw, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { energyBalanceRequest } from '../../services/energyBalanceApi';
+import { energyBalanceRequest, triggerBalanceEmailNow } from '../../services/energyBalanceApi';
 import {
   convertDisplayRowToEnergyBalancePayload,
   type DisplayEnergyBalanceRow,
@@ -89,7 +89,8 @@ export default function EmailDispatchApprovalCard({
   rawData,
   onSuccess,
 }: EmailDispatchApprovalCardProps) {
-  const [pendingAction, setPendingAction] = React.useState<'release' | 'revert' | null>(null);
+  const [pendingAction, setPendingAction] = React.useState<'release' | 'revert' | 'send-now' | null>(null);
+  const [showSendNowConfirmation, setShowSendNowConfirmation] = React.useState(false);
 
   const alreadySent = React.useMemo(() => {
     if (rawData && typeof rawData === 'object') {
@@ -121,6 +122,32 @@ export default function EmailDispatchApprovalCard({
     const parsed = toBooleanFlag(value);
     if (parsed === null) return null;
     return parsed ? 'Sim' : 'Nao';
+  };
+
+  const getEmailValue = (): string | null => {
+    // Tentar obter o email do rawData primeiro
+    if (rawData && typeof rawData === 'object') {
+      const emailFromRaw = (rawData as Record<string, unknown>).email;
+      if (typeof emailFromRaw === 'string' && emailFromRaw.trim() !== '') {
+        return emailFromRaw.trim();
+      }
+    }
+    // Tentar obter do row
+    if (row?.email && typeof row.email === 'string' && row.email.trim() !== '') {
+      const emailValue = row.email.trim();
+      // Verificar se não é um valor placeholder
+      if (emailValue !== '-' && emailValue !== 'Não informado' && emailValue.toLowerCase() !== 'nao informado') {
+        return emailValue;
+      }
+    }
+    return null;
+  };
+
+  const isValidEmail = (email: string): boolean => {
+    if (!email || email.trim() === '') return false;
+    // Regex básico para validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email.trim());
   };
 
   const handleDispatch = async (action: 'release' | 'revert') => {
@@ -179,6 +206,104 @@ export default function EmailDispatchApprovalCard({
 
   const handleSubmit = () => void handleDispatch('release');
   const handleRevert = () => void handleDispatch('revert');
+
+  const handleSendNowClick = () => {
+    if (!balanceId) {
+      toast.error('Nao foi possivel identificar o balanço para envio imediato.');
+      return;
+    }
+
+    // Validar se o email existe
+    const emailValue = getEmailValue();
+    if (!emailValue) {
+      toast.error('Email não encontrado. Por favor, adicione um email válido antes de enviar.');
+      return;
+    }
+
+    if (!isValidEmail(emailValue)) {
+      toast.error('Email inválido. Por favor, verifique o email cadastrado antes de enviar.');
+      return;
+    }
+
+    setShowSendNowConfirmation(true);
+  };
+
+  const handleConfirmSendNow = async () => {
+    if (!balanceId) {
+      toast.error('Nao foi possivel identificar o balanço para envio imediato.');
+      setShowSendNowConfirmation(false);
+      return;
+    }
+
+    if (!row) {
+      toast.error('Nao foi possivel identificar o registro para envio.');
+      setShowSendNowConfirmation(false);
+      return;
+    }
+
+    // Validar novamente se o email existe antes de enviar
+    const emailValue = getEmailValue();
+    if (!emailValue) {
+      toast.error('Email não encontrado. Não é possível enviar o email sem um endereço válido cadastrado.');
+      setShowSendNowConfirmation(false);
+      return;
+    }
+
+    if (!isValidEmail(emailValue)) {
+      toast.error('Email inválido. Não é possível enviar o email sem um endereço válido cadastrado.');
+      setShowSendNowConfirmation(false);
+      return;
+    }
+
+    setPendingAction('send-now');
+    try {
+      // Enviar para o webhook
+      await triggerBalanceEmailNow(balanceId);
+      
+      // Atualizar sent_ok para true no banco
+      const payload = convertDisplayRowToEnergyBalancePayload(row, rawData ?? undefined);
+      payload.sentOk = true;
+
+      const response = await energyBalanceRequest(`/energy-balance/${balanceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      toast.success('Email enviado com sucesso!');
+      
+      const responseRecord =
+        response && typeof response === 'object' ? (response as Record<string, unknown>) : undefined;
+      const nextEnvioOk =
+        toDisplayBoolean(
+          responseRecord?.sentOk ?? responseRecord?.envioOk ?? responseRecord?.sent_ok ?? responseRecord?.envio_ok,
+        ) ?? 'Sim';
+      const responseSendDate = extractSendDate(responseRecord);
+      const updatedRow: DisplayEnergyBalanceRow = {
+        ...row,
+        envioOk: nextEnvioOk,
+        disparo: responseSendDate ?? row.disparo,
+      };
+      onSuccess?.(updatedRow, responseRecord);
+    } catch (error) {
+      console.error('[EmailDispatchApprovalCard] Falha ao enviar email imediatamente', error);
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Nao foi possivel enviar o email agora. Tente novamente.';
+      toast.error(message);
+    } finally {
+      setPendingAction(null);
+      setShowSendNowConfirmation(false);
+    }
+  };
+
+  const handleCancelSendNow = () => {
+    setShowSendNowConfirmation(false);
+  };
 
   const isSubmitting = pendingAction !== null;
   const badgeLabel = alreadySent ? 'Email liberado' : 'Open para liberar';
@@ -248,10 +373,68 @@ export default function EmailDispatchApprovalCard({
             </>
           )}
         </button>
+        <button
+          type="button"
+          onClick={handleSendNowClick}
+          disabled={isSubmitting || !balanceId}
+          className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold shadow-sm transition ${
+            isSubmitting || !balanceId
+              ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+              : 'border-blue-200 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-300'
+          } ${pendingAction === 'send-now' ? 'opacity-70' : ''}`}
+        >
+          {pendingAction === 'send-now' ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Enviando...
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" /> Enviar email agora
+            </>
+          )}
+        </button>
         <p className="text-xs font-semibold text-gray-500">
           O disparo atualizara o status deste balanco para enviado.
         </p>
       </div>
+      {showSendNowConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4 py-6">
+          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">Confirmar envio agora</h3>
+            <p className="mt-2 text-sm font-medium text-gray-700">
+              Deseja enviar o email deste balanço agora? Essa ação notificará o cliente imediatamente.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCancelSendNow}
+                disabled={pendingAction === 'send-now'}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-800 disabled:opacity-50"
+              >
+                Não
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSendNow}
+                disabled={pendingAction === 'send-now'}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
+              >
+                {pendingAction === 'send-now' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Sim, enviar agora
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

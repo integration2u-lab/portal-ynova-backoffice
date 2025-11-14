@@ -201,7 +201,7 @@ const monthColumns: EditableMonthColumn[] = [
   {
     key: 'reajustado',
     label: 'Preço reajustado (R$)',
-    editable: true,
+    editable: false,
     inputType: 'text',
     minWidth: 'min-w-[160px]',
   },
@@ -212,8 +212,8 @@ const monthColumns: EditableMonthColumn[] = [
   { key: 'requisito', label: 'Requisito', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'net', label: 'NET', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'medicao', label: 'Medição', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
-  { key: 'proinfa', label: 'Proinfa', editable: true, inputType: 'text', minWidth: 'min-w-[120px]', required: true },
-  { key: 'contrato', label: 'Contrato', editable: true, inputType: 'text', minWidth: 'min-w-[140px]' },
+  { key: 'proinfa', label: 'Proinfa (MWh)', editable: true, inputType: 'text', minWidth: 'min-w-[120px]', required: true },
+  { key: 'contrato', label: 'Volume contratado (MWh)', editable: true, inputType: 'text', minWidth: 'min-w-[140px]' },
   { key: 'minimo', label: 'Mínimo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'maximo', label: 'Máximo', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
   { key: 'faturar', label: 'Faturar', editable: true, inputType: 'text', minWidth: 'min-w-[120px]' },
@@ -474,9 +474,6 @@ export default function EnergyBalanceDetailPage() {
   // const eventsControllerRef = React.useRef<AbortController | null>(null);
 
   const proinfaInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
-  const [isEditingReajustedPrice, setIsEditingReajustedPrice] = React.useState(false);
-  const [reajustedPriceInputValue, setReajustedPriceInputValue] = React.useState('');
-  const reajustedPriceInputRef = React.useRef<HTMLInputElement | null>(null);
   
   const [editingField, setEditingField] = React.useState<string | null>(null);
   const [fieldInputValue, setFieldInputValue] = React.useState('');
@@ -876,101 +873,6 @@ export default function EnergyBalanceDetailPage() {
       setDirtyRows((prev) => prev.filter((item) => item !== rowId));
     },
     [detail, rawDetail, rawMonthMap],
-  );
-
-  const handleStartEditingReajustedPrice = React.useCallback(() => {
-    if (!detail || !selectedMonthId) return;
-    
-    const primaryMonth = detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0];
-    const primaryMonthRaw = rawMonthMap[primaryMonth.id] ?? rawDetail ?? null;
-    const reajustedPriceDisplayValue = deriveReajustedDisplayValue(primaryMonth, primaryMonthRaw);
-    const currentValue = prepareEditableValue('reajustado', reajustedPriceDisplayValue);
-    
-    setReajustedPriceInputValue(currentValue);
-    setIsEditingReajustedPrice(true);
-    setTimeout(() => {
-      reajustedPriceInputRef.current?.focus();
-      reajustedPriceInputRef.current?.select();
-    }, 0);
-  }, [detail, rawMonthMap, rawDetail, selectedMonthId]);
-
-  const handleCancelEditingReajustedPrice = React.useCallback(() => {
-    setIsEditingReajustedPrice(false);
-    setReajustedPriceInputValue('');
-  }, []);
-
-  const handleSaveReajustedPrice = React.useCallback(async () => {
-    if (!detail || !selectedMonthId) return;
-
-    const primaryMonth = detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0];
-    const primaryMonthRaw = rawMonthMap[primaryMonth.id] ?? rawDetail ?? null;
-    const primaryMonthRow = editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw);
-    
-    if (!primaryMonthRow) return;
-
-    const rowId = primaryMonth.id;
-    const updatedRow: EmailRow = {
-      ...primaryMonthRow,
-      reajustado: reajustedPriceInputValue,
-    };
-
-    setSavingRowId(rowId);
-    try {
-      const originalRaw = rawMonthMap[rowId] ?? rawDetail ?? undefined;
-      const payload = convertDisplayRowToEnergyBalancePayload(updatedRow, originalRaw);
-      const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response && typeof response === 'object' && !Array.isArray(response)) {
-        const record = response as Record<string, unknown>;
-        setRawDetail((prev) => ({ ...(prev ?? {}), ...record }));
-        setRawMonthMap((prev) => ({ ...prev, [rowId]: record }));
-      } else if (originalRaw && typeof originalRaw === 'object') {
-        setRawMonthMap((prev) => ({ ...prev, [rowId]: originalRaw as Record<string, unknown> }));
-      }
-
-      setDetail((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          months: prev.months.map((month) =>
-            month.id === rowId ? mergeMonthWithEmailRow(month, updatedRow) : month,
-          ),
-        };
-      });
-
-      setEditableRows((prev) => ({
-        ...prev,
-        [rowId]: updatedRow,
-      }));
-
-      setDirtyRows((prev) => prev.filter((item) => item !== rowId));
-      setIsEditingReajustedPrice(false);
-      setReajustedPriceInputValue('');
-      toast.success('Preço reajustado atualizado com sucesso!');
-    } catch (saveError) {
-      console.error('[EnergyBalanceDetail] Erro ao salvar preço reajustado', saveError);
-      toast.error('Não foi possível salvar o preço reajustado.');
-    } finally {
-      setSavingRowId(null);
-    }
-  }, [detail, reajustedPriceInputValue, rawDetail, rawMonthMap, editableRows, selectedMonthId]);
-
-  const handleKeyDownReajustedPrice = React.useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-        void handleSaveReajustedPrice();
-      } else if (e.key === 'Escape') {
-        handleCancelEditingReajustedPrice();
-      }
-    },
-    [handleSaveReajustedPrice, handleCancelEditingReajustedPrice],
   );
 
   const handleStartEditingField = React.useCallback((field: keyof EmailRow | 'proinfaTotal', currentValue: string) => {
@@ -1402,52 +1304,13 @@ export default function EnergyBalanceDetailPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {/* Preço reajustado (R$) */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md transition hover:shadow-lg">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-600">
-                <span>Preço reajustado (R$)</span>
-                {!isEditingReajustedPrice && (
-                  <button
-                    type="button"
-                    onClick={handleStartEditingReajustedPrice}
-                    disabled={!primaryMonth || savingRowId === primaryMonth.id}
-                    className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Editar
-                  </button>
-                )}
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md">
+              <div className="text-xs font-semibold uppercase tracking-wider text-gray-600">
+                Preço reajustado (R$)
               </div>
-              {isEditingReajustedPrice ? (
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    ref={reajustedPriceInputRef}
-                    type="text"
-                    value={reajustedPriceInputValue}
-                    onChange={(e) => setReajustedPriceInputValue(e.target.value)}
-                    onKeyDown={handleKeyDownReajustedPrice}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="flex-1 rounded-lg border-2 border-yn-orange bg-white px-3 py-2 text-base font-bold text-gray-900 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 disabled:opacity-50"
-                    placeholder="0,00"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveReajustedPrice}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
-                  >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelEditingReajustedPrice}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-3 text-xl font-bold text-gray-900">{reajustedPriceDisplayValue}</div>
-              )}
+              <div className="mt-3 text-xl font-bold text-gray-900">
+                {reajustedPriceDisplayValue && reajustedPriceDisplayValue.trim() !== '' ? reajustedPriceDisplayValue : '-'}
+              </div>
             </div>
 
             {/* Preço */}
@@ -1843,7 +1706,7 @@ export default function EnergyBalanceDetailPage() {
             {/* Proinfa - Campo obrigatório */}
             <div className={`rounded-xl border p-4 shadow-md transition hover:shadow-lg ${isProinfaValueMissing(prepareEditableValue('proinfa', primaryMonthRow.proinfa)) ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'}`}>
               <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-600">
-                <span>Proinfa *</span>
+                <span>Proinfa (MWh) *</span>
                 {editingField !== 'proinfa' && (
                   <button
                     type="button"
@@ -1891,10 +1754,10 @@ export default function EnergyBalanceDetailPage() {
               )}
             </div>
 
-            {/* Contrato */}
+            {/* Volume contratado */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md transition hover:shadow-lg">
               <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-600">
-                <span>Contrato</span>
+                <span>Volume contratado (MWh)</span>
                 {editingField !== 'contrato' && (
                   <button
                     type="button"
@@ -2283,7 +2146,8 @@ export default function EnergyBalanceDetailPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+      {/* Tabela Completa - Comentada por enquanto */}
+      {/* <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
         <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-bold text-gray-900">Tabela Completa</h3>
           <p className="text-sm text-gray-600 mt-1">Visualize e edite todos os campos do balanço</p>
@@ -2450,7 +2314,7 @@ export default function EnergyBalanceDetailPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div> */}
 
       {primaryMonth ? (
         <EmailDispatchApprovalCard

@@ -331,4 +331,38 @@ export async function pollJob(
   throw new Error('Tempo limite ao aguardar o processamento do balanço energético.');
 }
 
+export async function triggerBalanceEmailNow(balanceId: string): Promise<void> {
+  if (!balanceId) {
+    throw new Error('ID do balanço energético é obrigatório para envio imediato de email.');
+  }
+
+  const url = 'https://n8n.ynovamarketplace.com/webhook/email-balanco-unico';
+  const sameOrigin = isSameOriginUrl(url);
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ balanceId }),
+      credentials: sameOrigin ? 'include' : 'omit',
+      mode: sameOrigin ? 'same-origin' : 'cors',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao conectar com o webhook';
+    throw new HttpError(message);
+  }
+
+  if (!response.ok) {
+    const body = await parseJsonSafely(response);
+    const errorMessage =
+      (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
+        ? (body as any).error
+        : undefined) || response.statusText || `HTTP ${response.status}`;
+    throw new HttpError(errorMessage, { status: response.status, body });
+  }
+}
+
 export { request as energyBalanceRequest, HttpError as EnergyBalanceHttpError };
