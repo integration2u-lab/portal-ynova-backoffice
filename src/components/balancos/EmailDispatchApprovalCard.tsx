@@ -124,23 +124,13 @@ export default function EmailDispatchApprovalCard({
     return parsed ? 'Sim' : 'Nao';
   };
 
-  const getEmailValue = (): string | null => {
-    // Tentar obter o email do rawData primeiro
-    if (rawData && typeof rawData === 'object') {
-      const emailFromRaw = (rawData as Record<string, unknown>).email;
-      if (typeof emailFromRaw === 'string' && emailFromRaw.trim() !== '') {
-        return emailFromRaw.trim();
-      }
-    }
-    // Tentar obter do row
-    if (row?.email && typeof row.email === 'string' && row.email.trim() !== '') {
-      const emailValue = row.email.trim();
-      // Verificar se não é um valor placeholder
-      if (emailValue !== '-' && emailValue !== 'Não informado' && emailValue.toLowerCase() !== 'nao informado') {
-        return emailValue;
-      }
-    }
-    return null;
+  const extractEmails = (value: unknown): string[] => {
+    if (!value || typeof value !== 'string') return [];
+
+    return value
+      .split(/[,;]+/)
+      .map((email) => email.trim())
+      .filter((email) => email && email !== '-' && email.toLowerCase() !== 'nao informado' && email.toLowerCase() !== 'não informado');
   };
 
   const isValidEmail = (email: string): boolean => {
@@ -148,6 +138,21 @@ export default function EmailDispatchApprovalCard({
     // Regex básico para validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email.trim());
+  };
+
+  const getEmailValue = (): string | null => {
+    let candidates: string[] = [];
+
+    if (rawData && typeof rawData === 'object') {
+      candidates = candidates.concat(extractEmails((rawData as Record<string, unknown>).email));
+    }
+
+    if (row?.email && typeof row.email === 'string') {
+      candidates = candidates.concat(extractEmails(row.email));
+    }
+
+    const validEmail = candidates.find((candidate) => isValidEmail(candidate));
+    return validEmail ?? null;
   };
 
   const handleDispatch = async (action: 'release' | 'revert') => {

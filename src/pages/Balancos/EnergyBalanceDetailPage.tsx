@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getById } from '../../services/energyBalanceApi';
+import { getById, energyBalanceRequest } from '../../services/energyBalanceApi';
 import {
   normalizeEnergyBalanceDetail,
   // normalizeEnergyBalanceEvent, // Removido - endpoint /events não existe
@@ -14,7 +14,6 @@ import {
   sanitizeDisplayValue,
   type DisplayEnergyBalanceRow,
 } from '../../utils/energyBalancePayload';
-import { energyBalanceRequest } from '../../services/energyBalanceApi';
 import EmailDispatchApprovalCard from '../../components/balancos/EmailDispatchApprovalCard';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -905,16 +904,61 @@ export default function EnergyBalanceDetailPage() {
     };
 
     setSavingRowId(rowId);
+    let payload: Record<string, unknown> | null = null;
+
     try {
       const originalRaw = rawMonthMap[rowId] ?? rawDetail ?? undefined;
-      const payload = convertDisplayRowToEnergyBalancePayload(updatedRow, originalRaw);
-      const response = await energyBalanceRequest(`/energy-balance/${rowId}`, {
+      payload = convertDisplayRowToEnergyBalancePayload(updatedRow, originalRaw);
+      const normalizedId = Number.isNaN(Number(rowId)) ? rowId : Number(rowId);
+
+      let requestPayload: Record<string, unknown>;
+      if (field === 'dataVencimentoBoleto') {
+        const isoDate = (() => {
+          if (!fieldInputValue) return null;
+          try {
+            const parsed = new Date(fieldInputValue);
+            if (Number.isNaN(parsed.getTime())) return null;
+            return parsed.toISOString().split('T')[0];
+          } catch (error) {
+            console.warn('[EnergyBalanceDetail] ⚠️ Não foi possível converter data de vencimento', {
+              fieldInputValue,
+              error,
+            });
+            return null;
+          }
+        })();
+
+        console.log('[EnergyBalanceDetail] 📝 Preparando payload para data de vencimento', {
+          rowId: normalizedId,
+          input: fieldInputValue,
+          isoDate,
+        });
+
+        requestPayload = {
+          billsDate: isoDate,
+          bills_date: isoDate,
+        };
+      } else {
+        requestPayload = {
+          id: payload.id ?? normalizedId,
+          ...payload,
+        };
+      }
+
+      if (field === 'dataVencimentoBoleto') {
+        console.log('[EnergyBalanceDetail] 📤 Payload enviado para atualização do vencimento', {
+          endpoint: `/energy-balance/${encodeURIComponent(String(normalizedId))}`,
+          body: requestPayload,
+        });
+      }
+
+      const response = await energyBalanceRequest(`/energy-balance/${encodeURIComponent(String(normalizedId))}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestPayload),
       });
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
@@ -922,7 +966,16 @@ export default function EnergyBalanceDetailPage() {
         setRawDetail((prev) => ({ ...(prev ?? {}), ...record }));
         setRawMonthMap((prev) => ({ ...prev, [rowId]: record }));
       } else if (originalRaw && typeof originalRaw === 'object') {
-        setRawMonthMap((prev) => ({ ...prev, [rowId]: originalRaw as Record<string, unknown> }));
+        const fallbackRecord =
+          field === 'dataVencimentoBoleto'
+            ? {
+                ...(originalRaw as Record<string, unknown>),
+                billsDate: requestPayload.billsDate ?? null,
+                bills_date: requestPayload.bills_date ?? null,
+              }
+            : (originalRaw as Record<string, unknown>);
+        setRawDetail((prev) => ({ ...(prev ?? {}), ...fallbackRecord }));
+        setRawMonthMap((prev) => ({ ...prev, [rowId]: fallbackRecord }));
       }
 
       setDetail((prev) => {
@@ -945,7 +998,12 @@ export default function EnergyBalanceDetailPage() {
       setFieldInputValue('');
       toast.success('Campo atualizado com sucesso!');
     } catch (saveError) {
-      console.error('[EnergyBalanceDetail] Erro ao salvar campo', saveError);
+      console.error('[EnergyBalanceDetail] Erro ao salvar campo', {
+        field,
+        rowId,
+        payload,
+        error: saveError,
+      });
       toast.error('Não foi possível salvar o campo.');
     } finally {
       setSavingRowId(null);
