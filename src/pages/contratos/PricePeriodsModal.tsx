@@ -2,6 +2,23 @@ import React from 'react';
 import { Plus, Trash2, X, Eraser } from 'lucide-react';
 import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitizeCurrencyInput } from '../../utils/currency';
 import { monthsBetween } from '../../utils/dateRange';
+import type { VolumeUnit } from '../../types/pricePeriods';
+
+const volumeUnitOptions: Array<{ value: VolumeUnit; label: string }> = [
+  { value: 'MWH', label: 'MWh' },
+  { value: 'MW_MEDIO', label: 'MW médio' },
+];
+
+const DEFAULT_VOLUME_UNIT: VolumeUnit = 'MWH';
+
+const normalizeVolumeUnit = (value: unknown): VolumeUnit => {
+  if (typeof value !== 'string') return DEFAULT_VOLUME_UNIT;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'MW_MEDIO' || normalized === 'MW MÉDIO' || normalized === 'MW MEDIO') {
+    return 'MW_MEDIO';
+  }
+  return 'MWH';
+};
 
 export type PricePeriods = {
   periods: Array<{
@@ -9,7 +26,9 @@ export type PricePeriods = {
     start: string; // YYYY-MM
     end: string; // YYYY-MM
     defaultPrice?: number;
-    months: Array<{ ym: string; price: number }>;
+    defaultVolume?: number | null;
+    defaultVolumeUnit?: VolumeUnit | null;
+    months: Array<{ ym: string; price: number; volume?: number | null; volumeUnit?: VolumeUnit | null }>;
   }>;
 };
 
@@ -44,6 +63,8 @@ export function summarizePricePeriods(value: PricePeriods): PricePeriodsSummary 
 type MonthDraft = {
   ym: string;
   value: string;
+  volume: string;
+  volumeUnit: VolumeUnit;
 };
 
 type PeriodDraft = {
@@ -52,6 +73,8 @@ type PeriodDraft = {
   end: string;
   defaultPrice: string;
   months: MonthDraft[];
+  defaultVolume: string;
+  defaultVolumeUnit: VolumeUnit;
 };
 
 const toInputString = (value?: number) =>
@@ -64,9 +87,14 @@ const buildDraftFromPeriod = (period: PricePeriods['periods'][number]): PeriodDr
   start: period.start,
   end: period.end,
   defaultPrice: toInputString(period.defaultPrice),
+  defaultVolume: toInputString(period.defaultVolume ?? undefined),
+  defaultVolumeUnit: normalizeVolumeUnit(period.defaultVolumeUnit),
   months: monthsBetween(period.start, period.end).map((ym) => {
     const existing = period.months.find((month) => month.ym === ym);
-    return { ym, value: existing ? toInputString(existing.price) : '' };
+    const priceValue = existing ? toInputString(existing.price) : '';
+    const volumeValue = existing ? toInputString(existing.volume ?? undefined) : '';
+    const volumeUnit = existing ? normalizeVolumeUnit(existing.volumeUnit) : normalizeVolumeUnit(period.defaultVolumeUnit);
+    return { ym, value: priceValue, volume: volumeValue, volumeUnit };
   }),
 });
 
@@ -80,16 +108,29 @@ const buildEmptyDraft = (): PeriodDraft => {
     start,
     end,
     defaultPrice: '',
-    months: monthsBetween(start, end).map((ym) => ({ ym, value: '' })),
+    defaultVolume: '',
+    defaultVolumeUnit: DEFAULT_VOLUME_UNIT,
+    months: monthsBetween(start, end).map((ym) => ({ ym, value: '', volume: '', volumeUnit: DEFAULT_VOLUME_UNIT })),
   };
 };
 
 const ensureMonthsForDraft = (draft: PeriodDraft): PeriodDraft => {
   const monthList = monthsBetween(draft.start, draft.end);
-  const existing = new Map(draft.months.map((month) => [month.ym, month.value] as const));
+  const existing = new Map(draft.months.map((month) => [month.ym, month]));
   return {
     ...draft,
-    months: monthList.map((ym) => ({ ym, value: existing.get(ym) ?? '' })),
+    months: monthList.map((ym) => {
+      const current = existing.get(ym);
+      if (current) {
+        return {
+          ym,
+          value: current.value,
+          volume: current.volume,
+          volumeUnit: normalizeVolumeUnit(current.volumeUnit),
+        };
+      }
+      return { ym, value: '', volume: '', volumeUnit: draft.defaultVolumeUnit ?? DEFAULT_VOLUME_UNIT };
+    }),
   };
 };
 
@@ -222,6 +263,64 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
     );
   }, []);
 
+  const handleMonthVolumeChange = React.useCallback((periodId: string, ym: string, value: string) => {
+    const sanitized = sanitizeCurrencyInput(value);
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === periodId
+          ? {
+              ...draft,
+              months: draft.months.map((month) =>
+                month.ym === ym
+                  ? {
+                      ...month,
+                      volume: sanitized,
+                    }
+                  : month
+              ),
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleMonthVolumeBlur = React.useCallback((periodId: string, ym: string) => {
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === periodId
+          ? {
+              ...draft,
+              months: draft.months.map((month) =>
+                month.ym === ym
+                  ? { ...month, volume: month.volume ? formatCurrencyInputBlur(month.volume) : '' }
+                  : month
+              ),
+            }
+          : draft
+      )
+    );
+  }, []);
+
+  const handleMonthVolumeUnitChange = React.useCallback((periodId: string, ym: string, unit: VolumeUnit) => {
+    setDrafts((prev) =>
+      prev.map((draft) =>
+        draft.id === periodId
+          ? {
+              ...draft,
+              months: draft.months.map((month) =>
+                month.ym === ym
+                  ? {
+                      ...month,
+                      volumeUnit: unit,
+                    }
+                  : month
+              ),
+            }
+          : draft
+      )
+    );
+  }, []);
+
   const handleRemovePeriod = React.useCallback((id: string) => {
     setDrafts((prev) => (prev.length <= 1 ? prev : prev.filter((draft) => draft.id !== id)));
   }, []);
@@ -233,7 +332,9 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
           ? {
               ...draft,
               defaultPrice: '',
-              months: draft.months.map((month) => ({ ...month, value: '' })),
+              defaultVolume: '',
+              defaultVolumeUnit: DEFAULT_VOLUME_UNIT,
+              months: draft.months.map((month) => ({ ...month, value: '', volume: '', volumeUnit: DEFAULT_VOLUME_UNIT })),
             }
           : draft
       )
@@ -247,14 +348,32 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
       
       try {
         const periods = drafts.map((draft) => {
-          const months = draft.months
-            .map((month) => ({ ym: month.ym, price: parseCurrencyInput(month.value) }))
-            .filter((month): month is { ym: string; price: number } => month.price !== null);
+          const months = draft.months.reduce<
+            Array<{ ym: string; price: number; volume?: number | null; volumeUnit?: VolumeUnit | null }>
+          >((acc, month) => {
+            const price = parseCurrencyInput(month.value);
+            if (price === null || !Number.isFinite(price)) {
+              return acc;
+            }
+            const volumeValue = parseCurrencyInput(month.volume);
+            const volumeUnit = volumeValue !== null ? normalizeVolumeUnit(month.volumeUnit) : null;
+            acc.push({
+              ym: month.ym,
+              price,
+              volume: volumeValue ?? null,
+              volumeUnit,
+            });
+            return acc;
+          }, []);
+          const defaultVolumeValue = parseCurrencyInput(draft.defaultVolume);
           return {
             id: draft.id,
             start: draft.start,
             end: draft.end,
             defaultPrice: parseCurrencyInput(draft.defaultPrice) ?? undefined,
+            defaultVolume: defaultVolumeValue ?? undefined,
+            defaultVolumeUnit:
+              defaultVolumeValue !== null ? draft.defaultVolumeUnit ?? DEFAULT_VOLUME_UNIT : undefined,
             months,
           };
         });
@@ -438,6 +557,32 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({ open, value, onCl
                                     placeholder="0,00"
                                     className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
                                   />
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={month?.volume ?? ''}
+                                      onChange={(event) => handleMonthVolumeChange(draft.id, ym, event.target.value)}
+                                      onBlur={() => handleMonthVolumeBlur(draft.id, ym)}
+                                      placeholder="Volume contratado"
+                                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
+                                    />
+                                  </div>
+                                  <select
+                                    value={month?.volumeUnit ?? DEFAULT_VOLUME_UNIT}
+                                    onChange={(event) =>
+                                      handleMonthVolumeUnitChange(draft.id, ym, event.target.value as VolumeUnit)
+                                    }
+                                    className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-900"
+                                  >
+                                    {volumeUnitOptions.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
                                 </div>
                               </label>
                             );

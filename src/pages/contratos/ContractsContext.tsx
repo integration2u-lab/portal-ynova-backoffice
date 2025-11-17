@@ -627,6 +627,12 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const fonteValue = normalizeFonte(
       (item as { fonte?: unknown }).fonte ?? (item as { energy_source?: unknown }).energy_source
     );
+    const submarketValue =
+      normalizeString(
+        (item as { submercado?: unknown }).submercado ??
+          (item as { submarket?: unknown }).submarket ??
+          (item as { sub_market?: unknown }).sub_market
+      ) || '';
     
     // Add status field mapping
     const statusRaw = 
@@ -738,6 +744,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const lowerLimitRaw =
       (item as { limiteInferior?: unknown }).limiteInferior ??
       (item as { lower_limit_percent?: unknown }).lower_limit_percent;
+    const seasonalFlexUpperRaw =
+      (item as { flexSazonalSuperior?: unknown }).flexSazonalSuperior ??
+      (item as { flex_sazonal_superior?: unknown }).flex_sazonal_superior ??
+      (item as { seasonal_flexibility_upper?: unknown }).seasonal_flexibility_upper;
+    const seasonalFlexLowerRaw =
+      (item as { flexSazonalInferior?: unknown }).flexSazonalInferior ??
+      (item as { flex_sazonal_inferior?: unknown }).flex_sazonal_inferior ??
+      (item as { seasonal_flexibility_lower?: unknown }).seasonal_flexibility_lower;
 
     const findEmailValueInDados = (keywords: string[]): string | undefined => {
       const normalizedKeywords = keywords.map((keyword) => removeDiacritics(keyword));
@@ -782,17 +796,24 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 
     const supplierDisplay = supplier || 'Não informado';
     ensureField('Fornecedor', supplierDisplay);
+    ensureField('Submercado', submarketValue || 'Não informado');
     ensureField('Medidor', meter || 'Não informado');
     ensureField('Preço (R$/MWh)', precoMedio ? formatCurrencyBRL(precoMedio) : 'Não informado');
     ensureField('Contrato', normalizeString(rawCodigo));
     ensureField('Cliente ID', clientId || 'Não informado');
     ensureField('Volume contratado', formatMwhValue(contractedVolume));
-    ensureField(
-      'Flex / Limites',
-      [formatPercentValue(flexValue), formatPercentValue(lowerLimitRaw), formatPercentValue(upperLimitRaw)]
-        .filter(Boolean)
-        .join(' · ')
-    );
+    const flexDisplay = [formatPercentValue(flexValue), formatPercentValue(lowerLimitRaw), formatPercentValue(upperLimitRaw)]
+      .filter(Boolean)
+      .join(' · ');
+    ensureField('Flex / Limites', flexDisplay);
+    const seasonalFlexUpperFormatted = formatPercentValue(seasonalFlexUpperRaw);
+    const seasonalFlexLowerFormatted = formatPercentValue(seasonalFlexLowerRaw);
+    const seasonalFlexDisplay = [seasonalFlexLowerFormatted, seasonalFlexUpperFormatted]
+      .filter(Boolean)
+      .join(' - ');
+    if (seasonalFlexDisplay) {
+      ensureField('Flex sazonalidade', seasonalFlexDisplay);
+    }
     ensureField('Status', status);
     ensureField('Segmento', normalizeString(rawSegmento));
     ensureField('Responsável', normalizeString(rawContato) || 'Não informado');
@@ -925,6 +946,7 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
         normalizeString(
           (item as { modalidade?: unknown }).modalidade ?? (item as { contracted_modality?: unknown }).contracted_modality
         ) || 'Não informado',
+      submercado: submarketValue || undefined,
       inicioVigencia: inicioVigencia || normalizeString((item as { inicio?: unknown }).inicio),
       fimVigencia: fimVigencia,
       limiteSuperior: formatPercentValue(
@@ -938,6 +960,8 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
           (item as { flexibilidade?: unknown }).flexibilidade ??
           (item as { flexibility_percent?: unknown }).flexibility_percent
       ),
+      flexSazonalSuperior: seasonalFlexUpperFormatted || null,
+      flexSazonalInferior: seasonalFlexLowerFormatted || null,
       precoMedio,
       fornecedor: supplier,
       balanceEmail: toOptionalEmail(balanceEmailValue),
@@ -1046,6 +1070,16 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
       return keywords.some((keyword) => normalized.includes(keyword));
     });
     return match ? normalizeString(match.value) : undefined;
+  };
+
+  const sanitizeOptionalField = (value: unknown): string | undefined => {
+    const normalized = normalizeString(value);
+    if (!normalized) return undefined;
+    const canonical = removeDiacritics(normalized).toLowerCase();
+    if (canonical === 'nao informado' || canonical === 'nao-informado') {
+      return undefined;
+    }
+    return normalized;
   };
 
   const supplier = findDadosValue(['fornecedor', 'supplier']);
@@ -1185,6 +1219,17 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const payloadFlatPrice = hasPricePeriods ? null : flatPriceValue ?? null;
   const payloadFlatYears = hasPricePeriods ? null : flatYearsValue ?? null;
 
+  const submarketFromContract = sanitizeOptionalField((contract as { submercado?: unknown }).submercado);
+  const submarketFromDados = sanitizeOptionalField(findDadosValue(['submercado', 'submarket']));
+  const submarketValue = submarketFromContract || submarketFromDados || undefined;
+
+  const seasonalFlexUpperFromContract = parsePercentInput((contract as { flexSazonalSuperior?: unknown }).flexSazonalSuperior);
+  const seasonalFlexLowerFromContract = parsePercentInput((contract as { flexSazonalInferior?: unknown }).flexSazonalInferior);
+  const seasonalFlexUpperField = findDadosValue(['flex', 'sazonal', 'super']);
+  const seasonalFlexLowerField = findDadosValue(['flex', 'sazonal', 'infer']);
+  const seasonalFlexUpper = seasonalFlexUpperFromContract ?? parsePercentInput(seasonalFlexUpperField);
+  const seasonalFlexLower = seasonalFlexLowerFromContract ?? parsePercentInput(seasonalFlexLowerField);
+
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
     client_name: normalizeString(contract.cliente),
@@ -1197,6 +1242,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     cnpj: normalizeString(contract.cnpj),
     segment: normalizeString(contract.segmento),
     contact_responsible: normalizeString(contract.contato),
+    submarket: submarketValue,
     contracted_volume_mwh: contractedVolume ?? undefined,
     status: normalizeString(contract.status),
     energy_source: normalizeString(contract.fonte),
@@ -1207,6 +1253,8 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     upper_limit_percent: parsePercentInput(contract.limiteSuperior),
     lower_limit_percent: parsePercentInput(contract.limiteInferior),
     flexibility_percent: parsePercentInput(contract.flex),
+    seasonal_flexibility_upper: seasonalFlexUpper ?? undefined,
+    seasonal_flexibility_lower: seasonalFlexLower ?? undefined,
     average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
     proinfa_contribution: proinfaValue ?? null,
     compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,

@@ -11,8 +11,11 @@ import { formatCurrencyBRL, formatCurrencyInputBlur, parseCurrencyInput, sanitiz
 import { monthsBetween } from '../../utils/dateRange';
 import { SUPPLIER_NAMES, getSupplierEmails } from '../../utils/suppliers';
 
-const energySourceOptions = ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%'] as const;
+const energySourceOptions = ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%', 'Convencional'] as const;
 type EnergySourceOption = (typeof energySourceOptions)[number];
+
+const submarketOptions = ['Norte', 'Nordeste', 'Sudeste/Centro-Oeste', 'Sul'] as const;
+type SubmarketOption = (typeof submarketOptions)[number] | '';
 
 const volumeUnitOptions = [
   { value: 'MWH', label: 'MWh' },
@@ -22,7 +25,22 @@ const volumeUnitOptions = [
 type VolumeUnit = (typeof volumeUnitOptions)[number]['value'];
 
 type FormErrors = Partial<
-  Record<'client' | 'cnpj' | 'volume' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'emailBalanco' | 'emailFaturamento', string>
+  Record<
+    | 'client'
+    | 'cnpj'
+    | 'volume'
+    | 'startDate'
+    | 'endDate'
+    | 'upperLimit'
+    | 'lowerLimit'
+    | 'flexibility'
+    | 'seasonalFlexUpper'
+    | 'seasonalFlexLower'
+    | 'emailBalanco'
+    | 'emailFaturamento'
+  ,
+    string
+  >
 >;
 
 type FormState = {
@@ -43,6 +61,9 @@ type FormState = {
   upperLimit: string;
   lowerLimit: string;
   flexibility: string;
+  seasonalFlexUpper: string;
+  seasonalFlexLower: string;
+  submarket: SubmarketOption;
   // Medidor maps to groupName in API
   medidor: string;
   // Flat price (applies to all years) and number of years
@@ -157,6 +178,9 @@ const buildInitialFormState = (): FormState => ({
   upperLimit: '200',
   lowerLimit: '0',
   flexibility: '100',
+  seasonalFlexUpper: '',
+  seasonalFlexLower: '',
+  submarket: '',
   medidor: '',
   flatPrice: '',
   flatYears: 1,
@@ -217,7 +241,25 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   const priceSummary = React.useMemo(() => summarizePricePeriods(formState.pricePeriods), [formState.pricePeriods]);
 
   const handleInputChange = (
-    field: keyof Pick<FormState, 'client' | 'razaoSocial' | 'segment' | 'contact' | 'emailBalanco' | 'emailFaturamento' | 'volume' | 'modality' | 'startDate' | 'endDate' | 'upperLimit' | 'lowerLimit' | 'flexibility' | 'medidor'>
+    field: keyof Pick<
+      FormState,
+      | 'client'
+      | 'razaoSocial'
+      | 'segment'
+      | 'contact'
+      | 'emailBalanco'
+      | 'emailFaturamento'
+      | 'volume'
+      | 'modality'
+      | 'startDate'
+      | 'endDate'
+      | 'upperLimit'
+      | 'lowerLimit'
+      | 'flexibility'
+      | 'medidor'
+      | 'seasonalFlexUpper'
+      | 'seasonalFlexLower'
+    >
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const { value } = event.target;
@@ -242,6 +284,10 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       supplier: supplierName,
       emailFaturamento: emailsString,
     }));
+  };
+
+  const handleSubmarketChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormState((prev) => ({ ...prev, submarket: event.target.value as SubmarketOption }));
   };
 
   const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -327,6 +373,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const upper = Number(formState.upperLimit);
     const lower = Number(formState.lowerLimit);
     const flex = Number(formState.flexibility);
+    const seasonalUpper = formState.seasonalFlexUpper.trim() === '' ? null : Number(formState.seasonalFlexUpper);
+    const seasonalLower = formState.seasonalFlexLower.trim() === '' ? null : Number(formState.seasonalFlexLower);
 
     if (!Number.isFinite(upper) || upper < 0 || upper > 500) {
       nextErrors.upperLimit = 'Limite superior deve estar entre 0% e 500%';
@@ -338,6 +386,28 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     if (!Number.isFinite(flex) || flex < 0 || flex > 500) {
       nextErrors.flexibility = 'Flexibilidade deve estar entre 0% e 500%';
+    }
+
+    if (
+      seasonalUpper !== null &&
+      (!Number.isFinite(seasonalUpper) || seasonalUpper < 0 || seasonalUpper > 500)
+    ) {
+      nextErrors.seasonalFlexUpper = 'Flex sazonal superior deve estar entre 0% e 500%';
+    }
+
+    if (
+      seasonalLower !== null &&
+      (!Number.isFinite(seasonalLower) || seasonalLower < 0 || seasonalLower > 500)
+    ) {
+      nextErrors.seasonalFlexLower = 'Flex sazonal inferior deve estar entre 0% e 500%';
+    }
+
+    if (
+      seasonalUpper !== null &&
+      seasonalLower !== null &&
+      seasonalUpper < seasonalLower
+    ) {
+      nextErrors.seasonalFlexUpper = 'Flex sazonal superior deve ser maior ou igual ao inferior';
     }
 
     if (
@@ -388,6 +458,9 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const balanceEmail = normalizeEmails(formState.emailBalanco);
     const billingEmail = normalizeEmails(formState.emailFaturamento);
     const medidorValue = formState.medidor.trim();
+    const submarketValue = formState.submarket;
+    const seasonalFlexUpperValue = formState.seasonalFlexUpper.trim();
+    const seasonalFlexLowerValue = formState.seasonalFlexLower.trim();
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
@@ -398,6 +471,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       { label: 'CNPJ', value: formState.cnpj.trim() || 'Não informado' },
       { label: 'Segmento', value: formState.segment.trim() || 'Não informado' },
       { label: 'Modalidade', value: formState.modality.trim() || 'Não informado' },
+      { label: 'Submercado', value: submarketValue || 'Não informado' },
       { label: 'Fonte de energia', value: formState.energySource },
       { label: 'Fornecedor', value: supplierValue || 'Não informado' },
       { label: 'Email de balanço energético', value: balanceEmail || 'Não informado' },
@@ -414,6 +488,13 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       {
         label: 'Flex / Limites',
         value: `${formState.flexibility || '0'}% (${formState.lowerLimit || '0'}% - ${formState.upperLimit || '0'}%)`,
+      },
+      {
+        label: 'Flex sazonalidade',
+        value:
+          seasonalFlexUpperValue || seasonalFlexLowerValue
+            ? `${seasonalFlexLowerValue || '0'}% - ${seasonalFlexUpperValue || '0'}%`
+            : 'Não informado',
       },
       {
         label: 'Volume contratado',
@@ -468,8 +549,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       limiteSuperior: `${formState.upperLimit || '0'}%`,
       limiteInferior: `${formState.lowerLimit || '0'}%`,
       flex: `${formState.flexibility || '0'}%`,
+      flexSazonalSuperior: seasonalFlexUpperValue ? `${seasonalFlexUpperValue}%` : null,
+      flexSazonalInferior: seasonalFlexLowerValue ? `${seasonalFlexLowerValue}%` : null,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
+      submercado: submarketValue || undefined,
       razaoSocial: legalName || undefined,
       balanceEmail: balanceEmail || undefined,
       billingEmail: billingEmail || undefined,
@@ -691,6 +775,22 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Submercado
+                  <select
+                    value={formState.submarket}
+                    onChange={handleSubmarketChange}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="">Selecione um submercado</option>
+                    {submarketOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Fornecedor
                   <select
                     value={formState.supplier}
@@ -774,7 +874,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 {/* billing cycle removed from manual contract creation */}
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Limite superior (%)
+                  Limite superior
                   <input
                     type="number"
                     min="0"
@@ -791,7 +891,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Limite inferior (%)
+                  Limite inferior
                   <input
                     type="number"
                     min="0"
@@ -822,6 +922,44 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                     placeholder="100"
                   />
                   {errors.flexibility && <span className="text-xs font-medium text-red-500">{errors.flexibility}</span>}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Flexibilidade Sazonalidade - Superior (%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.seasonalFlexUpper}
+                    onChange={handleInputChange('seasonalFlexUpper')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.seasonalFlexUpper ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="0"
+                  />
+                  {errors.seasonalFlexUpper && (
+                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexUpper}</span>
+                  )}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Flexibilidade Sazonalidade - Inferior (%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.seasonalFlexLower}
+                    onChange={handleInputChange('seasonalFlexLower')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.seasonalFlexLower ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="0"
+                  />
+                  {errors.seasonalFlexLower && (
+                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexLower}</span>
+                  )}
                 </label>
 
                 <div className="flex flex-col gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">

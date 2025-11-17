@@ -77,8 +77,11 @@ export type ContractMock = {
   limiteSuperior: string;
   limiteInferior: string;
   flex: string;
+  flexSazonalSuperior?: string | null;
+  flexSazonalInferior?: string | null;
   precoMedio: number;
   fornecedor: string;
+  submercado?: string;
   proinfa?: number | null;
   cicloFaturamento: string;
   createdAt?: string;
@@ -155,8 +158,11 @@ export const mockContracts: ContractMock[] = [
     limiteSuperior: '105%',
     limiteInferior: '95%',
     flex: '5%',
+    flexSazonalSuperior: '105%',
+    flexSazonalInferior: '95%',
     precoMedio: 274.32,
     fornecedor: 'Neoenergia Comercializadora',
+    submercado: 'Sudeste/Centro-Oeste',
     cicloFaturamento: '2024-06',
     balanceEmail: 'balanco@unisolar.com.br',
     billingEmail: 'faturamento@unisolar.com.br',
@@ -322,8 +328,11 @@ export const mockContracts: ContractMock[] = [
     limiteSuperior: '110%',
     limiteInferior: '92%',
     flex: '8%',
+    flexSazonalSuperior: '110%',
+    flexSazonalInferior: '92%',
     precoMedio: 219.5,
     fornecedor: 'Raízen Energia',
+    submercado: 'Sul',
     cicloFaturamento: '2024-05',
     balanceEmail: 'balanco@brasilfoods.com.br',
     billingEmail: 'faturamento@brasilfoods.com.br',

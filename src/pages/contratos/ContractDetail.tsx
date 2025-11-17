@@ -20,6 +20,7 @@ import PricePeriodsModal, { PricePeriods, summarizePricePeriods } from './PriceP
 import { formatCurrencyBRL } from '../../utils/currency';
 import { useContracts } from './ContractsContext';
 import { parseContractPricePeriods } from '../../utils/contractPricing';
+import type { VolumeUnit } from '../../types/pricePeriods';
 
 const statusStyles: Record<StatusResumo, string> = {
   Conforme: 'bg-green-100 text-green-700 border border-green-200',
@@ -172,6 +173,18 @@ export function StatusBadge({ status }: { status: StatusResumo }) {
   );
 }
 
+const normalizeVolumeUnit = (value: unknown): VolumeUnit | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'MW_MEDIO' || normalized === 'MW MÉDIO' || normalized === 'MW MEDIO') {
+    return 'MW_MEDIO';
+  }
+  if (normalized === 'MWH') {
+    return 'MWH';
+  }
+  return undefined;
+};
+
 const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | null => {
   const parsed = parseContractPricePeriods(rawValue ?? undefined);
   if (!parsed || !Array.isArray(parsed.periods)) {
@@ -182,10 +195,20 @@ const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | nul
 
   parsed.periods.forEach((period, index) => {
     const months = period.months
-      .filter((month): month is { ym: string; price: number } =>
-        typeof month.price === 'number' && Number.isFinite(month.price)
+      .filter(
+        (month): month is {
+          ym: string;
+          price: number;
+          volume?: number | null;
+          volumeUnit?: VolumeUnit | null;
+        } => typeof month.price === 'number' && Number.isFinite(month.price)
       )
-      .map((month) => ({ ym: month.ym, price: month.price }));
+      .map((month) => ({
+        ym: month.ym,
+        price: month.price,
+        volume: typeof month.volume === 'number' && Number.isFinite(month.volume) ? month.volume : null,
+        volumeUnit: normalizeVolumeUnit(month.volumeUnit),
+      }));
 
     const hasDefaultPrice = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
     const defaultPriceValue = hasDefaultPrice ? (period.defaultPrice as number) : undefined;
@@ -199,6 +222,8 @@ const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | nul
       start: period.start,
       end: period.end,
       defaultPrice: defaultPriceValue,
+      defaultVolume: typeof period.defaultVolume === 'number' ? period.defaultVolume : null,
+      defaultVolumeUnit: normalizeVolumeUnit(period.defaultVolumeUnit) ?? null,
       months,
     });
   });

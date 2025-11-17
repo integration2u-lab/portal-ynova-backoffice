@@ -1,5 +1,16 @@
 import { monthsBetween } from './dateRange';
-import type { ContractPriceMonth, ContractPricePeriod, ContractPricePeriods } from '../types/pricePeriods';
+import type { ContractPriceMonth, ContractPricePeriod, ContractPricePeriods, VolumeUnit } from '../types/pricePeriods';
+const normalizeVolumeUnit = (value: unknown): VolumeUnit | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'MW_MEDIO' || normalized === 'MW MÉDIO' || normalized === 'MW MEDIO') {
+    return 'MW_MEDIO';
+  }
+  if (normalized === 'MWH') {
+    return 'MWH';
+  }
+  return null;
+};
 
 export type PricePeriodsSummary = {
   filledMonths: number;
@@ -38,13 +49,31 @@ const sanitizeMonths = (months: unknown[]): ContractPriceMonth[] => {
     if (!month || typeof month !== 'object') {
       return;
     }
-    const record = month as { ym?: unknown; month?: unknown; price?: unknown; value?: unknown };
+    const record = month as {
+      ym?: unknown;
+      month?: unknown;
+      price?: unknown;
+      value?: unknown;
+      volume?: unknown;
+      contracted_volume?: unknown;
+      quantity?: unknown;
+      volumeUnit?: unknown;
+      volume_unit?: unknown;
+      unit?: unknown;
+    };
     const ym = normalizeYearMonth(record.ym ?? record.month);
     const price = coerceNumber(record.price ?? record.value);
     if (!ym || price === null || !Number.isFinite(price)) {
       return;
     }
-    sanitized.push({ ym, price });
+    const volume = coerceNumber(record.volume ?? record.contracted_volume ?? record.quantity);
+    const volumeUnit = normalizeVolumeUnit(record.volumeUnit ?? record.volume_unit ?? record.unit);
+    sanitized.push({
+      ym,
+      price,
+      volume: volume ?? null,
+      volumeUnit: volume !== null ? volumeUnit : null,
+    });
   });
 
   sanitized.sort((a, b) => (a.ym > b.ym ? 1 : a.ym < b.ym ? -1 : 0));
@@ -60,7 +89,7 @@ const buildPeriodsFromMonthMap = (value: Record<string, unknown>): ContractPrice
     if (!normalizedYm || numericPrice === null || !Number.isFinite(numericPrice)) {
       return;
     }
-    monthEntries.push({ ym: normalizedYm, price: numericPrice });
+    monthEntries.push({ ym: normalizedYm, price: numericPrice, volume: null, volumeUnit: null });
   });
 
   monthEntries.sort((a, b) => (a.ym > b.ym ? 1 : a.ym < b.ym ? -1 : 0));
@@ -89,6 +118,8 @@ const buildPeriodsFromMonthMap = (value: Record<string, unknown>): ContractPrice
       start: current.start,
       end: current.end,
       defaultPrice: null,
+      defaultVolume: null,
+      defaultVolumeUnit: null,
       months: current.months,
     });
 
@@ -101,6 +132,8 @@ const buildPeriodsFromMonthMap = (value: Record<string, unknown>): ContractPrice
       start: current.start,
       end: current.end,
       defaultPrice: null,
+      defaultVolume: null,
+      defaultVolumeUnit: null,
       months: current.months,
     });
   }
@@ -158,12 +191,14 @@ export function createAnnualPeriod(year: number, defaultPrice?: number | null): 
   const sanitizedYear = sanitizeYear(year, new Date().getFullYear());
   const start = `${sanitizedYear}-01`;
   const end = `${sanitizedYear}-12`;
-  const months = monthsBetween(start, end).map((ym) => ({ ym, price: null }));
+  const months = monthsBetween(start, end).map((ym) => ({ ym, price: null, volume: null, volumeUnit: null }));
   return {
     id: ensureRandomId(),
     start,
     end,
     defaultPrice: defaultPrice ?? null,
+    defaultVolume: null,
+    defaultVolumeUnit: null,
     months,
   };
 }
@@ -173,10 +208,12 @@ export function ensureAnnualPeriod(period: ContractPricePeriod): ContractPricePe
   const sanitizedYear = sanitizeYear(Number.isNaN(year) ? null : year, new Date().getFullYear());
   const start = `${sanitizedYear}-01`;
   const end = `${sanitizedYear}-12`;
-  const monthValues = new Map(period.months.map((month) => [month.ym, month.price] as const));
+  const monthValues = new Map(period.months.map((month) => [month.ym, month]));
   const months = monthsBetween(start, end).map((ym) => ({
     ym,
-    price: monthValues.has(ym) ? monthValues.get(ym) ?? null : null,
+    price: monthValues.has(ym) ? monthValues.get(ym)?.price ?? null : null,
+    volume: monthValues.has(ym) ? monthValues.get(ym)?.volume ?? null : null,
+    volumeUnit: monthValues.has(ym) ? monthValues.get(ym)?.volumeUnit ?? null : null,
   }));
 
   return {
@@ -184,6 +221,8 @@ export function ensureAnnualPeriod(period: ContractPricePeriod): ContractPricePe
     start,
     end,
     defaultPrice: coerceNumber(period.defaultPrice),
+     defaultVolume: coerceNumber(period.defaultVolume),
+     defaultVolumeUnit: normalizeVolumeUnit(period.defaultVolumeUnit),
     months,
   };
 }
@@ -199,10 +238,14 @@ export function normalizeAnnualPricePeriods(value: ContractPricePeriods | undefi
       start: period.start || period.end || `${new Date().getFullYear()}-01`,
       end: period.end || period.start || `${new Date().getFullYear()}-12`,
       defaultPrice: coerceNumber(period.defaultPrice),
+      defaultVolume: coerceNumber((period as { defaultVolume?: unknown }).defaultVolume),
+      defaultVolumeUnit: normalizeVolumeUnit((period as { defaultVolumeUnit?: unknown }).defaultVolumeUnit),
       months: Array.isArray(period.months)
         ? period.months.map((month) => ({
             ym: month.ym,
             price: coerceNumber(month.price),
+            volume: coerceNumber((month as { volume?: unknown }).volume),
+            volumeUnit: normalizeVolumeUnit((month as { volumeUnit?: unknown }).volumeUnit),
           }))
         : [],
     };
@@ -247,7 +290,14 @@ export function clonePricePeriods(value: ContractPricePeriods | undefined | null
       start: period.start,
       end: period.end,
       defaultPrice: period.defaultPrice ?? null,
-      months: period.months.map((month) => ({ ym: month.ym, price: month.price ?? null })),
+      defaultVolume: period.defaultVolume ?? null,
+      defaultVolumeUnit: period.defaultVolumeUnit ?? null,
+      months: period.months.map((month) => ({
+        ym: month.ym,
+        price: month.price ?? null,
+        volume: month.volume ?? null,
+        volumeUnit: month.volumeUnit ?? null,
+      })),
     })),
   };
 }
@@ -290,6 +340,8 @@ export function parseContractPricePeriods(value: unknown): ContractPricePeriods 
         start?: unknown;
         end?: unknown;
         defaultPrice?: unknown;
+        defaultVolume?: unknown;
+        defaultVolumeUnit?: unknown;
         months?: unknown;
       };
 
@@ -301,12 +353,16 @@ export function parseContractPricePeriods(value: unknown): ContractPricePeriods 
       }
 
       const defaultPrice = coerceNumber(data.defaultPrice);
+      const defaultVolume = coerceNumber(data.defaultVolume);
+      const defaultVolumeUnit = normalizeVolumeUnit(data.defaultVolumeUnit);
 
       periods.push({
         id: typeof data.id === 'string' && data.id.trim() ? data.id : `${ensureRandomId()}-${index}`,
         start,
         end,
         defaultPrice: defaultPrice ?? null,
+        defaultVolume: defaultVolume ?? null,
+        defaultVolumeUnit: defaultVolumeUnit,
         months,
       });
     });
