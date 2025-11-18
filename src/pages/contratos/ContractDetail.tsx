@@ -236,9 +236,6 @@ const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | nul
 };
 
 export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods }) => {
-  console.log('[ContractDetail] Render - Componente renderizado com contrato:', contrato?.id, contrato?.codigo);
-  console.log('[ContractDetail] Render - Contrato completo (JSON):', JSON.stringify(contrato, null, 2));
-  
   const { updateContract } = useContracts();
   const [isPriceModalOpen, setIsPriceModalOpen] = React.useState(false);
   const [isEditingFlatPrice, setIsEditingFlatPrice] = React.useState(false);
@@ -253,10 +250,6 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   
   // Função auxiliar para extrair periodPrice do contrato
   const extractPeriodPrice = React.useCallback(() => {
-    console.log('[ContractDetail] extractPeriodPrice - Contrato completo:', contrato);
-    console.log('[ContractDetail] extractPeriodPrice - Tipo do contrato:', typeof contrato);
-    console.log('[ContractDetail] extractPeriodPrice - Keys do contrato:', contrato ? Object.keys(contrato) : 'contrato é null/undefined');
-    
     // Tenta extrair de diferentes lugares possíveis
     const contractWithPeriodPrice = contrato as { 
       periodPrice?: { price_periods?: string | null; flat_price_mwh?: number | null; flat_years?: number | null };
@@ -270,27 +263,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
     const directFlatPrice = contractWithPeriodPrice?.flat_price_mwh;
     const directFlatYears = contractWithPeriodPrice?.flat_years;
     
-    console.log('[ContractDetail] extractPeriodPrice - periodPrice objeto:', periodPrice);
-    console.log('[ContractDetail] extractPeriodPrice - periodPrice?.price_periods:', periodPrice?.price_periods);
-    console.log('[ContractDetail] extractPeriodPrice - periodPrice?.flat_price_mwh:', periodPrice?.flat_price_mwh);
-    console.log('[ContractDetail] extractPeriodPrice - periodPrice?.flat_years:', periodPrice?.flat_years);
-    console.log('[ContractDetail] extractPeriodPrice - directPricePeriods:', directPricePeriods);
-    console.log('[ContractDetail] extractPeriodPrice - directFlatPrice:', directFlatPrice);
-    console.log('[ContractDetail] extractPeriodPrice - directFlatYears:', directFlatYears);
-    
     // Prioriza periodPrice, mas também aceita campos diretos
     const pricePeriodsJson = periodPrice?.price_periods ?? directPricePeriods;
     const flatPrice = periodPrice?.flat_price_mwh ?? directFlatPrice;
     const flatYears = periodPrice?.flat_years ?? directFlatYears;
-    
-    console.log('[ContractDetail] extractPeriodPrice - Resultado final:', {
-      pricePeriodsJson,
-      flatPrice,
-      flatYears,
-      pricePeriodsJsonType: typeof pricePeriodsJson,
-      pricePeriodsJsonLength: typeof pricePeriodsJson === 'string' ? pricePeriodsJson.length : 'N/A',
-      pricePeriodsJsonIsEmpty: typeof pricePeriodsJson === 'string' ? pricePeriodsJson.trim() === '' : 'N/A',
-    });
     
     return { pricePeriodsJson, flatPrice, flatYears };
   }, [contrato]);
@@ -298,20 +274,13 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   const [pricePeriods, setPricePeriods] = React.useState<PricePeriods | null>(() => {
     const { pricePeriodsJson } = extractPeriodPrice();
     const parsed = toPricePeriods(pricePeriodsJson);
-    console.log('[ContractDetail] useState inicial - pricePeriods parseado via util:', parsed);
     return parsed;
   });
 
   // Atualiza quando o contrato mudar
   React.useEffect(() => {
-    console.log('[ContractDetail] useEffect - Contrato mudou, atualizando pricePeriods');
-    console.log('[ContractDetail] useEffect - Contrato ID:', contrato?.id);
-    const { pricePeriodsJson, flatPrice, flatYears } = extractPeriodPrice();
-    console.log('[ContractDetail] useEffect - pricePeriodsJson:', pricePeriodsJson);
-    console.log('[ContractDetail] useEffect - flatPrice:', flatPrice);
-    console.log('[ContractDetail] useEffect - flatYears:', flatYears);
+    const { pricePeriodsJson } = extractPeriodPrice();
     const parsed = toPricePeriods(pricePeriodsJson);
-    console.log('[ContractDetail] useEffect - Novo pricePeriods parseado via util:', parsed);
     setPricePeriods(parsed);
   }, [contrato, extractPeriodPrice]);
 
@@ -332,11 +301,6 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
     pricePeriods && Array.isArray(pricePeriods.periods)
       ? pricePeriods.periods
       : ([] as PricePeriods['periods']);
-  
-  console.log('[ContractDetail] Render - pricePeriods:', pricePeriods);
-  console.log('[ContractDetail] Render - flatPrice:', flatPrice);
-  console.log('[ContractDetail] Render - flatYears:', flatYears);
-  console.log('[ContractDetail] Render - priceSummary:', priceSummary);
 
   // Função para iniciar edição de um campo
   const handleStartEditing = (fieldLabel: string, currentValue: string) => {

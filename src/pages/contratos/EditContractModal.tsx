@@ -66,8 +66,8 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'limiteInferior', label: 'Limite Inferior (%)', type: 'number', placeholder: '0' },
   { key: 'flex', label: 'Flexibilidade (%)', type: 'number', placeholder: '100' },
   { key: 'precoMedio', label: 'Preço Médio (R$/MWh)', type: 'number', placeholder: '0,00' },
-  { key: 'balanceEmail', label: 'E-mail do Balanço', type: 'email', placeholder: 'balanco@exemplo.com' },
-  { key: 'billingEmail', label: 'E-mail de Faturamento', type: 'email', placeholder: 'faturamento@exemplo.com' },
+  { key: 'balanceEmail', label: 'E-mail do Balanço', type: 'text', placeholder: 'balanco@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
+  { key: 'billingEmail', label: 'E-mail de Faturamento', type: 'text', placeholder: 'faturamento@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
   { key: 'medidor', label: 'Medidor', type: 'text', placeholder: 'Nome do medidor / grupo' },
 ];
 
@@ -497,13 +497,20 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                           )}
                         </div>
                       ) : (
-                        <input
-                          type={config.type}
-                          value={value}
-                          onChange={(e) => handleFieldChange(config.key, e.target.value)}
-                          placeholder={config.placeholder}
-                          className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                        />
+                        <>
+                          <input
+                            type={config.type}
+                            value={value}
+                            onChange={(e) => handleFieldChange(config.key, e.target.value)}
+                            placeholder={config.placeholder}
+                            className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                          />
+                          {(config.key === 'balanceEmail' || config.key === 'billingEmail') && (
+                            <span className="text-xs text-slate-500">
+                              Separe múltiplos emails por vírgula ou ponto-e-vírgula
+                            </span>
+                          )}
+                        </>
                       )}
                     </label>
                   );

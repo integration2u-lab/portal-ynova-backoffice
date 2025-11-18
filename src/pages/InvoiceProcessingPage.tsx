@@ -9,6 +9,7 @@ import {
   Eye,
   RefreshCw,
 } from 'lucide-react';
+import { IDP_API_URL } from '../config/api';
 
 type Etapa = 'upload' | 'processamento' | 'dados';
 
@@ -259,7 +260,7 @@ export default function InvoiceProcessingPage() {
       };
 
       // Make API call
-      const response = await fetch('https://api.ynovamarketplace.com/api/idp/process', {
+      const response = await fetch(`${IDP_API_URL}/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

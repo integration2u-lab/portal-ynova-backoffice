@@ -213,13 +213,17 @@ export default function ContratosPage() {
 
   const handleCreateContract = React.useCallback(
     async (contract: ContractMock) => {
-      const saved = await addContract(contract);
-      setIsCreateOpen(false);
-      await handleRefreshContracts();
-      setSearchTerm('');
-      setContratoSelecionado(saved.id);
-      setPaginaAtual(1);
-      return saved;
+      try {
+        const saved = await addContract(contract);
+        setIsCreateOpen(false);
+        await handleRefreshContracts();
+        setSearchTerm('');
+        setContratoSelecionado(saved.id);
+        setPaginaAtual(1);
+        return saved;
+      } catch (error) {
+        throw error;
+      }
     },
     [addContract, handleRefreshContracts]
   );

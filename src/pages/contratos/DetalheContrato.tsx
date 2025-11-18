@@ -9,19 +9,11 @@ export default function DetalheContratoPage() {
   const { id } = useParams();
   const { getContractById, updateContract } = useContracts();
   
-  console.log('[DetalheContrato] Render - ID do contrato:', id);
-  
   const contrato = React.useMemo(() => {
     if (!id) {
-      console.log('[DetalheContrato] useMemo - Sem ID, retornando undefined');
       return undefined;
     }
     const found = getContractById(id);
-    console.log('[DetalheContrato] useMemo - Contrato encontrado:', found);
-    if (found) {
-      console.log('[DetalheContrato] useMemo - periodPrice do contrato:', (found as { periodPrice?: unknown }).periodPrice);
-      console.log('[DetalheContrato] useMemo - price_periods direto:', (found as { price_periods?: unknown }).price_periods);
-    }
     return found;
   }, [getContractById, id]);
 

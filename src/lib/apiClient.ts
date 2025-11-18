@@ -1,10 +1,10 @@
+import { API_BASE_URL } from '../config/api';
+
 const isDev = import.meta.env.DEV;
-const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false';
-// URL base padrão para API de contratos
-const DEFAULT_API_BASE_URL = 'api-balanco.ynovamarketplace.com/api';
-// URL ngrok para testes
-const NGROK_API_BASE_URL = 'https://api-balanco.ynovamarketplace.com';
-const BASE_URL = isDev && useProxy ? '' : (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL);
+const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'false') !== 'false';
+// URL base para API de contratos (usa a mesma URL base configurada)
+const NGROK_API_BASE_URL = API_BASE_URL;
+const BASE_URL = isDev && useProxy ? '' : API_BASE_URL;
 
 type ApiFetchOptions = RequestInit & {
   /**
@@ -31,7 +31,8 @@ const buildUrl = (path: string) => {
   
   // Para endpoints de contratos, usa a URL ngrok para testes
   if (normalizedPath.startsWith('/contracts')) {
-    return `${NGROK_API_BASE_URL}${normalizedPath}`;
+    const url = `${NGROK_API_BASE_URL}${normalizedPath}`;
+    return url;
   }
   
   return `${BASE_URL}${normalizedPath}`;
@@ -81,6 +82,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   };
 
   const url = buildUrl(path);
+  
   let response: Response;
   try {
     response = await fetch(url, requestInit);
@@ -124,7 +126,13 @@ export function postJson<T>(path: string, body: unknown, init: Omit<ApiFetchOpti
   const headers: HeadersInit = {
     ...(init.headers ?? {}),
     ...(jsonBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    'ngrok-skip-browser-warning': 'true',
   };
+  
+  console.log('[apiClient] 📤 postJson - Path:', path);
+  console.log('[apiClient] 📤 postJson - Headers:', headers);
+  console.log('[apiClient] 📤 postJson - Body:', jsonBody);
+  
   return apiFetch<T>(path, {
     ...init,
     method: 'POST',

@@ -1,5 +1,6 @@
 import { Cliente } from '../types';
 import { mockClientes } from '../data/mockData';
+import { LEAD_SIMULATION_WEBHOOK_URL } from '../config/api';
 
 type FetchOptions = {
   signal?: AbortSignal;
@@ -11,7 +12,7 @@ export type LeadSimulationResponse = {
   error?: string;
 };
 
-const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook/mockBalancoEnergetico';
+const DEFAULT_BFF_URL = LEAD_SIMULATION_WEBHOOK_URL;
 
 let lastResult: LeadSimulationResponse | null = null;
 let lastRemoteClientes: Cliente[] | null = null;

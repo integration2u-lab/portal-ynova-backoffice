@@ -8,8 +8,9 @@ import {
   type CreateContractPayload,
 } from '../../services/contracts';
 import { parseContractPricePeriods } from '../../utils/contractPricing';
+import { API_BASE_URL } from '../../config/api';
 
-const DEFAULT_API_URL = 'https://api-balanco.ynovamarketplace.com';
+const DEFAULT_API_URL = API_BASE_URL;
 
 const runtimeEnv: Record<string, string | undefined> =
   ((typeof import.meta !== 'undefined'
@@ -514,8 +515,6 @@ const normalizePeriodos = (value: unknown): ContractMock['periodos'] => {
 };
 
 const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
-  console.log('[ContractsContext] normalizeContractsFromApi - Payload recebido:', payload);
-  
   const extractArray = (data: unknown): unknown[] => {
     if (Array.isArray(data)) return data;
     if (!data || typeof data !== 'object') return [];
@@ -534,13 +533,10 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
   };
 
   const rawContracts = extractArray(payload);
-  console.log('[ContractsContext] normalizeContractsFromApi - Processando', rawContracts.length, 'contratos');
   
   return rawContracts.map((item, index) => {
     const baseId = normalizeString((item as { id?: unknown; codigo?: unknown }).id ?? (item as { codigo?: unknown }).codigo);
     const id = baseId || `contract-${index + 1}`;
-    
-    console.log(`[ContractsContext] normalizeContractsFromApi - Contrato ${index + 1} (ID: ${id}):`, item);
 
     const referenceBaseRaw =
       (item as { reference_base?: unknown }).reference_base ??
@@ -1038,9 +1034,6 @@ const fetchContractsFromEndpoints = async (
       if (!contracts.length) {
         console.warn('[ContractsContext] API retornou lista vazia de contratos.');
       }
-      console.info(
-        `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos de ${endpoint}.`
-      );
       return contracts;
     } catch (error) {
       if (signal?.aborted) {
@@ -1087,7 +1080,30 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const groupName = findDadosValue(['grupo', 'group', 'medidor', 'meter']);
   const volumeField =
     contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
-  const contractedVolume = parseNumericInput(volumeField);
+  
+  // Melhora a extração do volume: remove texto e formatação, mantém apenas números
+  let contractedVolume = null;
+  if (volumeField && volumeField !== 'Não informado') {
+    // Remove tudo exceto números, pontos e vírgulas
+    const volumeStr = String(volumeField).replace(/[^\d.,]/g, '');
+    // Remove pontos (separadores de milhar) e substitui vírgula por ponto
+    const volumeNum = volumeStr.replace(/\./g, '').replace(',', '.');
+    const parsed = parseFloat(volumeNum);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      contractedVolume = parsed;
+    }
+  }
+  
+  // Se não conseguiu extrair, tenta parseNumericInput como fallback
+  if (!contractedVolume) {
+    contractedVolume = parseNumericInput(volumeField);
+  }
+  
+  console.log('🔍 [contractToApiPayload] Volume extraído:', {
+    volumeField,
+    contractedVolume,
+    dadosContratoVolume: contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value,
+  });
   const supplierFromContract = normalizeString(contract.fornecedor);
   const supplierValue = supplierFromContract || supplier || '';
   const proinfaField = findDadosValue(['proinfa']);
@@ -1223,12 +1239,21 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const submarketFromDados = sanitizeOptionalField(findDadosValue(['submercado', 'submarket']));
   const submarketValue = submarketFromContract || submarketFromDados || undefined;
 
-  const seasonalFlexUpperFromContract = parsePercentInput((contract as { flexSazonalSuperior?: unknown }).flexSazonalSuperior);
-  const seasonalFlexLowerFromContract = parsePercentInput((contract as { flexSazonalInferior?: unknown }).flexSazonalInferior);
+  // Para flexibilidade sazonal, a API espera o valor numérico da porcentagem (ex: 50 para 50%), não decimal (0.5)
+  const parsePercentAsNumber = (value: unknown): number | null => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).replace(/%/g, '').replace(/\s/g, '').replace(',', '.');
+    if (!text) return null;
+    const numeric = Number(text);
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+  
+  const seasonalFlexUpperFromContract = parsePercentAsNumber((contract as { flexSazonalSuperior?: unknown }).flexSazonalSuperior);
+  const seasonalFlexLowerFromContract = parsePercentAsNumber((contract as { flexSazonalInferior?: unknown }).flexSazonalInferior);
   const seasonalFlexUpperField = findDadosValue(['flex', 'sazonal', 'super']);
   const seasonalFlexLowerField = findDadosValue(['flex', 'sazonal', 'infer']);
-  const seasonalFlexUpper = seasonalFlexUpperFromContract ?? parsePercentInput(seasonalFlexUpperField);
-  const seasonalFlexLower = seasonalFlexLowerFromContract ?? parsePercentInput(seasonalFlexLowerField);
+  const seasonalFlexUpper = seasonalFlexUpperFromContract ?? parsePercentAsNumber(seasonalFlexUpperField);
+  const seasonalFlexLower = seasonalFlexLowerFromContract ?? parsePercentAsNumber(seasonalFlexLowerField);
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
@@ -1310,6 +1335,101 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     return null;
   };
 
+  // Extrai valores de flexibilidade sazonal do record (já processado por contractToApiPayload)
+  // O contractToApiPayload mapeia para seasonal_flexibility_upper e seasonal_flexibility_lower
+  // Mas precisamos enviar como seasonalFlexibilityUpperPercentage e seasonalFlexibilityMinPercentage
+  const seasonalFlexUpperFromRecord = pickNullableValue('seasonal_flexibility_upper');
+  const seasonalFlexLowerFromRecord = pickNullableValue('seasonal_flexibility_lower');
+  
+  // Se não encontrou no record, tenta extrair diretamente do contract
+  // Para flexibilidade sazonal, a API espera o valor numérico da porcentagem (ex: 50 para 50%), não decimal (0.5)
+  const parsePercentAsNumber = (value: unknown): number | null => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).replace(/%/g, '').replace(/\s/g, '').replace(',', '.');
+    if (!text || text === '') return null;
+    const numeric = Number(text);
+    const result = Number.isFinite(numeric) ? numeric : null;
+    console.log('🔢 [parsePercentAsNumber] Conversão:', { value, text, numeric, result });
+    return result;
+  };
+  
+  console.log('🔍 [contractToServicePayload] Antes de parsear:', {
+    seasonalFlexUpperFromRecord,
+    seasonalFlexLowerFromRecord,
+    contractFlexSazonalSuperior: contract.flexSazonalSuperior,
+    contractFlexSazonalInferior: contract.flexSazonalInferior,
+  });
+  
+  const seasonalFlexUpper = seasonalFlexUpperFromRecord ?? 
+    (contract.flexSazonalSuperior ? parsePercentAsNumber(contract.flexSazonalSuperior) : null);
+  const seasonalFlexLower = seasonalFlexLowerFromRecord ?? 
+    (contract.flexSazonalInferior ? parsePercentAsNumber(contract.flexSazonalInferior) : null);
+  
+  console.log('🔍 [contractToServicePayload] Após parsear:', {
+    seasonalFlexUpper,
+    seasonalFlexLower,
+  });
+
+  // Extrai submarket do record (já processado por contractToApiPayload)
+  const submarketValue = typeof record.submarket === 'string' && record.submarket.trim() 
+    ? record.submarket.trim() 
+    : (contract.submercado && typeof contract.submercado === 'string' ? contract.submercado.trim() : null);
+
+  // Extrai supplierEmail do record (billing_email já processado por contractToApiPayload)
+  // O supplierEmail é o mesmo que billing_email conforme especificação do curl
+  const supplierEmailValue = typeof record.billing_email === 'string' && record.billing_email.trim()
+    ? record.billing_email.trim()
+    : (contract.billingEmail && typeof contract.billingEmail === 'string' ? contract.billingEmail.trim() : null);
+
+  console.log('🔍 [contractToServicePayload] Valores extraídos dos novos campos:', {
+    submarket: submarketValue,
+    supplierEmail: supplierEmailValue,
+    seasonalFlexibilityMinPercentage: seasonalFlexLower,
+    seasonalFlexibilityUpperPercentage: seasonalFlexUpper,
+    contractSubmercado: contract.submercado,
+    contractBillingEmail: contract.billingEmail,
+    contractFlexSazonalSuperior: contract.flexSazonalSuperior,
+    contractFlexSazonalInferior: contract.flexSazonalInferior,
+  });
+
+  // Extrai o volume do record (já processado por contractToApiPayload)
+  // Se não encontrar no record, tenta extrair do dadosContrato ou calcular
+  let volumeValue = pickNullableValue('contracted_volume_mwh');
+  
+  console.log('🔍 [contractToServicePayload] Volume do record:', volumeValue);
+  
+  if (!volumeValue || volumeValue === null) {
+    // Tenta extrair do dadosContrato
+    const volumeField = contract.dadosContrato?.find((item) => 
+      /volume/i.test(item.label)
+    )?.value;
+    
+    console.log('🔍 [contractToServicePayload] Volume do dadosContrato:', volumeField);
+    
+    if (volumeField && volumeField !== 'Não informado') {
+      // Extrai o número do campo (ex: "1.000,00 MWh" -> 1000)
+      // Remove tudo exceto números, pontos e vírgulas
+      const volumeStr = String(volumeField).replace(/[^\d.,]/g, '');
+      // Remove pontos (separadores de milhar) e substitui vírgula por ponto
+      const volumeNum = volumeStr.replace(/\./g, '').replace(',', '.');
+      const parsed = parseFloat(volumeNum);
+      
+      console.log('🔍 [contractToServicePayload] Volume processado:', {
+        volumeField,
+        volumeStr,
+        volumeNum,
+        parsed,
+      });
+      
+      if (Number.isFinite(parsed) && parsed > 0) {
+        volumeValue = parsed;
+        console.log('✅ [contractToServicePayload] Volume extraído do dadosContrato:', volumeValue);
+      }
+    }
+  }
+  
+  console.log('🔍 [contractToServicePayload] Volume final que será enviado:', volumeValue);
+  
   const servicePayload: CreateContractPayload = {
     contract_code: pickString('contract_code', contract.codigo || contract.id),
     client_name: pickString('client_name', contract.cliente),
@@ -1317,7 +1437,7 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     cnpj: pickString('cnpj', contract.cnpj),
     segment: pickString('segment', contract.segmento),
     contact_responsible: pickString('contact_responsible', contract.contato),
-    contracted_volume_mwh: pickNullableValue('contracted_volume_mwh'),
+    contracted_volume_mwh: volumeValue,
     status: pickString('status', contract.status),
     energy_source: pickString('energy_source', contract.fonte),
     contracted_modality: pickString('contracted_modality', contract.modalidade),
@@ -1341,6 +1461,11 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     price_periods: typeof record.price_periods === 'string' ? record.price_periods : null,
     flat_price_mwh: pickNullableValue('flat_price_mwh'),
     flat_years: pickNullableValue('flat_years'),
+    // Novos campos solicitados
+    submarket: submarketValue,
+    supplierEmail: supplierEmailValue,
+    seasonalFlexibilityMinPercentage: seasonalFlexLower,
+    seasonalFlexibilityUpperPercentage: seasonalFlexUpper,
     // Adiciona periodPrice como objeto (formato do backend)
     periodPrice: (() => {
       if (record.periodPrice && typeof record.periodPrice === 'object') {
@@ -1390,6 +1515,7 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
       };
     })(),
   };
+  
   return servicePayload;
 };
 
@@ -1441,29 +1567,58 @@ const requestContractApi = async (
 };
 
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
-  const writeBaseUrl = resolveWriteApiUrl();
-  const shouldUseService = !isAbsoluteUrl(writeBaseUrl);
-
-  if (shouldUseService) {
-    try {
-      const created = await createContractService(contractToServicePayload(contract));
-      const normalized = normalizeContractsFromApi(created);
-      if (normalized[0]) {
-        return normalized[0];
-      }
-    } catch (serviceError) {
-      console.error('[ContractsContext] Falha ao criar contrato via apiClient.', serviceError);
+  console.log('🎯 [createContractInApi] Iniciando criação de contrato na API');
+  console.log('🎯 [createContractInApi] Contrato recebido:', {
+    id: contract.id,
+    codigo: contract.codigo,
+    cliente: contract.cliente,
+    submercado: contract.submercado,
+    flexSazonalSuperior: contract.flexSazonalSuperior,
+    flexSazonalInferior: contract.flexSazonalInferior,
+  });
+  
+  // Sempre usa createContractService quando disponível, pois ele usa apiClient que já está configurado
+  // com a URL correta (NGROK_API_BASE_URL para /contracts)
+  console.log('🎯 [createContractInApi] Usando createContractService (apiClient)...');
+  try {
+    const servicePayload = contractToServicePayload(contract);
+    console.log('🎯 [createContractInApi] Chamando createContractService com payload...');
+    const created = await createContractService(servicePayload);
+    console.log('🎯 [createContractInApi] Resposta recebida de createContractService');
+    
+    // createContractService retorna um Contract único, não um array
+    // Precisamos normalizar como se fosse um array com um único item
+    const normalized = normalizeContractsFromApi(
+      Array.isArray(created) ? created : { contracts: [created] }
+    );
+    
+    console.log('🎯 [createContractInApi] Normalizado:', { 
+      normalizedLength: normalized.length, 
+      hasFirst: !!normalized[0] 
+    });
+    
+    if (normalized[0]) {
+      console.log('✅ [createContractInApi] Contrato criado com sucesso via createContractService - RETORNANDO');
+      return normalized[0];
     }
+    // Se não conseguiu normalizar, lança erro para ir ao fallback
+    throw new Error('Não foi possível normalizar o contrato retornado pela API');
+  } catch (serviceError) {
+    console.error('❌ [createContractInApi] Erro em createContractService:', serviceError);
+    // Se falhar, tenta o fallback
+    console.log('🎯 [createContractInApi] Tentando fallback requestContractApi...');
+    
+    const writeBaseUrl = resolveWriteApiUrl();
+    const payload = contractToApiPayload(contract);
+    const endpoints = buildEndpointCandidates(writeBaseUrl);
+    const response = await requestContractApi(endpoints, 'POST', payload);
+    
+    if (!response) {
+      return contract;
+    }
+    const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
+    return normalized[0] ?? contract;
   }
-
-  const payload = contractToApiPayload(contract);
-  const endpoints = buildEndpointCandidates(writeBaseUrl);
-  const response = await requestContractApi(endpoints, 'POST', payload);
-  if (!response) {
-    return contract;
-  }
-  const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
-  return normalized[0] ?? contract;
 };
 
 const updateContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
@@ -1530,13 +1685,8 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
 
   try {
         const apiContracts = await listContractsService({ signal });
-        console.log('[ContractsContext] fetchContracts - Dados brutos da API:', apiContracts);
         const normalized = normalizeContractsFromApi(apiContracts);
-        console.log('[ContractsContext] fetchContracts - Contratos normalizados:', normalized);
         if (normalized.length) {
-          console.info(
-            `[ContractsContext] Contratos carregados via apiClient: ${normalized.length} itens recebidos.`
-          );
       return normalized;
     }
     console.warn('[ContractsContext] API retornou lista vazia de contratos.');
@@ -1636,9 +1786,24 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
   }, [loadContracts]);
 
   const addContract = React.useCallback(async (contract: ContractMock) => {
+    console.log('📝 [addContract] Iniciando adição de contrato');
+    console.log('📝 [addContract] Contrato recebido:', {
+      id: contract.id,
+      codigo: contract.codigo,
+      cliente: contract.cliente,
+      submercado: contract.submercado,
+      flexSazonalSuperior: contract.flexSazonalSuperior,
+      flexSazonalInferior: contract.flexSazonalInferior,
+      billingEmail: contract.billingEmail,
+    });
+    
     const draft = cloneContract(contract);
+    console.log('📝 [addContract] Draft clonado, chamando createContractInApi...');
+    
     try {
       const saved = await createContractInApi(draft);
+      console.log('📝 [addContract] Contrato salvo na API:', saved);
+      
       const savedWithTimestamps = (() => {
         if (saved.createdAt && saved.updatedAt) {
           return saved;
@@ -1650,6 +1815,7 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
           updatedAt: saved.updatedAt ?? saved.createdAt ?? nowIso,
         };
       })();
+      
       setContracts((prev) => {
         const next: ContractMock[] = [];
         const seen = new Set<string>();
@@ -1671,7 +1837,13 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       return savedWithTimestamps;
     } catch (apiError) {
-      console.error('[ContractsProvider] Falha ao criar contrato na API.', apiError);
+      console.error('[ContractsProvider] ❌ Falha ao criar contrato na API:', apiError);
+      console.error('[ContractsProvider] ❌ Tipo do erro:', typeof apiError);
+      console.error('[ContractsProvider] ❌ Stack trace:', apiError instanceof Error ? apiError.stack : 'N/A');
+      if (apiError instanceof Error) {
+        console.error('[ContractsProvider] ❌ Mensagem do erro:', apiError.message);
+        console.error('[ContractsProvider] ❌ Nome do erro:', apiError.name);
+      }
       const message =
         apiError instanceof Error ? apiError.message : 'Erro desconhecido ao criar contrato na API';
       setError(message);
@@ -1739,18 +1911,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
 
   const getContractById = React.useCallback(
     (id: string) => {
-      console.log('[ContractsContext] getContractById - Buscando contrato com ID:', id);
-      console.log('[ContractsContext] getContractById - Total de contratos disponíveis:', contracts.length);
       const found = contracts.find((contract) => contract.id === id || contract.codigo === id);
-      console.log('[ContractsContext] getContractById - Contrato encontrado:', found ? 'SIM' : 'NÃO');
       if (found) {
-        console.log('[ContractsContext] getContractById - Dados do contrato encontrado:', {
-          id: found.id,
-          codigo: found.codigo,
-          cliente: found.cliente,
-          periodPrice: (found as { periodPrice?: unknown }).periodPrice,
-          price_periods: (found as { price_periods?: unknown }).price_periods,
-        });
       }
       return found;
     },

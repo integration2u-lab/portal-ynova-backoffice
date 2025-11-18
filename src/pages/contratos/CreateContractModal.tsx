@@ -410,6 +410,32 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       nextErrors.seasonalFlexUpper = 'Flex sazonal superior deve ser maior ou igual ao inferior';
     }
 
+    // Validação de emails (permite múltiplos emails separados por vírgula ou ponto-e-vírgula)
+    const validateEmails = (emailString: string): string | null => {
+      if (!emailString.trim()) return null; // Email vazio é válido (opcional)
+      
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emails = emailString.split(/[;,]/).map((email) => email.trim()).filter(Boolean);
+      
+      for (const email of emails) {
+        if (!emailRegex.test(email)) {
+          return `Email inválido: "${email}". Use o formato correto (exemplo@dominio.com)`;
+        }
+      }
+      
+      return null;
+    };
+
+    const emailBalancoError = validateEmails(formState.emailBalanco);
+    if (emailBalancoError) {
+      nextErrors.emailBalanco = emailBalancoError;
+    }
+
+    const emailFaturamentoError = validateEmails(formState.emailFaturamento);
+    if (emailFaturamentoError) {
+      nextErrors.emailFaturamento = emailFaturamentoError;
+    }
+
     if (
       Number.isFinite(upper) &&
       Number.isFinite(lower) &&
@@ -461,6 +487,15 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const submarketValue = formState.submarket;
     const seasonalFlexUpperValue = formState.seasonalFlexUpper.trim();
     const seasonalFlexLowerValue = formState.seasonalFlexLower.trim();
+    
+    console.log('📋 [CreateContractModal] Valores do formulário:', {
+      submarket: submarketValue,
+      seasonalFlexUpper: seasonalFlexUpperValue,
+      seasonalFlexLower: seasonalFlexLowerValue,
+      formStateSubmarket: formState.submarket,
+      formStateSeasonalFlexUpper: formState.seasonalFlexUpper,
+      formStateSeasonalFlexLower: formState.seasonalFlexLower,
+    });
 
     const startMonth = formState.startDate ? formState.startDate.slice(0, 7) : '';
     const endMonth = formState.endDate ? formState.endDate.slice(0, 7) : '';
@@ -549,8 +584,8 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       limiteSuperior: `${formState.upperLimit || '0'}%`,
       limiteInferior: `${formState.lowerLimit || '0'}%`,
       flex: `${formState.flexibility || '0'}%`,
-      flexSazonalSuperior: seasonalFlexUpperValue ? `${seasonalFlexUpperValue}%` : null,
-      flexSazonalInferior: seasonalFlexLowerValue ? `${seasonalFlexLowerValue}%` : null,
+      flexSazonalSuperior: seasonalFlexUpperValue && seasonalFlexUpperValue !== '' ? `${seasonalFlexUpperValue}%` : null,
+      flexSazonalInferior: seasonalFlexLowerValue && seasonalFlexLowerValue !== '' ? `${seasonalFlexLowerValue}%` : null,
       precoMedio: priceAverage,
       fornecedor: supplierValue,
       submercado: submarketValue || undefined,
@@ -593,14 +628,22 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       },
     } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number | null };
 
+    console.log('📋 [CreateContractModal] Contrato montado antes de enviar:', {
+      id: newContract.id,
+      cliente: newContract.cliente,
+      submercado: newContract.submercado,
+      flexSazonalSuperior: newContract.flexSazonalSuperior,
+      flexSazonalInferior: newContract.flexSazonalInferior,
+      billingEmail: newContract.billingEmail,
+    });
+
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      await onCreate(newContract);
-  setFormState(buildInitialFormState());
-  setErrors({});
+      const result = await onCreate(newContract);
+      setFormState(buildInitialFormState());
+      setErrors({});
     } catch (error) {
-      console.error('[CreateContractModal] Falha ao criar contrato.', error);
       const message =
         error instanceof Error ? error.message : 'Não foi possível criar o contrato. Tente novamente.';
       setSubmitError(message);
@@ -820,25 +863,39 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   E-mail do Balanço
                   <input
-                    type="email"
+                    type="text"
                     value={formState.emailBalanco}
                     onChange={handleInputChange('emailBalanco')}
-                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="balanco@exemplo.com"
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.emailBalanco ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="balanco@exemplo.com ou email1@exemplo.com, email2@exemplo.com"
                   />
-                  <span className="text-xs text-slate-500">Usado para envio de relatórios</span>
+                  <span className="text-xs text-slate-500">
+                    Usado para envio de relatórios. Separe múltiplos emails por vírgula ou ponto-e-vírgula
+                  </span>
+                  {errors.emailBalanco && (
+                    <span className="text-xs font-medium text-red-500">{errors.emailBalanco}</span>
+                  )}
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   E-mail de Faturamento
                   <input
-                    type="email"
+                    type="text"
                     value={formState.emailFaturamento}
                     onChange={handleInputChange('emailFaturamento')}
-                    className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="faturamento@exemplo.com"
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.emailFaturamento ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="faturamento@exemplo.com ou email1@exemplo.com, email2@exemplo.com"
                   />
-                  <span className="text-xs text-slate-500">Obrigatório para clientes de atacado</span>
+                  <span className="text-xs text-slate-500">
+                    Obrigatório para clientes de atacado. Separe múltiplos emails por vírgula ou ponto-e-vírgula
+                  </span>
+                  {errors.emailFaturamento && (
+                    <span className="text-xs font-medium text-red-500">{errors.emailFaturamento}</span>
+                  )}
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">

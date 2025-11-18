@@ -18,8 +18,11 @@ export default defineConfig(({ mode }) => {
         'http://localhost:3000',
       ],
       hmr: {
-        clientPort: 443,
-        protocol: 'wss',
+        // Usa HTTP/WS ao invés de HTTPS/WSS para evitar erros de conexão
+        // O servidor está rodando em HTTP, então o HMR também deve usar HTTP
+        protocol: 'ws',
+        host: 'localhost',
+        port: 5173,
       },
     },
     // Forçar o Vite a expor as variáveis para import.meta.env
