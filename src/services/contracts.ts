@@ -195,8 +195,40 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     // Novos campos
     submarket: item?.submarket == null ? undefined : item?.submarket === null ? null : toStringSafe(item?.submarket),
     supplierEmail: item?.supplierEmail == null ? undefined : item?.supplierEmail === null ? null : toStringSafe(item?.supplierEmail) ?? (item?.billing_email == null ? undefined : item?.billing_email === null ? null : toStringSafe(item?.billing_email)),
-    seasonalFlexibilityMinPercentage: coerceNumber(item?.seasonalFlexibilityMinPercentage ?? item?.seasonal_flexibility_lower) ?? null,
-    seasonalFlexibilityUpperPercentage: coerceNumber(item?.seasonalFlexibilityUpperPercentage ?? item?.seasonal_flexibility_upper) ?? null,
+    // PRIORIDADE: Busca PRIMEIRO de seasonal_flexibility_min_percentage (campo correto da tabela)
+    seasonalFlexibilityMinPercentage: (() => {
+      const raw1 = item?.seasonal_flexibility_min_percentage; // PRIORIDADE 1: campo correto da tabela
+      const raw2 = item?.seasonal_flexibility_lower;
+      const raw3 = item?.seasonalFlexibilityMinPercentage;
+      const result = coerceNumber(raw1 ?? raw2 ?? raw3) ?? null;
+      console.log('🔍 [contracts.ts] Normalizando seasonalFlexibilityMinPercentage:', {
+        raw1_seasonal_flexibility_min_percentage: raw1,
+        raw2_seasonal_flexibility_lower: raw2,
+        raw3_seasonalFlexibilityMinPercentage: raw3,
+        result,
+        tipoRaw1: typeof raw1,
+        tipoRaw2: typeof raw2,
+        tipoRaw3: typeof raw3,
+      });
+      return result;
+    })(),
+    // PRIORIDADE: Busca PRIMEIRO de seasonal_flexibility_upper_percentage (campo correto da tabela)
+    seasonalFlexibilityUpperPercentage: (() => {
+      const raw1 = item?.seasonal_flexibility_upper_percentage; // PRIORIDADE 1: campo correto da tabela
+      const raw2 = item?.seasonal_flexibility_upper;
+      const raw3 = item?.seasonalFlexibilityUpperPercentage;
+      const result = coerceNumber(raw1 ?? raw2 ?? raw3) ?? null;
+      console.log('🔍 [contracts.ts] Normalizando seasonalFlexibilityUpperPercentage:', {
+        raw1_seasonal_flexibility_upper_percentage: raw1,
+        raw2_seasonal_flexibility_upper: raw2,
+        raw3_seasonalFlexibilityUpperPercentage: raw3,
+        result,
+        tipoRaw1: typeof raw1,
+        tipoRaw2: typeof raw2,
+        tipoRaw3: typeof raw3,
+      });
+      return result;
+    })(),
     created_at: toStringSafe(item?.created_at),
     updated_at: toStringSafe(item?.updated_at),
   };
@@ -276,7 +308,7 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
 
   // Map legal_name to social_reason for API
   // Remove campos antigos que serão substituídos pelos novos nomes
-  const { legal_name, balance_email, billing_email, supplierEmail, ...rest } = payload;
+  const { legal_name, balance_email, billing_email, supplierEmail, seasonalFlexibilityMinPercentage, seasonalFlexibilityUpperPercentage, ...rest } = payload;
   const socialReason = legalNameValue === undefined ? undefined : legalNameValue === '' ? null : legalNameValue;
 
   const finalPayload = {
@@ -288,9 +320,9 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
     // E-mail de Faturamento → supplier_email (não billing_email ou supplierEmail)
     supplier_email: billingEmailValue === undefined ? undefined : billingEmailValue === '' ? null : billingEmailValue,
     submarket: submarketValue === undefined ? undefined : submarketValue === '' ? null : submarketValue,
-    // Envia em camelCase conforme especificação da API (ver curl de teste)
-    seasonalFlexibilityMinPercentage: seasonalFlexMin === undefined ? undefined : seasonalFlexMin === '' ? null : seasonalFlexMin,
-    seasonalFlexibilityUpperPercentage: seasonalFlexUpper === undefined ? undefined : seasonalFlexUpper === '' ? null : seasonalFlexUpper,
+    // Envia em snake_case conforme especificação da API
+    seasonal_flexibility_min_percentage: seasonalFlexMin === undefined ? undefined : seasonalFlexMin === '' ? null : seasonalFlexMin,
+    seasonal_flexibility_upper_percentage: seasonalFlexUpper === undefined ? undefined : seasonalFlexUpper === '' ? null : seasonalFlexUpper,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',
   };
 

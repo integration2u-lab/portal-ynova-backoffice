@@ -187,6 +187,7 @@ const normalizeVolumeUnit = (value: unknown): VolumeUnit | undefined => {
 
 const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | null => {
   const parsed = parseContractPricePeriods(rawValue ?? undefined);
+  
   if (!parsed || !Array.isArray(parsed.periods)) {
     return null;
   }
@@ -198,16 +199,40 @@ const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | nul
       .filter(
         (month): month is {
           ym: string;
-          price: number;
+          price?: number;
           volume?: number | null;
           volumeUnit?: VolumeUnit | null;
-        } => typeof month.price === 'number' && Number.isFinite(month.price)
+          hoursInMonth?: number;
+          volumeMWm?: number | null;
+          volumeMWh?: number | null;
+          volumeSeasonalizedMWh?: number | null;
+          flexibilityMaxMWh?: number | null;
+          flexibilityMinMWh?: number | null;
+          basePrice?: number | null;
+          adjustedPrice?: number | null;
+        } => {
+          // Aceita meses que tenham price, basePrice ou volumeMWm
+          const hasPrice = typeof month.price === 'number' && Number.isFinite(month.price);
+          const hasBasePrice = typeof month.basePrice === 'number' && Number.isFinite(month.basePrice);
+          const hasVolumeMWm = typeof month.volumeMWm === 'number' && Number.isFinite(month.volumeMWm);
+          
+          return hasPrice || hasBasePrice || hasVolumeMWm;
+        }
       )
       .map((month) => ({
         ym: month.ym,
         price: month.price,
         volume: typeof month.volume === 'number' && Number.isFinite(month.volume) ? month.volume : null,
         volumeUnit: normalizeVolumeUnit(month.volumeUnit),
+        // Carrega todos os novos campos salvos no JSON
+        hoursInMonth: typeof month.hoursInMonth === 'number' ? month.hoursInMonth : undefined,
+        volumeMWm: typeof month.volumeMWm === 'number' && Number.isFinite(month.volumeMWm) ? month.volumeMWm : null,
+        volumeMWh: typeof month.volumeMWh === 'number' && Number.isFinite(month.volumeMWh) ? month.volumeMWh : null,
+        volumeSeasonalizedMWh: typeof month.volumeSeasonalizedMWh === 'number' && Number.isFinite(month.volumeSeasonalizedMWh) ? month.volumeSeasonalizedMWh : null,
+        flexibilityMaxMWh: typeof month.flexibilityMaxMWh === 'number' && Number.isFinite(month.flexibilityMaxMWh) ? month.flexibilityMaxMWh : null,
+        flexibilityMinMWh: typeof month.flexibilityMinMWh === 'number' && Number.isFinite(month.flexibilityMinMWh) ? month.flexibilityMinMWh : null,
+        basePrice: typeof month.basePrice === 'number' && Number.isFinite(month.basePrice) ? month.basePrice : null,
+        // adjustedPrice não é carregado - será recalculado pelo modal
       }));
 
     const hasDefaultPrice = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
@@ -235,7 +260,7 @@ const toPricePeriods = (rawValue: string | null | undefined): PricePeriods | nul
   return { periods: normalizedPeriods } satisfies PricePeriods;
 };
 
-export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods }) => {
+export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, onUpdatePricePeriods }) => {
   const { updateContract } = useContracts();
   const [isPriceModalOpen, setIsPriceModalOpen] = React.useState(false);
   const [isEditingFlatPrice, setIsEditingFlatPrice] = React.useState(false);
@@ -247,6 +272,64 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   const [fieldInputValue, setFieldInputValue] = React.useState('');
   const [savingField, setSavingField] = React.useState<string | null>(null);
   const fieldInputRef = React.useRef<HTMLInputElement | HTMLSelectElement>(null);
+  
+  // Migra campos antigos para campos separados
+  const contrato = React.useMemo(() => {
+    const updated = { ...contratoOriginal };
+    
+    console.log('🔍 [ContractDetail] Contrato recebido:', {
+      id: updated.id,
+      codigo: updated.codigo,
+      flexSazonalSuperior: updated.flexSazonalSuperior,
+      flexSazonalInferior: updated.flexSazonalInferior,
+      flex: updated.flex,
+      limiteSuperior: updated.limiteSuperior,
+      limiteInferior: updated.limiteInferior,
+    });
+    
+    // Verifica se tem campos antigos mas não tem os novos
+    const hasFlexLimites = updated.dadosContrato.some(f => f.label.toLowerCase().includes('flex / limites'));
+    const hasFlexSeparated = updated.dadosContrato.some(f => f.label.toLowerCase().includes('flexibilidade (%)'));
+    
+    if (hasFlexLimites && !hasFlexSeparated) {
+      // Remove campos antigos
+      updated.dadosContrato = updated.dadosContrato.filter(f => {
+        const label = f.label.toLowerCase();
+        return !label.includes('flex / limites') && !label.includes('flex sazonalidade');
+      });
+      
+      // Adiciona campos novos separados
+      const flexValue = updated.flex?.replace('%', '') || '0';
+      const limiteSupValue = updated.limiteSuperior?.replace('%', '') || '0';
+      const limiteInfValue = updated.limiteInferior?.replace('%', '') || '0';
+      const flexSazSupValue = updated.flexSazonalSuperior?.replace('%', '') || '';
+      const flexSazInfValue = updated.flexSazonalInferior?.replace('%', '') || '';
+      
+      console.log('🔍 [ContractDetail] Valores extraídos para campos:', {
+        flexValue,
+        limiteSupValue,
+        limiteInfValue,
+        flexSazSupValue,
+        flexSazInfValue,
+      });
+      
+      // Encontra índice onde inserir (após medidor)
+      const medidorIndex = updated.dadosContrato.findIndex(f => f.label.toLowerCase().includes('medidor'));
+      const insertIndex = medidorIndex >= 0 ? medidorIndex + 1 : updated.dadosContrato.length;
+      
+      const newFields = [
+        { label: 'Flexibilidade (%)', value: `${flexValue}%` },
+        { label: 'Limite Superior (%)', value: `${limiteSupValue}%` },
+        { label: 'Limite Inferior (%)', value: `${limiteInfValue}%` },
+        { label: 'Flexibilidade Sazonalidade - Superior (%)', value: flexSazSupValue ? `${flexSazSupValue}%` : 'Não informado' },
+        { label: 'Flexibilidade Sazonalidade - Inferior (%)', value: flexSazInfValue ? `${flexSazInfValue}%` : 'Não informado' },
+      ];
+      
+      updated.dadosContrato.splice(insertIndex, 0, ...newFields);
+    }
+    
+    return updated;
+  }, [contratoOriginal]);
   
   // Função auxiliar para extrair periodPrice do contrato
   const extractPeriodPrice = React.useCallback(() => {
@@ -305,7 +388,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
   // Função para iniciar edição de um campo
   const handleStartEditing = (fieldLabel: string, currentValue: string) => {
     setEditingField(fieldLabel);
-    setFieldInputValue(currentValue);
+    // Se o valor for "Não informado", usa string vazia para os selects
+    const valueToEdit = currentValue === 'Não informado' ? '' : currentValue;
+    setFieldInputValue(valueToEdit);
     setTimeout(() => {
       fieldInputRef.current?.focus();
     }, 0);
@@ -408,14 +493,128 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
       // Atualiza o campo no dadosContrato
       await updateContract(contrato.id, (current) => {
         const updated = { ...current };
-        if (updated.dadosContrato[fieldIndex]) {
-          updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
-        }
         
         // Mapeia campos específicos para atualizar também no contrato
         const normalizedLabel = normalizeLabel(fieldLabel);
-        if (normalizedLabel.includes('volume') && normalizedLabel.includes('contratado')) {
+        
+        console.log('🔍 [ContractDetail] Salvando campo:', {
+          fieldLabel,
+          normalizedLabel,
+          fieldIndex,
+          fieldInputValue,
+          campoNoIndex: updated.dadosContrato[fieldIndex]?.label,
+        });
+        
+        // Verifica se o fieldIndex corresponde ao campo correto
+        const campoNoIndex = updated.dadosContrato[fieldIndex];
+        if (!campoNoIndex || normalizeLabel(campoNoIndex.label) !== normalizedLabel) {
+          console.error('⚠️ [ContractDetail] ERRO: fieldIndex não corresponde ao campo!', {
+            fieldIndex,
+            campoEsperado: fieldLabel,
+            campoNoIndex: campoNoIndex?.label,
+          });
+        }
+        
+        // ORDEM IMPORTANTE: Verificações mais específicas primeiro
+        // Verifica se é Flexibilidade Sazonalidade - Superior
+        if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('superior') && !normalizedLabel.includes('inferior')) {
+          // Flexibilidade Sazonalidade - Superior - APENAS ESTE CAMPO
+          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
+          const parsed = parseFloat(numericValue);
+          console.log('✅ [ContractDetail] Salvando APENAS flexibilidade sazonal SUPERIOR:', {
+            fieldLabel,
+            normalizedLabel,
+            fieldIndex,
+            fieldInputValue,
+            numericValue,
+            parsed,
+            isFinite: Number.isFinite(parsed),
+            campoNoIndex: updated.dadosContrato[fieldIndex]?.label,
+          });
+          
+          // Atualiza APENAS o campo correto
+          if (Number.isFinite(parsed)) {
+            updated.flexSazonalSuperior = `${parsed}%`;
+            // Atualiza APENAS o campo no índice correto
+            if (updated.dadosContrato[fieldIndex] && normalizeLabel(updated.dadosContrato[fieldIndex].label) === normalizedLabel) {
+              updated.dadosContrato[fieldIndex].value = `${parsed}%`;
+            } else {
+              // Se o índice não corresponder, procura o campo correto
+              const correctIndex = updated.dadosContrato.findIndex(f => 
+                normalizeLabel(f.label) === normalizedLabel
+              );
+              if (correctIndex >= 0) {
+                updated.dadosContrato[correctIndex].value = `${parsed}%`;
+                console.log('🔧 [ContractDetail] Campo encontrado no índice correto:', correctIndex);
+              } else {
+                console.error('❌ [ContractDetail] Campo não encontrado no dadosContrato!');
+              }
+            }
+          } else {
+            updated.flexSazonalSuperior = null;
+            if (updated.dadosContrato[fieldIndex] && normalizeLabel(updated.dadosContrato[fieldIndex].label) === normalizedLabel) {
+              updated.dadosContrato[fieldIndex].value = 'Não informado';
+            }
+          }
+          // IMPORTANTE: Retorna aqui para não processar outras condições
+          return updated;
+        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('inferior') && !normalizedLabel.includes('superior')) {
+          // Flexibilidade Sazonalidade - Inferior - APENAS ESTE CAMPO
+          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
+          const parsed = parseFloat(numericValue);
+          console.log('✅ [ContractDetail] Salvando APENAS flexibilidade sazonal INFERIOR:', {
+            fieldLabel,
+            normalizedLabel,
+            fieldIndex,
+            fieldInputValue,
+            numericValue,
+            parsed,
+            isFinite: Number.isFinite(parsed),
+            campoNoIndex: updated.dadosContrato[fieldIndex]?.label,
+          });
+          
+          // Atualiza APENAS o campo correto
+          if (Number.isFinite(parsed)) {
+            updated.flexSazonalInferior = `${parsed}%`;
+            // Atualiza APENAS o campo no índice correto
+            if (updated.dadosContrato[fieldIndex] && normalizeLabel(updated.dadosContrato[fieldIndex].label) === normalizedLabel) {
+              updated.dadosContrato[fieldIndex].value = `${parsed}%`;
+            } else {
+              // Se o índice não corresponder, procura o campo correto
+              const correctIndex = updated.dadosContrato.findIndex(f => 
+                normalizeLabel(f.label) === normalizedLabel
+              );
+              if (correctIndex >= 0) {
+                updated.dadosContrato[correctIndex].value = `${parsed}%`;
+                console.log('🔧 [ContractDetail] Campo encontrado no índice correto:', correctIndex);
+              } else {
+                console.error('❌ [ContractDetail] Campo não encontrado no dadosContrato!');
+              }
+            }
+          } else {
+            updated.flexSazonalInferior = null;
+            if (updated.dadosContrato[fieldIndex] && normalizeLabel(updated.dadosContrato[fieldIndex].label) === normalizedLabel) {
+              updated.dadosContrato[fieldIndex].value = 'Não informado';
+            }
+          }
+          // IMPORTANTE: Retorna aqui para não processar outras condições
+          return updated;
+        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('%') && !normalizedLabel.includes('sazonalidade')) {
+          // Flexibilidade (%) - mas não sazonalidade
+          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
+          const parsed = parseFloat(numericValue);
+          if (Number.isFinite(parsed)) {
+            updated.flex = `${parsed}%`;
+            updated.dadosContrato[fieldIndex].value = `${parsed}%`;
+          }
+        } else if (normalizedLabel.includes('volume') && normalizedLabel.includes('contratado')) {
+          // Volume contratado - verificação mais específica
           const volumeNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
+          console.log('🔍 [ContractDetail] Salvando volume contratado:', {
+            fieldInputValue,
+            volumeNum,
+            isFinite: Number.isFinite(volumeNum),
+          });
           if (Number.isFinite(volumeNum)) {
             (updated as { contractedVolume?: number }).contractedVolume = volumeNum;
           }
@@ -449,68 +648,87 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
             };
             (updated as { flatPrice?: number | null }).flatPrice = priceNum;
           }
-        } else if (normalizedLabel.includes('flex') && normalizedLabel.includes('limite')) {
-          const matches = fieldInputValue.match(/-?\d+(?:[.,]\d+)?/g) ?? [];
-
-          const toPercentString = (value?: string): string | null => {
-            if (!value) return null;
-            const numeric = Number(value.replace(',', '.'));
-            if (!Number.isFinite(numeric)) return null;
-            return `${numeric}%`;
-          };
-
-          const formatDisplay = (raw: string | null): string | null => {
-            if (!raw) return null;
-            const numeric = Number(raw.replace('%', ''));
-            if (!Number.isFinite(numeric)) return raw;
-            const formatted = numeric.toString().replace('.', ',');
-            return `${formatted}%`;
-          };
-
-          const flexPercent = toPercentString(matches[0]);
-          const lowerPercent = toPercentString(matches[1]);
-          const upperPercent = toPercentString(matches[2]);
-
-          if (flexPercent) {
-            (updated as { flex?: string }).flex = flexPercent;
+        } else if (normalizedLabel.includes('limite superior')) {
+          // Limite Superior (%)
+          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
+          const parsed = parseFloat(numericValue);
+          if (Number.isFinite(parsed)) {
+            updated.limiteSuperior = `${parsed}%`;
+            updated.dadosContrato[fieldIndex].value = `${parsed}%`;
           }
-          if (lowerPercent) {
-            (updated as { limiteInferior?: string }).limiteInferior = lowerPercent;
+        } else if (normalizedLabel.includes('limite inferior')) {
+          // Limite Inferior (%)
+          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
+          const parsed = parseFloat(numericValue);
+          if (Number.isFinite(parsed)) {
+            updated.limiteInferior = `${parsed}%`;
+            updated.dadosContrato[fieldIndex].value = `${parsed}%`;
           }
-          if (upperPercent) {
-            (updated as { limiteSuperior?: string }).limiteSuperior = upperPercent;
-          }
-
-          const displayParts = [flexPercent, lowerPercent, upperPercent]
-            .map((value) => formatDisplay(value))
-            .filter((value): value is string => Boolean(value));
-
-          if (displayParts.length > 0) {
-            updated.dadosContrato[fieldIndex].value = displayParts.join(' · ');
-          } else {
+        } else if (normalizedLabel.includes('submercado')) {
+          updated.submercado = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
             updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
           }
         } else if (normalizedLabel.includes('fornecedor')) {
           updated.fornecedor = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('status')) {
           updated.status = fieldInputValue as ContractMock['status'];
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('proinfa')) {
           const proinfaNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
           (updated as { proinfa?: number | null }).proinfa = Number.isFinite(proinfaNum) ? proinfaNum : null;
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('balanco')) {
           (updated as { balanceEmail?: string }).balanceEmail = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('faturamento')) {
           (updated as { billingEmail?: string }).billingEmail = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('email')) {
           (updated as { balanceEmail?: string }).balanceEmail = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('responsável')) {
           updated.contato = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('segmento')) {
           updated.segmento = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('modalidade')) {
           updated.modalidade = fieldInputValue.trim();
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         } else if (normalizedLabel.includes('fonte')) {
           updated.fonte = fieldInputValue.trim() as ContractMock['fonte'];
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
+        } else {
+          // Campo não reconhecido - apenas atualiza o valor no dadosContrato
+          console.warn('⚠️ [ContractDetail] Campo não reconhecido, atualizando apenas dadosContrato:', {
+            fieldLabel,
+            normalizedLabel,
+          });
+          if (updated.dadosContrato[fieldIndex]) {
+            updated.dadosContrato[fieldIndex].value = fieldInputValue.trim();
+          }
         }
         
         return updated;
@@ -549,6 +767,26 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
     { value: 'Incentivada 0%', label: 'Incentivada 0%' },
     { value: 'Incentivada 50%', label: 'Incentivada 50%' },
     { value: 'Incentivada 100%', label: 'Incentivada 100%' },
+    { value: 'Convencional', label: 'Convencional' },
+  ];
+
+  const submarketOptions = [
+    { value: '', label: 'Selecione um submercado' },
+    { value: 'Norte', label: 'Norte' },
+    { value: 'Nordeste', label: 'Nordeste' },
+    { value: 'Sudeste/Centro-Oeste', label: 'Sudeste/Centro-Oeste' },
+    { value: 'Sul', label: 'Sul' },
+  ];
+
+  const fornecedorOptions = [
+    { value: '', label: 'Selecione um fornecedor' },
+    { value: 'Boven', label: 'Boven' },
+    { value: 'Serena', label: 'Serena' },
+    { value: 'Bolt', label: 'Bolt' },
+    { value: 'Matrix', label: 'Matrix' },
+    { value: 'Voltta', label: 'Voltta' },
+    { value: 'Newave', label: 'Newave' },
+    { value: 'Auren', label: 'Auren' },
   ];
 
   return (
@@ -629,7 +867,20 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
             } else if (normalizedLabel.includes('fonte')) {
               inputType = 'select';
               selectOptions = fonteOptions;
-            } else if (normalizedLabel.includes('volume') || normalizedLabel.includes('preço') || normalizedLabel.includes('proinfa') || normalizedLabel.includes('spot')) {
+            } else if (normalizedLabel.includes('submercado')) {
+              inputType = 'select';
+              selectOptions = submarketOptions;
+            } else if (normalizedLabel.includes('fornecedor')) {
+              inputType = 'select';
+              selectOptions = fornecedorOptions;
+            } else if (
+              normalizedLabel.includes('volume') || 
+              normalizedLabel.includes('preço') || 
+              normalizedLabel.includes('proinfa') || 
+              normalizedLabel.includes('spot') ||
+              normalizedLabel.includes('flexibilidade') ||
+              normalizedLabel.includes('limite')
+            ) {
               inputType = 'number';
             }
             
@@ -930,6 +1181,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato, onUpdatePricePeriods
           value={pricePeriods || { periods: [] }}
           onClose={() => setIsPriceModalOpen(false)}
           onSave={handlePricePeriodsSave}
+          contractStartDate={contrato.inicioVigencia}
+          contractEndDate={contrato.fimVigencia}
+          flexibilityUpper={contrato.flexSazonalSuperior ? parseFloat(contrato.flexSazonalSuperior.replace('%', '')) : 0}
+          flexibilityLower={contrato.flexSazonalInferior ? parseFloat(contrato.flexSazonalInferior.replace('%', '')) : 0}
         />
       )}
     </div>

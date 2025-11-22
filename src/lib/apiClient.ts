@@ -31,8 +31,7 @@ const buildUrl = (path: string) => {
   
   // Para endpoints de contratos, usa a URL ngrok para testes
   if (normalizedPath.startsWith('/contracts')) {
-    const url = `${NGROK_API_BASE_URL}${normalizedPath}`;
-    return url;
+    return `${NGROK_API_BASE_URL}${normalizedPath}`;
   }
   
   return `${BASE_URL}${normalizedPath}`;

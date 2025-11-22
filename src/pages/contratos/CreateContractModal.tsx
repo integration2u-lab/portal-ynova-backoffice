@@ -521,15 +521,24 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   // ciclo de faturamento removed
       { label: 'Medidor', value: medidorValue || 'Não informado' },
       {
-        label: 'Flex / Limites',
-        value: `${formState.flexibility || '0'}% (${formState.lowerLimit || '0'}% - ${formState.upperLimit || '0'}%)`,
+        label: 'Flexibilidade (%)',
+        value: `${formState.flexibility || '0'}%`,
       },
       {
-        label: 'Flex sazonalidade',
-        value:
-          seasonalFlexUpperValue || seasonalFlexLowerValue
-            ? `${seasonalFlexLowerValue || '0'}% - ${seasonalFlexUpperValue || '0'}%`
-            : 'Não informado',
+        label: 'Limite Superior (%)',
+        value: `${formState.upperLimit || '0'}%`,
+      },
+      {
+        label: 'Limite Inferior (%)',
+        value: `${formState.lowerLimit || '0'}%`,
+      },
+      {
+        label: 'Flexibilidade Sazonalidade - Superior (%)',
+        value: seasonalFlexUpperValue ? `${seasonalFlexUpperValue}%` : 'Não informado',
+      },
+      {
+        label: 'Flexibilidade Sazonalidade - Inferior (%)',
+        value: seasonalFlexLowerValue ? `${seasonalFlexLowerValue}%` : 'Não informado',
       },
       {
         label: 'Volume contratado',
@@ -1109,6 +1118,10 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
           value={formState.pricePeriods}
           onClose={() => setIsPriceModalOpen(false)}
           onSave={handlePricePeriodsSave}
+          contractStartDate={formState.startDate}
+          contractEndDate={formState.endDate}
+          flexibilityUpper={formState.seasonalFlexUpper ? Number(formState.seasonalFlexUpper) : 0}
+          flexibilityLower={formState.seasonalFlexLower ? Number(formState.seasonalFlexLower) : 0}
         />
       )}
     </div>

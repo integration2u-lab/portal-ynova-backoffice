@@ -60,19 +60,49 @@ const sanitizeMonths = (months: unknown[]): ContractPriceMonth[] => {
       volumeUnit?: unknown;
       volume_unit?: unknown;
       unit?: unknown;
+      // Novos campos
+      hoursInMonth?: unknown;
+      volumeMWm?: unknown;
+      volumeMWh?: unknown;
+      volumeSeasonalizedMWh?: unknown;
+      flexibilityMaxMWh?: unknown;
+      flexibilityMinMWh?: unknown;
+      basePrice?: unknown;
     };
     const ym = normalizeYearMonth(record.ym ?? record.month);
     const price = coerceNumber(record.price ?? record.value);
-    if (!ym || price === null || !Number.isFinite(price)) {
+    
+    // Aceita meses que tenham price, basePrice ou volumeMWm
+    const basePrice = coerceNumber(record.basePrice);
+    const volumeMWm = coerceNumber(record.volumeMWm);
+    
+    if (!ym || (price === null && basePrice === null && volumeMWm === null)) {
       return;
     }
+    
     const volume = coerceNumber(record.volume ?? record.contracted_volume ?? record.quantity);
     const volumeUnit = normalizeVolumeUnit(record.volumeUnit ?? record.volume_unit ?? record.unit);
+    
+    // Extrai todos os novos campos
+    const hoursInMonth = coerceNumber(record.hoursInMonth);
+    const volumeMWh = coerceNumber(record.volumeMWh);
+    const volumeSeasonalizedMWh = coerceNumber(record.volumeSeasonalizedMWh);
+    const flexibilityMaxMWh = coerceNumber(record.flexibilityMaxMWh);
+    const flexibilityMinMWh = coerceNumber(record.flexibilityMinMWh);
+    
     sanitized.push({
       ym,
-      price,
+      price: price ?? 0,
       volume: volume ?? null,
       volumeUnit: volume !== null ? volumeUnit : null,
+      // Novos campos
+      hoursInMonth: hoursInMonth ?? undefined,
+      volumeMWm: volumeMWm ?? null,
+      volumeMWh: volumeMWh ?? null,
+      volumeSeasonalizedMWh: volumeSeasonalizedMWh ?? null,
+      flexibilityMaxMWh: flexibilityMaxMWh ?? null,
+      flexibilityMinMWh: flexibilityMinMWh ?? null,
+      basePrice: basePrice ?? null,
     });
   });
 
@@ -300,6 +330,49 @@ export function clonePricePeriods(value: ContractPricePeriods | undefined | null
       })),
     })),
   };
+}
+
+/**
+ * Calcula o número de horas em um mês específico
+ * @param year Ano (ex: 2025)
+ * @param month Mês (1-12)
+ * @returns Número de horas no mês (dias × 24)
+ */
+export function getHoursInMonth(year: number, month: number): number {
+  // Cria uma data do primeiro dia do próximo mês e depois subtrai 1 dia
+  // para obter o último dia do mês atual
+  const lastDay = new Date(year, month, 0).getDate();
+  return lastDay * 24;
+}
+
+/**
+ * Calcula o volume em MWh a partir do volume em MWm e horas do mês
+ * @param volumeMWm Volume em MW médio
+ * @param hours Horas no mês
+ * @returns Volume em MWh (volumeMWm × hours)
+ */
+export function calculateVolumeMWh(volumeMWm: number, hours: number): number {
+  return volumeMWm * hours;
+}
+
+/**
+ * Calcula a flexibilidade máxima em MWh
+ * @param volumeSeasonalized Volume sazonalizado em MWh
+ * @param flexUpper Flexibilidade superior em percentual (ex: 50 para 50%)
+ * @returns Flexibilidade máxima em MWh
+ */
+export function calculateFlexibilityMax(volumeSeasonalized: number, flexUpper: number): number {
+  return volumeSeasonalized * (1 + flexUpper / 100);
+}
+
+/**
+ * Calcula a flexibilidade mínima em MWh
+ * @param volumeSeasonalized Volume sazonalizado em MWh
+ * @param flexLower Flexibilidade inferior em percentual (ex: 50 para 50%)
+ * @returns Flexibilidade mínima em MWh
+ */
+export function calculateFlexibilityMin(volumeSeasonalized: number, flexLower: number): number {
+  return volumeSeasonalized * (1 - flexLower / 100);
 }
 
 export function parseContractPricePeriods(value: unknown): ContractPricePeriods | null {

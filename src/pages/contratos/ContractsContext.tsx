@@ -515,6 +515,12 @@ const normalizePeriodos = (value: unknown): ContractMock['periodos'] => {
 };
 
 const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
+  console.log('🔍 [normalizeContractsFromApi] Payload recebido:', {
+    payloadType: typeof payload,
+    isArray: Array.isArray(payload),
+    payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload) : null,
+  });
+  
   const extractArray = (data: unknown): unknown[] => {
     if (Array.isArray(data)) return data;
     if (!data || typeof data !== 'object') return [];
@@ -740,14 +746,39 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     const lowerLimitRaw =
       (item as { limiteInferior?: unknown }).limiteInferior ??
       (item as { lower_limit_percent?: unknown }).lower_limit_percent;
+    // 🔍 DEBUG: Log do item completo para ver o que vem do backend
+    console.log('🔍 [ContractsContext] Item completo do backend:', {
+      id: (item as { id?: unknown }).id,
+      contract_code: (item as { contract_code?: unknown }).contract_code,
+      seasonal_flexibility_upper_percentage: (item as { seasonal_flexibility_upper_percentage?: unknown }).seasonal_flexibility_upper_percentage,
+      seasonal_flexibility_min_percentage: (item as { seasonal_flexibility_min_percentage?: unknown }).seasonal_flexibility_min_percentage,
+      seasonal_flexibility_upper: (item as { seasonal_flexibility_upper?: unknown }).seasonal_flexibility_upper,
+      seasonal_flexibility_lower: (item as { seasonal_flexibility_lower?: unknown }).seasonal_flexibility_lower,
+      flexSazonalSuperior: (item as { flexSazonalSuperior?: unknown }).flexSazonalSuperior,
+      flexSazonalInferior: (item as { flexSazonalInferior?: unknown }).flexSazonalInferior,
+    });
+
+    // PRIORIDADE: Busca PRIMEIRO dos campos corretos do backend (snake_case da tabela)
+    // seasonal_flexibility_upper_percentage e seasonal_flexibility_min_percentage
     const seasonalFlexUpperRaw =
+      (item as { seasonal_flexibility_upper_percentage?: unknown }).seasonal_flexibility_upper_percentage ??
+      (item as { seasonal_flexibility_upper?: unknown }).seasonal_flexibility_upper ??
+      (item as { seasonalFlexibilityUpperPercentage?: unknown }).seasonalFlexibilityUpperPercentage ??
       (item as { flexSazonalSuperior?: unknown }).flexSazonalSuperior ??
-      (item as { flex_sazonal_superior?: unknown }).flex_sazonal_superior ??
-      (item as { seasonal_flexibility_upper?: unknown }).seasonal_flexibility_upper;
+      (item as { flex_sazonal_superior?: unknown }).flex_sazonal_superior;
     const seasonalFlexLowerRaw =
+      (item as { seasonal_flexibility_min_percentage?: unknown }).seasonal_flexibility_min_percentage ??
+      (item as { seasonal_flexibility_lower?: unknown }).seasonal_flexibility_lower ??
+      (item as { seasonalFlexibilityMinPercentage?: unknown }).seasonalFlexibilityMinPercentage ??
       (item as { flexSazonalInferior?: unknown }).flexSazonalInferior ??
-      (item as { flex_sazonal_inferior?: unknown }).flex_sazonal_inferior ??
-      (item as { seasonal_flexibility_lower?: unknown }).seasonal_flexibility_lower;
+      (item as { flex_sazonal_inferior?: unknown }).flex_sazonal_inferior;
+
+    console.log('🔍 [ContractsContext] Valores extraídos (raw):', {
+      seasonalFlexUpperRaw,
+      seasonalFlexLowerRaw,
+      tipoUpper: typeof seasonalFlexUpperRaw,
+      tipoLower: typeof seasonalFlexLowerRaw,
+    });
 
     const findEmailValueInDados = (keywords: string[]): string | undefined => {
       const normalizedKeywords = keywords.map((keyword) => removeDiacritics(keyword));
@@ -804,6 +835,14 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
     ensureField('Flex / Limites', flexDisplay);
     const seasonalFlexUpperFormatted = formatPercentValue(seasonalFlexUpperRaw);
     const seasonalFlexLowerFormatted = formatPercentValue(seasonalFlexLowerRaw);
+    
+    console.log('🔍 [ContractsContext] Valores formatados:', {
+      seasonalFlexUpperRaw,
+      seasonalFlexLowerRaw,
+      seasonalFlexUpperFormatted,
+      seasonalFlexLowerFormatted,
+    });
+    
     const seasonalFlexDisplay = [seasonalFlexLowerFormatted, seasonalFlexUpperFormatted]
       .filter(Boolean)
       .join(' - ');
@@ -1030,10 +1069,26 @@ const fetchContractsFromEndpoints = async (
       }
 
       const data = await response.json().catch(() => null);
+      console.log('🔍 [fetchContractsFromEndpoints] Dados brutos do backend:', {
+        endpoint,
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        dataKeys: data && typeof data === 'object' ? Object.keys(data) : null,
+        firstItem: Array.isArray(data) ? data[0] : (data && typeof data === 'object' && 'contracts' in data && Array.isArray((data as { contracts: unknown[] }).contracts)) ? (data as { contracts: unknown[] }).contracts[0] : null,
+      });
       const contracts = normalizeContractsFromApi(data);
       if (!contracts.length) {
         console.warn('[ContractsContext] API retornou lista vazia de contratos.');
       }
+      console.log('🔍 [fetchContractsFromEndpoints] Contratos normalizados:', {
+        count: contracts.length,
+        firstContract: contracts[0] ? {
+          id: contracts[0].id,
+          codigo: contracts[0].codigo,
+          flexSazonalSuperior: contracts[0].flexSazonalSuperior,
+          flexSazonalInferior: contracts[0].flexSazonalInferior,
+        } : null,
+      });
       return contracts;
     } catch (error) {
       if (signal?.aborted) {
@@ -1254,6 +1309,17 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const seasonalFlexLowerField = findDadosValue(['flex', 'sazonal', 'infer']);
   const seasonalFlexUpper = seasonalFlexUpperFromContract ?? parsePercentAsNumber(seasonalFlexUpperField);
   const seasonalFlexLower = seasonalFlexLowerFromContract ?? parsePercentAsNumber(seasonalFlexLowerField);
+  
+  console.log('🔍 [contractToApiPayload] Extraindo flexibilidade sazonal:', {
+    contractFlexSazonalSuperior: (contract as { flexSazonalSuperior?: unknown }).flexSazonalSuperior,
+    contractFlexSazonalInferior: (contract as { flexSazonalInferior?: unknown }).flexSazonalInferior,
+    seasonalFlexUpperFromContract,
+    seasonalFlexLowerFromContract,
+    seasonalFlexUpperField,
+    seasonalFlexLowerField,
+    seasonalFlexUpper,
+    seasonalFlexLower,
+  });
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
@@ -1278,8 +1344,16 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     upper_limit_percent: parsePercentInput(contract.limiteSuperior),
     lower_limit_percent: parsePercentInput(contract.limiteInferior),
     flexibility_percent: parsePercentInput(contract.flex),
-    seasonal_flexibility_upper: seasonalFlexUpper ?? undefined,
-    seasonal_flexibility_lower: seasonalFlexLower ?? undefined,
+    seasonal_flexibility_upper_percentage: (() => {
+      const value = seasonalFlexUpper ?? undefined;
+      console.log('🔍 [contractToApiPayload] Enviando seasonal_flexibility_upper_percentage:', value);
+      return value;
+    })(),
+    seasonal_flexibility_min_percentage: (() => {
+      const value = seasonalFlexLower ?? undefined;
+      console.log('🔍 [contractToApiPayload] Enviando seasonal_flexibility_min_percentage:', value);
+      return value;
+    })(),
     average_price_mwh: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
     proinfa_contribution: proinfaValue ?? null,
     compliance_consumption: normalizeString(contract.resumoConformidades.Consumo) || undefined,
@@ -1336,10 +1410,10 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
   };
 
   // Extrai valores de flexibilidade sazonal do record (já processado por contractToApiPayload)
-  // O contractToApiPayload mapeia para seasonal_flexibility_upper e seasonal_flexibility_lower
+  // O contractToApiPayload mapeia para seasonal_flexibility_upper_percentage e seasonal_flexibility_min_percentage
   // Mas precisamos enviar como seasonalFlexibilityUpperPercentage e seasonalFlexibilityMinPercentage
-  const seasonalFlexUpperFromRecord = pickNullableValue('seasonal_flexibility_upper');
-  const seasonalFlexLowerFromRecord = pickNullableValue('seasonal_flexibility_lower');
+  const seasonalFlexUpperFromRecord = pickNullableValue('seasonal_flexibility_upper_percentage');
+  const seasonalFlexLowerFromRecord = pickNullableValue('seasonal_flexibility_min_percentage');
   
   // Se não encontrou no record, tenta extrair diretamente do contract
   // Para flexibilidade sazonal, a API espera o valor numérico da porcentagem (ex: 50 para 50%), não decimal (0.5)
