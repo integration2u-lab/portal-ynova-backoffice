@@ -11,15 +11,25 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: 5173,
-      // Proxy desabilitado - todas as chamadas vão direto para a API configurada no .env
-      // A API será acessada via VITE_ENERGY_BALANCE_API_URL (ex: https://d16078567006.ngrok-free.app)
+      // Proxy para a API do Banco Central (IPCA) para resolver CORS
+      proxy: {
+        '/api-bcb': {
+          target: 'https://api.bcb.gov.br',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api-bcb/, ''),
+          secure: true,
+        },
+      },
       allowedHosts: [
         'https://api.ynovamarketplace.com.br',
         'http://localhost:3000',
       ],
       hmr: {
-        clientPort: 443,
-        protocol: 'wss',
+        // Usa HTTP/WS ao invés de HTTPS/WSS para evitar erros de conexão
+        // O servidor está rodando em HTTP, então o HMR também deve usar HTTP
+        protocol: 'ws',
+        host: 'localhost',
+        port: 5173,
       },
     },
     // Forçar o Vite a expor as variáveis para import.meta.env

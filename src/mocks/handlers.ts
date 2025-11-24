@@ -473,5 +473,36 @@ export const handlers = [
     const pontos = gerarSerie24Meses(id + ':' + serie, base, amp);
     return HttpResponse.json({ pontos });
   }),
+  
+  // Handler para requisições POST /contracts (criação de contratos)
+  http.post('/contracts', async ({ request }) => {
+    const body = await request.json().catch(() => ({}));
+    console.log('[MSW] 📥 POST /contracts recebido:', body);
+    
+    // Retorna o contrato criado com ID gerado
+    const newContract = {
+      id: `CT-${Date.now()}`,
+      ...body,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    
+    return HttpResponse.json(newContract, { status: 201 });
+  }),
+  
+  // Handler para requisições POST /api/contracts (alternativa)
+  http.post('/api/contracts', async ({ request }) => {
+    const body = await request.json().catch(() => ({}));
+    console.log('[MSW] 📥 POST /api/contracts recebido:', body);
+    
+    const newContract = {
+      id: `CT-${Date.now()}`,
+      ...body,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    
+    return HttpResponse.json(newContract, { status: 201 });
+  }),
 ];
 

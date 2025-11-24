@@ -1,9 +1,8 @@
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, ENERGY_BALANCE_WEBHOOK_URL } from '../config/api';
 
-const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
-
-// Usar configuração do arquivo TypeScript em vez de variáveis de ambiente
+// Usar configuração centralizada do arquivo de config
 const API_BASE_URL = API_CONFIG.baseURL;
+const DEFAULT_WEBHOOK_URL = ENERGY_BALANCE_WEBHOOK_URL;
 
 console.log('[energyBalanceApi] 🚀 Inicializado com URL:', API_BASE_URL);
 
