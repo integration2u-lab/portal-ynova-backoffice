@@ -335,7 +335,7 @@ export async function triggerBalanceEmailNow(balanceId: string): Promise<void> {
     throw new Error('ID do balanço energético é obrigatório para envio imediato de email.');
   }
 
-  const url = ENERGY_BALANCE_WEBHOOK_URL;
+  const url = 'https://n8n.ynovamarketplace.com/webhook/email-balanco-unico';
   const sameOrigin = isSameOriginUrl(url);
   let response: Response;
 
