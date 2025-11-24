@@ -15,12 +15,15 @@ type EditableField =
   | 'status'
   | 'fonte'
   | 'modalidade'
+  | 'submercado'
   | 'fornecedor'
   | 'inicioVigencia'
   | 'fimVigencia'
   | 'limiteSuperior'
   | 'limiteInferior'
   | 'flex'
+  | 'flexSazonalSuperior'
+  | 'flexSazonalInferior'
   | 'precoMedio'
   | 'balanceEmail'
   | 'billingEmail'
@@ -29,10 +32,12 @@ type EditableField =
 type FieldConfig = {
   key: EditableField;
   label: string;
-  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier' | 'select-status';
+  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier' | 'select-status' | 'select-submarket';
   options?: string[];
   placeholder?: string;
 };
+
+const submarketOptions = ['Norte', 'Nordeste', 'Sudeste/Centro-Oeste', 'Sul'] as const;
 
 const resumoStatusOptions: StatusResumo[] = ['Conforme', 'Em análise', 'Divergente'];
 
@@ -57,17 +62,20 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'segmento', label: 'Segmento', type: 'text', placeholder: 'Ex: Indústria' },
   { key: 'contato', label: 'Contato Responsável', type: 'text', placeholder: 'Nome completo' },
   { key: 'status', label: 'Status', type: 'select-status' },
-  { key: 'fonte', label: 'Fonte de Energia', type: 'select', options: ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%'] },
+  { key: 'fonte', label: 'Fonte de Energia', type: 'select', options: ['Incentivada 0%', 'Incentivada 50%', 'Incentivada 100%', 'Convencional'] },
   { key: 'modalidade', label: 'Modalidade', type: 'text', placeholder: 'Ex: Preço Fixo' },
+  { key: 'submercado', label: 'Submercado', type: 'select-submarket' },
   { key: 'fornecedor', label: 'Fornecedor', type: 'select-supplier' },
   { key: 'inicioVigencia', label: 'Início da Vigência', type: 'date' },
   { key: 'fimVigencia', label: 'Fim da Vigência', type: 'date' },
+  { key: 'flex', label: 'Flexibilidade (%)', type: 'number', placeholder: '100' },
   { key: 'limiteSuperior', label: 'Limite Superior (%)', type: 'number', placeholder: '200' },
   { key: 'limiteInferior', label: 'Limite Inferior (%)', type: 'number', placeholder: '0' },
-  { key: 'flex', label: 'Flexibilidade (%)', type: 'number', placeholder: '100' },
+  { key: 'flexSazonalSuperior', label: 'Flexibilidade Sazonalidade - Superior (%)', type: 'number', placeholder: '0' },
+  { key: 'flexSazonalInferior', label: 'Flexibilidade Sazonalidade - Inferior (%)', type: 'number', placeholder: '0' },
   { key: 'precoMedio', label: 'Preço Médio (R$/MWh)', type: 'number', placeholder: '0,00' },
-  { key: 'balanceEmail', label: 'E-mail do Balanço', type: 'email', placeholder: 'balanco@exemplo.com' },
-  { key: 'billingEmail', label: 'E-mail de Faturamento', type: 'email', placeholder: 'faturamento@exemplo.com' },
+  { key: 'balanceEmail', label: 'E-mail do Balanço', type: 'text', placeholder: 'balanco@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
+  { key: 'billingEmail', label: 'E-mail de Faturamento', type: 'text', placeholder: 'faturamento@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
   { key: 'medidor', label: 'Medidor', type: 'text', placeholder: 'Nome do medidor / grupo' },
 ];
 
@@ -201,6 +209,12 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
         return contract.balanceEmail || '';
       case 'billingEmail':
         return contract.billingEmail || '';
+      case 'submercado':
+        return contract.submercado || '';
+      case 'flexSazonalSuperior':
+        return contract.flexSazonalSuperior?.replace('%', '') || '';
+      case 'flexSazonalInferior':
+        return contract.flexSazonalInferior?.replace('%', '') || '';
       case 'medidor': {
         // medidor maps to groupName in API, find it in dadosContrato
         const medidorField = contract.dadosContrato.find((item) => {
@@ -295,6 +309,9 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
           case 'modalidade':
             updates.modalidade = value;
             break;
+          case 'submercado':
+            updates.submercado = value || undefined;
+            break;
           case 'fornecedor':
             updates.fornecedor = isCustomSupplier ? supplierCustom.trim() : value;
             break;
@@ -304,14 +321,20 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
           case 'fimVigencia':
             updates.fimVigencia = value;
             break;
+          case 'flex':
+            updates.flex = value ? `${value}%` : '0%';
+            break;
           case 'limiteSuperior':
             updates.limiteSuperior = value ? `${value}%` : '0%';
             break;
           case 'limiteInferior':
             updates.limiteInferior = value ? `${value}%` : '0%';
             break;
-          case 'flex':
-            updates.flex = value ? `${value}%` : '0%';
+          case 'flexSazonalSuperior':
+            updates.flexSazonalSuperior = value ? `${value}%` : null;
+            break;
+          case 'flexSazonalInferior':
+            updates.flexSazonalInferior = value ? `${value}%` : null;
             break;
           case 'precoMedio':
             updates.precoMedio = Number(value) || 0;
@@ -459,6 +482,19 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                             </option>
                           ))}
                         </select>
+                      ) : config.type === 'select-submarket' ? (
+                        <select
+                          value={value}
+                          onChange={(e) => handleFieldChange(config.key, e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="">Selecione um submercado</option>
+                          {submarketOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
                       ) : config.type === 'select' && config.options ? (
                         <select
                           value={value}
@@ -497,13 +533,20 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                           )}
                         </div>
                       ) : (
-                        <input
-                          type={config.type}
-                          value={value}
-                          onChange={(e) => handleFieldChange(config.key, e.target.value)}
-                          placeholder={config.placeholder}
-                          className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                        />
+                        <>
+                          <input
+                            type={config.type}
+                            value={value}
+                            onChange={(e) => handleFieldChange(config.key, e.target.value)}
+                            placeholder={config.placeholder}
+                            className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                          />
+                          {(config.key === 'balanceEmail' || config.key === 'billingEmail') && (
+                            <span className="text-xs text-slate-500">
+                              Separe múltiplos emails por vírgula ou ponto-e-vírgula
+                            </span>
+                          )}
+                        </>
                       )}
                     </label>
                   );
@@ -621,6 +664,10 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
             value={pricePeriods}
             onClose={() => setIsPriceModalOpen(false)}
             onSave={handlePricePeriodsSave}
+            contractStartDate={contract.inicioVigencia}
+            contractEndDate={contract.fimVigencia}
+            flexibilityUpper={contract.flexSazonalSuperior ? parseFloat(contract.flexSazonalSuperior.replace('%', '')) : 0}
+            flexibilityLower={contract.flexSazonalInferior ? parseFloat(contract.flexSazonalInferior.replace('%', '')) : 0}
           />
         )}
 

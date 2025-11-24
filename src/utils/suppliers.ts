@@ -11,7 +11,7 @@ export const SUPPLIERS: Supplier[] = [
   },
   {
     name: 'Serena',
-    emails: ['relacionamento.acl@srna.co', 'backoffice@srna.co'],
+    emails: ['relacionamento.acl@srna.com', 'backoffice@srna.com'],
   },
   {
     name: 'Bolt',

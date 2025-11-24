@@ -1,9 +1,8 @@
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, ENERGY_BALANCE_WEBHOOK_URL } from '../config/api';
 
-const DEFAULT_WEBHOOK_URL = 'https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d';
-
-// Usar configuração do arquivo TypeScript em vez de variáveis de ambiente
+// Usar configuração centralizada do arquivo de config
 const API_BASE_URL = API_CONFIG.baseURL;
+const DEFAULT_WEBHOOK_URL = ENERGY_BALANCE_WEBHOOK_URL;
 
 console.log('[energyBalanceApi] 🚀 Inicializado com URL:', API_BASE_URL);
 
@@ -329,6 +328,40 @@ export async function pollJob(
   }
 
   throw new Error('Tempo limite ao aguardar o processamento do balanço energético.');
+}
+
+export async function triggerBalanceEmailNow(balanceId: string): Promise<void> {
+  if (!balanceId) {
+    throw new Error('ID do balanço energético é obrigatório para envio imediato de email.');
+  }
+
+  const url = ENERGY_BALANCE_WEBHOOK_URL;
+  const sameOrigin = isSameOriginUrl(url);
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ balanceId }),
+      credentials: sameOrigin ? 'include' : 'omit',
+      mode: sameOrigin ? 'same-origin' : 'cors',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao conectar com o webhook';
+    throw new HttpError(message);
+  }
+
+  if (!response.ok) {
+    const body = await parseJsonSafely(response);
+    const errorMessage =
+      (body && typeof body === 'object' && 'error' in body && typeof (body as any).error === 'string'
+        ? (body as any).error
+        : undefined) || response.statusText || `HTTP ${response.status}`;
+    throw new HttpError(errorMessage, { status: response.status, body });
+  }
 }
 
 export { request as energyBalanceRequest, HttpError as EnergyBalanceHttpError };

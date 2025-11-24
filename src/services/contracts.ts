@@ -46,6 +46,11 @@ export type Contract = {
   price_periods?: string | null; // JSON string com a estrutura de períodos e meses
   flat_price_mwh?: string | number | null; // Preço flat aplicado
   flat_years?: string | number | null; // Número de anos para preço flat (1-10)
+  // Novos campos
+  submarket?: string | null;
+  supplierEmail?: string | null;
+  seasonalFlexibilityMinPercentage?: string | number | null;
+  seasonalFlexibilityUpperPercentage?: string | number | null;
   created_at: string;
   updated_at: string;
 };
@@ -112,7 +117,7 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
   return {
     id: toStringSafe(idSource, `contract-${index}`),
     contract_code: toStringSafe(item?.contract_code),
-    corporate_name: corporateName || undefined,
+    corporate_name: undefined,
     client_name: toStringSafe(item?.client_name),
     legal_name: (() => {
       // API returns social_reason, but we use legal_name internally
@@ -126,7 +131,7 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     cnpj: toStringSafe(item?.cnpj),
     segment: toStringSafe(item?.segment),
     contact_responsible: toStringSafe(item?.contact_responsible),
-    contracted_volume_mwh: item?.contracted_volume_mwh ?? coerceNumber(item?.contracted_volume_mwh),
+    contracted_volume_mwh: coerceNumber(item?.contracted_volume_mwh) ?? null,
     volume_by_year: normalizeVolumeByYear(item?.volume_by_year ?? item?.volumeByYear),
     status: toStringSafe(item?.status),
     energy_source: toStringSafe(item?.energy_source),
@@ -134,19 +139,19 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
     start_date: toStringSafe(item?.start_date),
     end_date: toStringSafe(item?.end_date),
     billing_cycle: toStringSafe(item?.billing_cycle),
-    upper_limit_percent: item?.upper_limit_percent ?? coerceNumber(item?.upper_limit_percent),
-    lower_limit_percent: item?.lower_limit_percent ?? coerceNumber(item?.lower_limit_percent),
-    flexibility_percent: item?.flexibility_percent ?? coerceNumber(item?.flexibility_percent),
-    average_price_mwh: item?.average_price_mwh ?? coerceNumber(item?.average_price_mwh),
+    upper_limit_percent: coerceNumber(item?.upper_limit_percent) ?? null,
+    lower_limit_percent: coerceNumber(item?.lower_limit_percent) ?? null,
+    flexibility_percent: coerceNumber(item?.flexibility_percent) ?? null,
+    average_price_mwh: coerceNumber(item?.average_price_mwh) ?? null,
     supplier: item?.supplier === undefined ? undefined : item?.supplier === null ? null : toStringSafe(item?.supplier),
     balance_email: item?.balance_email == null ? undefined : item?.balance_email === null ? null : toStringSafe(item?.balance_email),
     billing_email: item?.billing_email == null ? undefined : item?.billing_email === null ? null : toStringSafe(item?.billing_email),
-    spot_price_ref_mwh: item?.spot_price_ref_mwh ?? coerceNumber(item?.spot_price_ref_mwh),
-    compliance_consumption: item?.compliance_consumption ?? coerceNumber(item?.compliance_consumption),
-    compliance_nf: item?.compliance_nf ?? coerceNumber(item?.compliance_nf),
-    compliance_invoice: item?.compliance_invoice ?? coerceNumber(item?.compliance_invoice),
-    compliance_charges: item?.compliance_charges ?? coerceNumber(item?.compliance_charges),
-    compliance_overall: item?.compliance_overall ?? coerceNumber(item?.compliance_overall),
+    spot_price_ref_mwh: coerceNumber(item?.spot_price_ref_mwh) ?? null,
+    compliance_consumption: toStringSafe(item?.compliance_consumption) ?? null,
+    compliance_nf: toStringSafe(item?.compliance_nf) ?? null,
+    compliance_invoice: toStringSafe(item?.compliance_invoice) ?? null,
+    compliance_charges: toStringSafe(item?.compliance_charges) ?? null,
+    compliance_overall: toStringSafe(item?.compliance_overall) ?? null,
     // Preços por período (pode vir direto ou dentro de periodPrice)
     price_periods: (() => {
       // Tenta pegar de periodPrice primeiro
@@ -187,6 +192,43 @@ const normalizeContract = (raw: unknown, index: number): Contract => {
       const flatYearsDirect = item?.flat_years;
       return typeof flatYearsDirect === 'number' && Number.isFinite(flatYearsDirect) ? flatYearsDirect : null;
     })(),
+    // Novos campos
+    submarket: item?.submarket == null ? undefined : item?.submarket === null ? null : toStringSafe(item?.submarket),
+    supplierEmail: item?.supplierEmail == null ? undefined : item?.supplierEmail === null ? null : toStringSafe(item?.supplierEmail) ?? (item?.billing_email == null ? undefined : item?.billing_email === null ? null : toStringSafe(item?.billing_email)),
+    // PRIORIDADE: Busca PRIMEIRO de seasonal_flexibility_min_percentage (campo correto da tabela)
+    seasonalFlexibilityMinPercentage: (() => {
+      const raw1 = item?.seasonal_flexibility_min_percentage; // PRIORIDADE 1: campo correto da tabela
+      const raw2 = item?.seasonal_flexibility_lower;
+      const raw3 = item?.seasonalFlexibilityMinPercentage;
+      const result = coerceNumber(raw1 ?? raw2 ?? raw3) ?? null;
+      console.log('🔍 [contracts.ts] Normalizando seasonalFlexibilityMinPercentage:', {
+        raw1_seasonal_flexibility_min_percentage: raw1,
+        raw2_seasonal_flexibility_lower: raw2,
+        raw3_seasonalFlexibilityMinPercentage: raw3,
+        result,
+        tipoRaw1: typeof raw1,
+        tipoRaw2: typeof raw2,
+        tipoRaw3: typeof raw3,
+      });
+      return result;
+    })(),
+    // PRIORIDADE: Busca PRIMEIRO de seasonal_flexibility_upper_percentage (campo correto da tabela)
+    seasonalFlexibilityUpperPercentage: (() => {
+      const raw1 = item?.seasonal_flexibility_upper_percentage; // PRIORIDADE 1: campo correto da tabela
+      const raw2 = item?.seasonal_flexibility_upper;
+      const raw3 = item?.seasonalFlexibilityUpperPercentage;
+      const result = coerceNumber(raw1 ?? raw2 ?? raw3) ?? null;
+      console.log('🔍 [contracts.ts] Normalizando seasonalFlexibilityUpperPercentage:', {
+        raw1_seasonal_flexibility_upper_percentage: raw1,
+        raw2_seasonal_flexibility_upper: raw2,
+        raw3_seasonalFlexibilityUpperPercentage: raw3,
+        result,
+        tipoRaw1: typeof raw1,
+        tipoRaw2: typeof raw2,
+        tipoRaw3: typeof raw3,
+      });
+      return result;
+    })(),
     created_at: toStringSafe(item?.created_at),
     updated_at: toStringSafe(item?.updated_at),
   };
@@ -211,30 +253,11 @@ const normalizeContracts = (payload: unknown): Contract[] => {
 const resourcePath = (id: string) => `${collectionPath}/${id}`;
 
 export async function listContracts(options: ListOptions = {}): Promise<Contract[]> {
-  console.log('[services/contracts] listContracts - Iniciando busca em:', collectionPath);
-  console.log('[services/contracts] listContracts - URL completa será: https://api-balanco.ynovamarketplace.com/contracts');
-  
   const payload = await getJson<ContractsLikePayload | Contract>(collectionPath, {
     signal: options.signal,
   });
   
-  console.log('[services/contracts] listContracts - Payload recebido da API:', payload);
-  console.log('[services/contracts] listContracts - Tipo do payload:', typeof payload, Array.isArray(payload) ? 'Array' : 'Object');
-  
   const normalized = normalizeContracts(payload);
-  console.log('[services/contracts] listContracts - Contratos normalizados:', normalized.length, 'itens');
-  
-  // Log de cada contrato para verificar price_periods
-  normalized.forEach((contract, index) => {
-    console.log(`[services/contracts] listContracts - Contrato ${index + 1}:`, {
-      id: contract.id,
-      codigo: contract.contract_code,
-      price_periods: contract.price_periods,
-      flat_price_mwh: contract.flat_price_mwh,
-      flat_years: contract.flat_years,
-    });
-  });
-  
   return normalized;
 }
 
@@ -246,32 +269,80 @@ export async function getContracts(signal?: AbortSignal) {
   return listContracts({ signal });
 }
 
-export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'>;
+export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'> & {
+  periodPrice?: {
+    price_periods: string | null;
+    flat_price_mwh: number | null;
+    flat_years: number | null;
+  };
+  submarket?: string | null;
+  supplierEmail?: string | null;
+  seasonalFlexibilityMinPercentage?: string | number | null;
+  seasonalFlexibilityUpperPercentage?: string | number | null;
+};
 
 const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
   const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier;
   const balanceEmailValue = typeof payload.balance_email === 'string' ? payload.balance_email.trim() : payload.balance_email;
   const billingEmailValue = typeof payload.billing_email === 'string' ? payload.billing_email.trim() : payload.billing_email;
+  const supplierEmailValue = typeof payload.supplierEmail === 'string' ? payload.supplierEmail.trim() : payload.supplierEmail;
   const legalNameValue = typeof payload.legal_name === 'string' ? payload.legal_name.trim() : payload.legal_name;
+  const submarketValue = typeof payload.submarket === 'string' ? payload.submarket.trim() : payload.submarket;
+  
+  // Processa campos de flexibilidade sazonal (mantém os valores numéricos ou null)
+  const seasonalFlexMin = payload.seasonalFlexibilityMinPercentage;
+  const seasonalFlexUpper = payload.seasonalFlexibilityUpperPercentage;
+
+  console.log('🔍 [prepareWritePayload] Valores recebidos:', {
+    submarketOriginal: payload.submarket,
+    submarketProcessed: submarketValue,
+    balanceEmailOriginal: payload.balance_email,
+    balanceEmailProcessed: balanceEmailValue,
+    billingEmailOriginal: payload.billing_email,
+    billingEmailProcessed: billingEmailValue,
+    supplierEmailOriginal: payload.supplierEmail,
+    supplierEmailProcessed: supplierEmailValue,
+    seasonalFlexibilityMinPercentage: seasonalFlexMin,
+    seasonalFlexibilityUpperPercentage: seasonalFlexUpper,
+  });
 
   // Map legal_name to social_reason for API
-  const { legal_name, ...rest } = payload;
+  // Remove campos antigos que serão substituídos pelos novos nomes
+  const { legal_name, balance_email, billing_email, supplierEmail, seasonalFlexibilityMinPercentage, seasonalFlexibilityUpperPercentage, ...rest } = payload;
   const socialReason = legalNameValue === undefined ? undefined : legalNameValue === '' ? null : legalNameValue;
 
-  return {
+  const finalPayload = {
     ...rest,
     social_reason: socialReason,
     supplier: supplierValue === undefined ? undefined : supplierValue === '' ? null : supplierValue,
-    balance_email: balanceEmailValue === undefined ? undefined : balanceEmailValue === '' ? null : balanceEmailValue,
-    billing_email: billingEmailValue === undefined ? undefined : billingEmailValue === '' ? null : billingEmailValue,
+    // E-mail do Balanço → email (não balance_email)
+    email: balanceEmailValue === undefined ? undefined : balanceEmailValue === '' ? null : balanceEmailValue,
+    // E-mail de Faturamento → supplier_email (não billing_email ou supplierEmail)
+    supplier_email: billingEmailValue === undefined ? undefined : billingEmailValue === '' ? null : billingEmailValue,
+    submarket: submarketValue === undefined ? undefined : submarketValue === '' ? null : submarketValue,
+    // Envia em snake_case conforme especificação da API
+    seasonal_flexibility_min_percentage: seasonalFlexMin === undefined ? undefined : seasonalFlexMin === '' ? null : seasonalFlexMin,
+    seasonal_flexibility_upper_percentage: seasonalFlexUpper === undefined ? undefined : seasonalFlexUpper === '' ? null : seasonalFlexUpper,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',
   };
+
+  return finalPayload;
 };
 
 export async function createContract(payload: CreateContractPayload): Promise<Contract> {
-  const response = await postJson<ContractsLikePayload | Contract>(collectionPath, prepareWritePayload(payload));
-  const normalized = normalizeContracts(response);
-  return normalized[0] ?? normalizeContract(payload, 0);
+  const preparedPayload = prepareWritePayload(payload);
+  console.log('🚀 [ENVIO CONTRATO MANUAL] Payload final que será enviado ao salvar contrato:', JSON.stringify(preparedPayload, null, 2));
+  
+  try {
+    const response = await postJson<ContractsLikePayload | Contract>(collectionPath, preparedPayload);
+    const normalized = normalizeContracts(response);
+    const created = normalized[0] ?? normalizeContract(payload, 0);
+    console.log('✅ [ENVIO CONTRATO MANUAL] Contrato criado com sucesso! Resposta da API:', JSON.stringify(created, null, 2));
+    return created;
+  } catch (error) {
+    console.error('❌ [ENVIO CONTRATO MANUAL] Erro ao criar contrato:', error);
+    throw error;
+  }
 }
 
 export async function updateContract(id: string, payload: Partial<CreateContractPayload>): Promise<Contract> {

@@ -1,5 +1,16 @@
 import { monthsBetween } from './dateRange';
-import type { ContractPricePeriod, ContractPricePeriods } from '../types/pricePeriods';
+import type { ContractPriceMonth, ContractPricePeriod, ContractPricePeriods, VolumeUnit } from '../types/pricePeriods';
+const normalizeVolumeUnit = (value: unknown): VolumeUnit | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'MW_MEDIO' || normalized === 'MW MÉDIO' || normalized === 'MW MEDIO') {
+    return 'MW_MEDIO';
+  }
+  if (normalized === 'MWH') {
+    return 'MWH';
+  }
+  return null;
+};
 
 export type PricePeriodsSummary = {
   filledMonths: number;
@@ -10,6 +21,155 @@ const ensureRandomId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
+
+const YEAR_MONTH_REGEX = /^(\d{4})-(0[1-9]|1[0-2])$/;
+
+const normalizeYearMonth = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const candidate = trimmed.length >= 7 ? trimmed.slice(0, 7) : trimmed;
+  return YEAR_MONTH_REGEX.test(candidate) ? candidate : null;
+};
+
+const diffInMonths = (start: string, end: string): number => {
+  const [sy, sm] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  if ([sy, sm, ey, em].some((value) => Number.isNaN(value))) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return (ey - sy) * 12 + (em - sm);
+};
+
+const isConsecutiveMonth = (prev: string, current: string): boolean => diffInMonths(prev, current) === 1;
+
+const sanitizeMonths = (months: unknown[]): ContractPriceMonth[] => {
+  const sanitized: ContractPriceMonth[] = [];
+  months.forEach((month) => {
+    if (!month || typeof month !== 'object') {
+      return;
+    }
+    const record = month as {
+      ym?: unknown;
+      month?: unknown;
+      price?: unknown;
+      value?: unknown;
+      volume?: unknown;
+      contracted_volume?: unknown;
+      quantity?: unknown;
+      volumeUnit?: unknown;
+      volume_unit?: unknown;
+      unit?: unknown;
+      // Novos campos
+      hoursInMonth?: unknown;
+      volumeMWm?: unknown;
+      volumeMWh?: unknown;
+      volumeSeasonalizedMWh?: unknown;
+      flexibilityMaxMWh?: unknown;
+      flexibilityMinMWh?: unknown;
+      basePrice?: unknown;
+    };
+    const ym = normalizeYearMonth(record.ym ?? record.month);
+    const price = coerceNumber(record.price ?? record.value);
+    
+    // Aceita meses que tenham price, basePrice ou volumeMWm
+    const basePrice = coerceNumber(record.basePrice);
+    const volumeMWm = coerceNumber(record.volumeMWm);
+    
+    if (!ym || (price === null && basePrice === null && volumeMWm === null)) {
+      return;
+    }
+    
+    const volume = coerceNumber(record.volume ?? record.contracted_volume ?? record.quantity);
+    const volumeUnit = normalizeVolumeUnit(record.volumeUnit ?? record.volume_unit ?? record.unit);
+    
+    // Extrai todos os novos campos
+    const hoursInMonth = coerceNumber(record.hoursInMonth);
+    const volumeMWh = coerceNumber(record.volumeMWh);
+    const volumeSeasonalizedMWh = coerceNumber(record.volumeSeasonalizedMWh);
+    const flexibilityMaxMWh = coerceNumber(record.flexibilityMaxMWh);
+    const flexibilityMinMWh = coerceNumber(record.flexibilityMinMWh);
+    
+    sanitized.push({
+      ym,
+      price: price ?? 0,
+      volume: volume ?? null,
+      volumeUnit: volume !== null ? volumeUnit : null,
+      // Novos campos
+      hoursInMonth: hoursInMonth ?? undefined,
+      volumeMWm: volumeMWm ?? null,
+      volumeMWh: volumeMWh ?? null,
+      volumeSeasonalizedMWh: volumeSeasonalizedMWh ?? null,
+      flexibilityMaxMWh: flexibilityMaxMWh ?? null,
+      flexibilityMinMWh: flexibilityMinMWh ?? null,
+      basePrice: basePrice ?? null,
+    });
+  });
+
+  sanitized.sort((a, b) => (a.ym > b.ym ? 1 : a.ym < b.ym ? -1 : 0));
+  return sanitized;
+};
+
+const buildPeriodsFromMonthMap = (value: Record<string, unknown>): ContractPricePeriods | null => {
+  const monthEntries: ContractPriceMonth[] = [];
+
+  Object.entries(value).forEach(([ym, price]) => {
+    const normalizedYm = normalizeYearMonth(ym);
+    const numericPrice = coerceNumber(price);
+    if (!normalizedYm || numericPrice === null || !Number.isFinite(numericPrice)) {
+      return;
+    }
+    monthEntries.push({ ym: normalizedYm, price: numericPrice, volume: null, volumeUnit: null });
+  });
+
+  monthEntries.sort((a, b) => (a.ym > b.ym ? 1 : a.ym < b.ym ? -1 : 0));
+
+  if (!monthEntries.length) {
+    return null;
+  }
+
+  const periods: ContractPricePeriod[] = [];
+  let current: { start: string; end: string; months: ContractPriceMonth[] } | null = null;
+
+  for (const month of monthEntries) {
+    if (!current) {
+      current = { start: month.ym, end: month.ym, months: [month] };
+      continue;
+    }
+
+    if (isConsecutiveMonth(current.end, month.ym)) {
+      current.end = month.ym;
+      current.months.push(month);
+      continue;
+    }
+
+    periods.push({
+      id: ensureRandomId(),
+      start: current.start,
+      end: current.end,
+      defaultPrice: null,
+      defaultVolume: null,
+      defaultVolumeUnit: null,
+      months: current.months,
+    });
+
+    current = { start: month.ym, end: month.ym, months: [month] };
+  }
+
+  if (current) {
+    periods.push({
+      id: ensureRandomId(),
+      start: current.start,
+      end: current.end,
+      defaultPrice: null,
+      defaultVolume: null,
+      defaultVolumeUnit: null,
+      months: current.months,
+    });
+  }
+
+  return { periods };
+};
 
 export function summarizePricePeriods(value: ContractPricePeriods | undefined | null): PricePeriodsSummary {
   if (!value || !Array.isArray(value.periods)) {
@@ -61,12 +221,14 @@ export function createAnnualPeriod(year: number, defaultPrice?: number | null): 
   const sanitizedYear = sanitizeYear(year, new Date().getFullYear());
   const start = `${sanitizedYear}-01`;
   const end = `${sanitizedYear}-12`;
-  const months = monthsBetween(start, end).map((ym) => ({ ym, price: null }));
+  const months = monthsBetween(start, end).map((ym) => ({ ym, price: null, volume: null, volumeUnit: null }));
   return {
     id: ensureRandomId(),
     start,
     end,
     defaultPrice: defaultPrice ?? null,
+    defaultVolume: null,
+    defaultVolumeUnit: null,
     months,
   };
 }
@@ -76,10 +238,12 @@ export function ensureAnnualPeriod(period: ContractPricePeriod): ContractPricePe
   const sanitizedYear = sanitizeYear(Number.isNaN(year) ? null : year, new Date().getFullYear());
   const start = `${sanitizedYear}-01`;
   const end = `${sanitizedYear}-12`;
-  const monthValues = new Map(period.months.map((month) => [month.ym, month.price] as const));
+  const monthValues = new Map(period.months.map((month) => [month.ym, month]));
   const months = monthsBetween(start, end).map((ym) => ({
     ym,
-    price: monthValues.has(ym) ? monthValues.get(ym) ?? null : null,
+    price: monthValues.has(ym) ? monthValues.get(ym)?.price ?? null : null,
+    volume: monthValues.has(ym) ? monthValues.get(ym)?.volume ?? null : null,
+    volumeUnit: monthValues.has(ym) ? monthValues.get(ym)?.volumeUnit ?? null : null,
   }));
 
   return {
@@ -87,6 +251,8 @@ export function ensureAnnualPeriod(period: ContractPricePeriod): ContractPricePe
     start,
     end,
     defaultPrice: coerceNumber(period.defaultPrice),
+     defaultVolume: coerceNumber(period.defaultVolume),
+     defaultVolumeUnit: normalizeVolumeUnit(period.defaultVolumeUnit),
     months,
   };
 }
@@ -102,10 +268,14 @@ export function normalizeAnnualPricePeriods(value: ContractPricePeriods | undefi
       start: period.start || period.end || `${new Date().getFullYear()}-01`,
       end: period.end || period.start || `${new Date().getFullYear()}-12`,
       defaultPrice: coerceNumber(period.defaultPrice),
+      defaultVolume: coerceNumber((period as { defaultVolume?: unknown }).defaultVolume),
+      defaultVolumeUnit: normalizeVolumeUnit((period as { defaultVolumeUnit?: unknown }).defaultVolumeUnit),
       months: Array.isArray(period.months)
         ? period.months.map((month) => ({
             ym: month.ym,
             price: coerceNumber(month.price),
+            volume: coerceNumber((month as { volume?: unknown }).volume),
+            volumeUnit: normalizeVolumeUnit((month as { volumeUnit?: unknown }).volumeUnit),
           }))
         : [],
     };
@@ -150,7 +320,133 @@ export function clonePricePeriods(value: ContractPricePeriods | undefined | null
       start: period.start,
       end: period.end,
       defaultPrice: period.defaultPrice ?? null,
-      months: period.months.map((month) => ({ ym: month.ym, price: month.price ?? null })),
+      defaultVolume: period.defaultVolume ?? null,
+      defaultVolumeUnit: period.defaultVolumeUnit ?? null,
+      months: period.months.map((month) => ({
+        ym: month.ym,
+        price: month.price ?? null,
+        volume: month.volume ?? null,
+        volumeUnit: month.volumeUnit ?? null,
+      })),
     })),
   };
+}
+
+/**
+ * Calcula o número de horas em um mês específico
+ * @param year Ano (ex: 2025)
+ * @param month Mês (1-12)
+ * @returns Número de horas no mês (dias × 24)
+ */
+export function getHoursInMonth(year: number, month: number): number {
+  // Cria uma data do primeiro dia do próximo mês e depois subtrai 1 dia
+  // para obter o último dia do mês atual
+  const lastDay = new Date(year, month, 0).getDate();
+  return lastDay * 24;
+}
+
+/**
+ * Calcula o volume em MWh a partir do volume em MWm e horas do mês
+ * @param volumeMWm Volume em MW médio
+ * @param hours Horas no mês
+ * @returns Volume em MWh (volumeMWm × hours)
+ */
+export function calculateVolumeMWh(volumeMWm: number, hours: number): number {
+  return volumeMWm * hours;
+}
+
+/**
+ * Calcula a flexibilidade máxima em MWh
+ * @param volumeSeasonalized Volume sazonalizado em MWh
+ * @param flexUpper Flexibilidade superior em percentual (ex: 50 para 50%)
+ * @returns Flexibilidade máxima em MWh
+ */
+export function calculateFlexibilityMax(volumeSeasonalized: number, flexUpper: number): number {
+  return volumeSeasonalized * (1 + flexUpper / 100);
+}
+
+/**
+ * Calcula a flexibilidade mínima em MWh
+ * @param volumeSeasonalized Volume sazonalizado em MWh
+ * @param flexLower Flexibilidade inferior em percentual (ex: 50 para 50%)
+ * @returns Flexibilidade mínima em MWh
+ */
+export function calculateFlexibilityMin(volumeSeasonalized: number, flexLower: number): number {
+  return volumeSeasonalized * (1 - flexLower / 100);
+}
+
+export function parseContractPricePeriods(value: unknown): ContractPricePeriods | null {
+  if (!value) {
+    return null;
+  }
+
+  let raw: unknown = value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      raw = JSON.parse(trimmed);
+    } catch (error) {
+      console.warn('[contractPricing] parseContractPricePeriods - JSON.parse falhou', error);
+      return null;
+    }
+  }
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+
+  const record = raw as Record<string, unknown> & { periods?: unknown };
+
+  if (Array.isArray(record.periods)) {
+    const periods: ContractPricePeriod[] = [];
+
+    record.periods.forEach((period, index) => {
+      if (!period || typeof period !== 'object') {
+        return;
+      }
+
+      const data = period as {
+        id?: unknown;
+        start?: unknown;
+        end?: unknown;
+        defaultPrice?: unknown;
+        defaultVolume?: unknown;
+        defaultVolumeUnit?: unknown;
+        months?: unknown;
+      };
+
+      const months = Array.isArray(data.months) ? sanitizeMonths(data.months) : [];
+      const start = normalizeYearMonth(data.start) ?? months[0]?.ym ?? null;
+      const end = normalizeYearMonth(data.end) ?? months[months.length - 1]?.ym ?? start;
+      if (!start || !end) {
+        return;
+      }
+
+      const defaultPrice = coerceNumber(data.defaultPrice);
+      const defaultVolume = coerceNumber(data.defaultVolume);
+      const defaultVolumeUnit = normalizeVolumeUnit(data.defaultVolumeUnit);
+
+      periods.push({
+        id: typeof data.id === 'string' && data.id.trim() ? data.id : `${ensureRandomId()}-${index}`,
+        start,
+        end,
+        defaultPrice: defaultPrice ?? null,
+        defaultVolume: defaultVolume ?? null,
+        defaultVolumeUnit: defaultVolumeUnit,
+        months,
+      });
+    });
+
+    if (!periods.length) {
+      return { periods: [] };
+    }
+
+    return { periods };
+  }
+
+  const converted = buildPeriodsFromMonthMap(record);
+  return converted ?? { periods: [] };
 }

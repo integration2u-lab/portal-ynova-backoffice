@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
+import { INVOICE_WEBHOOK_URL } from '../config/api';
 
 interface SelectedFile {
   name: string;
@@ -58,7 +59,7 @@ export default function UploadXLSX() {
       setStatus('loading');
       setMessage('Enviando fatura...');
 
-      const response = await fetch('https://n8n.ynovamarketplace.com/webhook-test/8d7b84b3-f20d-4374-a812-76db38ebc77d', {
+      const response = await fetch(INVOICE_WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

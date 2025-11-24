@@ -9,19 +9,11 @@ export default function DetalheContratoPage() {
   const { id } = useParams();
   const { getContractById, updateContract } = useContracts();
   
-  console.log('[DetalheContrato] Render - ID do contrato:', id);
-  
   const contrato = React.useMemo(() => {
     if (!id) {
-      console.log('[DetalheContrato] useMemo - Sem ID, retornando undefined');
       return undefined;
     }
     const found = getContractById(id);
-    console.log('[DetalheContrato] useMemo - Contrato encontrado:', found);
-    if (found) {
-      console.log('[DetalheContrato] useMemo - periodPrice do contrato:', (found as { periodPrice?: unknown }).periodPrice);
-      console.log('[DetalheContrato] useMemo - price_periods direto:', (found as { price_periods?: unknown }).price_periods);
-    }
     return found;
   }, [getContractById, id]);
 
@@ -29,10 +21,39 @@ export default function DetalheContratoPage() {
     async (periods: PricePeriods) => {
       if (!contrato || !id) return;
       try {
-        await updateContract(id, (current) => ({
-          ...current,
-          pricePeriods: periods,
-        }));
+        await updateContract(id, (current) => {
+          const hasPeriodsData = periods.periods.some((period) => {
+            const hasMonths = Array.isArray(period.months)
+              ? period.months.some((month) => typeof month.price === 'number' && Number.isFinite(month.price))
+              : false;
+            const hasDefault = typeof period.defaultPrice === 'number' && Number.isFinite(period.defaultPrice);
+            return hasMonths || hasDefault;
+          });
+
+          const serialized = hasPeriodsData ? JSON.stringify(periods) : null;
+
+          const existingPeriodPrice = (current as {
+            periodPrice?: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null };
+          }).periodPrice;
+
+          const fallbackFlatPrice = existingPeriodPrice?.flat_price_mwh ?? (current as { flatPrice?: number | null }).flatPrice ?? current.precoMedio ?? null;
+          const fallbackFlatYears = existingPeriodPrice?.flat_years ?? (current as { flatYears?: number | null }).flatYears ?? null;
+
+          const resolvedFlatPrice = hasPeriodsData ? null : fallbackFlatPrice;
+          const resolvedFlatYears = hasPeriodsData ? null : fallbackFlatYears;
+
+          return {
+            ...current,
+            pricePeriods: periods,
+            flatPrice: resolvedFlatPrice,
+            flatYears: resolvedFlatYears,
+            periodPrice: {
+              price_periods: serialized,
+              flat_price_mwh: resolvedFlatPrice,
+              flat_years: resolvedFlatYears,
+            },
+          };
+        });
       } catch (error) {
         console.error('[DetalheContrato] Falha ao atualizar preços por período:', error);
         throw error;
