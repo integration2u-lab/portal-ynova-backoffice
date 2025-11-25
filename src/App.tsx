@@ -32,6 +32,14 @@ function AppRoutes() {
   const navigate = useNavigate();
   const { user, login, logout, loading, error } = useAuth();
 
+  const SKIP_LOGIN = (() => {
+    const flag = import.meta.env.VITE_SKIP_LOGIN;
+    if (typeof flag === 'string') {
+      return flag === 'true';
+    }
+    return false;
+  })();
+
   const handleLogin = async (e: React.FormEvent, email: string, password: string) => {
     e.preventDefault();
     await login(email, password);
@@ -44,6 +52,12 @@ function AppRoutes() {
   };
 
   if (loading) return null;
+
+  // Se SKIP_LOGIN estiver ativo e não houver usuário, redireciona para dashboard
+  // (o AuthContext já deve ter criado o usuário, mas garantimos o redirecionamento)
+  if (SKIP_LOGIN && !user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <Routes>

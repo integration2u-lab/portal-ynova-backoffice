@@ -10,11 +10,23 @@ const ALLOW_ANY_LOGIN = (() => {
   return import.meta.env.DEV;
 })();
 
-console.log('ALLOW_ANY_LOGIN:', ALLOW_ANY_LOGIN, 'DEV:', import.meta.env.DEV);
+const SKIP_LOGIN = (() => {
+  const flag = import.meta.env.VITE_SKIP_LOGIN;
+  if (typeof flag === 'string') {
+    return flag === 'true';
+  }
+  return false;
+})();
+
+console.log('SKIP_LOGIN:', SKIP_LOGIN, 'ALLOW_ANY_LOGIN:', ALLOW_ANY_LOGIN, 'DEV:', import.meta.env.DEV);
 
 const STORAGE_KEY = 'ynova.portal.auth.user';
 
 function loadStoredUser(): AuthUser | null {
+  if (SKIP_LOGIN) {
+    // Retorna um usuário padrão quando SKIP_LOGIN está ativo
+    return buildFallbackUser('parceiro@ynovamarketplace.com.br');
+  }
   if (!ALLOW_ANY_LOGIN || typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
@@ -27,7 +39,13 @@ function loadStoredUser(): AuthUser | null {
 }
 
 function persistUser(user: AuthUser | null) {
-  if (!ALLOW_ANY_LOGIN || typeof window === 'undefined') return;
+  if (SKIP_LOGIN || !ALLOW_ANY_LOGIN || typeof window === 'undefined') {
+    // Quando SKIP_LOGIN está ativo, sempre persiste o usuário
+    if (SKIP_LOGIN && user && typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    }
+    return;
+  }
   if (user) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
   } else {
@@ -70,6 +88,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     (async () => {
+      if (SKIP_LOGIN) {
+        // Pula completamente a autenticação quando SKIP_LOGIN está ativo
+        const defaultUser = buildFallbackUser('parceiro@ynovamarketplace.com.br');
+        console.log('SKIP_LOGIN ativo - usando usuário padrão:', defaultUser);
+        if (!active) return;
+        setUser(defaultUser);
+        persistUser(defaultUser);
+        setLoading(false);
+        return;
+      }
+
       try {
         await AuthAPI.csrf();
         const me = await AuthAPI.me();
@@ -101,6 +130,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
+    if (SKIP_LOGIN) {
+      // Quando SKIP_LOGIN está ativo, apenas cria um usuário local sem chamar a API
+      const fallback = buildFallbackUser(email);
+      setUser(fallback);
+      persistUser(fallback);
+      return;
+    }
+
     setError(null);
 
     const tryRemoteAuth = async () => {
@@ -130,6 +167,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    if (SKIP_LOGIN) {
+      // Quando SKIP_LOGIN está ativo, apenas limpa o estado local
+      setUser(null);
+      persistUser(null);
+      return;
+    }
+
     if (ALLOW_ANY_LOGIN) {
       try {
         await AuthAPI.logout();
