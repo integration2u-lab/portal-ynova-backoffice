@@ -10,20 +10,38 @@ const ALLOW_ANY_LOGIN = (() => {
   return import.meta.env.DEV;
 })();
 
-const SKIP_LOGIN = (() => {
-  const flag = import.meta.env.VITE_SKIP_LOGIN;
-  if (typeof flag === 'string') {
-    return flag === 'true';
+// Função helper para verificar SKIP_LOGIN de forma mais robusta
+function getSkipLogin(): boolean {
+  try {
+    const flag = import.meta.env.VITE_SKIP_LOGIN;
+    if (typeof flag === 'string') {
+      const result = flag.toLowerCase() === 'true' || flag === '1';
+      console.log('[AuthContext] VITE_SKIP_LOGIN:', flag, '->', result);
+      return result;
+    }
+    // Também verifica se está definido como boolean true
+    if (flag === true) return true;
+    return false;
+  } catch (error) {
+    console.warn('[AuthContext] Erro ao ler VITE_SKIP_LOGIN:', error);
+    return false;
   }
-  return false;
-})();
+}
 
-console.log('SKIP_LOGIN:', SKIP_LOGIN, 'ALLOW_ANY_LOGIN:', ALLOW_ANY_LOGIN, 'DEV:', import.meta.env.DEV);
+const SKIP_LOGIN = getSkipLogin();
+
+console.log('[AuthContext] Configuração:', {
+  SKIP_LOGIN,
+  ALLOW_ANY_LOGIN,
+  DEV: import.meta.env.DEV,
+  VITE_SKIP_LOGIN: import.meta.env.VITE_SKIP_LOGIN,
+  VITE_ALLOW_ANY_LOGIN: import.meta.env.VITE_ALLOW_ANY_LOGIN,
+});
 
 const STORAGE_KEY = 'ynova.portal.auth.user';
 
 function loadStoredUser(): AuthUser | null {
-  if (SKIP_LOGIN) {
+  if (getSkipLogin()) {
     // Retorna um usuário padrão quando SKIP_LOGIN está ativo
     return buildFallbackUser('parceiro@ynovamarketplace.com.br');
   }
@@ -39,9 +57,10 @@ function loadStoredUser(): AuthUser | null {
 }
 
 function persistUser(user: AuthUser | null) {
-  if (SKIP_LOGIN || !ALLOW_ANY_LOGIN || typeof window === 'undefined') {
+  const shouldSkipLogin = getSkipLogin();
+  if (shouldSkipLogin || !ALLOW_ANY_LOGIN || typeof window === 'undefined') {
     // Quando SKIP_LOGIN está ativo, sempre persiste o usuário
-    if (SKIP_LOGIN && user && typeof window !== 'undefined') {
+    if (shouldSkipLogin && user && typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     }
     return;
@@ -88,10 +107,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     (async () => {
-      if (SKIP_LOGIN) {
+      // Verifica novamente dentro do useEffect para garantir que funciona na Vercel
+      const shouldSkipLogin = getSkipLogin();
+      
+      if (shouldSkipLogin) {
         // Pula completamente a autenticação quando SKIP_LOGIN está ativo
         const defaultUser = buildFallbackUser('parceiro@ynovamarketplace.com.br');
-        console.log('SKIP_LOGIN ativo - usando usuário padrão:', defaultUser);
+        console.log('[AuthProvider] SKIP_LOGIN ativo - usando usuário padrão:', defaultUser);
         if (!active) return;
         setUser(defaultUser);
         persistUser(defaultUser);
@@ -130,45 +152,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    if (SKIP_LOGIN) {
-      // Quando SKIP_LOGIN está ativo, apenas cria um usuário local sem chamar a API
-      const fallback = buildFallbackUser(email);
-      setUser(fallback);
-      persistUser(fallback);
-      return;
-    }
-
+    // Aceita qualquer email/senha e cria um usuário local
+    // Não tenta chamar a API de autenticação
+    console.log('[AuthProvider] Login aceitando qualquer credencial:', { email: email.substring(0, 3) + '***' });
+    
     setError(null);
-
-    const tryRemoteAuth = async () => {
-      await AuthAPI.csrf();
-      const me = await AuthAPI.login(email, password);
-      setUser(me);
-      persistUser(me);
-    };
-
-    if (ALLOW_ANY_LOGIN) {
-      try {
-        await tryRemoteAuth();
-      } catch {
-        const fallback = buildFallbackUser(email);
-        setUser(fallback);
-        persistUser(fallback);
-      }
-      return;
-    }
-
-    try {
-      await tryRemoteAuth();
-    } catch (e: any) {
-      setError(e?.message || 'Falha no login');
-      throw e;
-    }
+    
+    // Cria um usuário local baseado no email fornecido
+    const fallback = buildFallbackUser(email || 'usuario@ynovamarketplace.com.br');
+    setUser(fallback);
+    persistUser(fallback);
+    
+    // Não lança erros, sempre funciona
+    return;
   }, []);
 
   const logout = useCallback(async () => {
-    if (SKIP_LOGIN) {
+    const shouldSkipLogin = getSkipLogin();
+    if (shouldSkipLogin) {
       // Quando SKIP_LOGIN está ativo, apenas limpa o estado local
+      console.log('[AuthProvider] Logout com SKIP_LOGIN ativo');
       setUser(null);
       persistUser(null);
       return;

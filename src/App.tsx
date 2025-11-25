@@ -32,13 +32,23 @@ function AppRoutes() {
   const navigate = useNavigate();
   const { user, login, logout, loading, error } = useAuth();
 
-  const SKIP_LOGIN = (() => {
-    const flag = import.meta.env.VITE_SKIP_LOGIN;
-    if (typeof flag === 'string') {
-      return flag === 'true';
+  // Função helper para verificar SKIP_LOGIN
+  const getSkipLogin = (): boolean => {
+    try {
+      const flag = import.meta.env.VITE_SKIP_LOGIN;
+      if (typeof flag === 'string') {
+        return flag.toLowerCase() === 'true' || flag === '1';
+      }
+      if (flag === true) return true;
+      return false;
+    } catch {
+      return false;
     }
-    return false;
-  })();
+  };
+
+  const SKIP_LOGIN = getSkipLogin();
+  
+  console.log('[AppRoutes] SKIP_LOGIN:', SKIP_LOGIN, 'VITE_SKIP_LOGIN:', import.meta.env.VITE_SKIP_LOGIN);
 
   const handleLogin = async (e: React.FormEvent, email: string, password: string) => {
     e.preventDefault();

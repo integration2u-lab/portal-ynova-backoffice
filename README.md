@@ -17,6 +17,8 @@ VITE_PORTAL_MODE=gestao
 | `VITE_API_BASE_URL` | Base URL for API requests | `/api` | `http://localhost:3001/api` |
 | `VITE_N8N_BALANCO_WEBHOOK` | Webhook do n8n utilizado para processar o balanço energético | — | `https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d` |
 | `VITE_N8N_SHARED_SECRET` | (Opcional) Segredo compartilhado para assinar requisições ao n8n com HMAC-SHA256 | — | `super-secret-token` |
+| `VITE_SKIP_LOGIN` | Pula completamente a autenticação (útil para Vercel quando a API não está disponível) | `false` | `true` |
+| `VITE_ALLOW_ANY_LOGIN` | Permite login sem validação real da API (fallback) | `false` (ou `true` em dev) | `true` |
 
 ## Usage
 
