@@ -289,7 +289,10 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
     
     // Verifica se tem campos antigos mas não tem os novos
     const hasFlexLimites = updated.dadosContrato.some(f => f.label.toLowerCase().includes('flex / limites'));
-    const hasFlexSeparated = updated.dadosContrato.some(f => f.label.toLowerCase().includes('flexibilidade (%)'));
+    const hasFlexSeparated = updated.dadosContrato.some(f => {
+      const label = f.label.toLowerCase();
+      return label.includes('flexibilidade superior') || label.includes('flexibilidade inferior');
+    });
     
     if (hasFlexLimites && !hasFlexSeparated) {
       // Remove campos antigos
@@ -299,14 +302,12 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
       });
       
       // Adiciona campos novos separados
-      const flexValue = updated.flex?.replace('%', '') || '0';
       const limiteSupValue = updated.limiteSuperior?.replace('%', '') || '0';
       const limiteInfValue = updated.limiteInferior?.replace('%', '') || '0';
       const flexSazSupValue = updated.flexSazonalSuperior?.replace('%', '') || '';
       const flexSazInfValue = updated.flexSazonalInferior?.replace('%', '') || '';
       
       console.log('🔍 [ContractDetail] Valores extraídos para campos:', {
-        flexValue,
         limiteSupValue,
         limiteInfValue,
         flexSazSupValue,
@@ -318,9 +319,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
       const insertIndex = medidorIndex >= 0 ? medidorIndex + 1 : updated.dadosContrato.length;
       
       const newFields = [
-        { label: 'Flexibilidade (%)', value: `${flexValue}%` },
-        { label: 'Limite Superior (%)', value: `${limiteSupValue}%` },
-        { label: 'Limite Inferior (%)', value: `${limiteInfValue}%` },
+        { label: 'Flexibilidade Superior (%)', value: `${limiteSupValue}%` },
+        { label: 'Flexibilidade Inferior (%)', value: `${limiteInfValue}%` },
         { label: 'Flexibilidade Sazonalidade - Superior (%)', value: flexSazSupValue ? `${flexSazSupValue}%` : 'Não informado' },
         { label: 'Flexibilidade Sazonalidade - Inferior (%)', value: flexSazInfValue ? `${flexSazInfValue}%` : 'Não informado' },
       ];
@@ -599,14 +599,6 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
           }
           // IMPORTANTE: Retorna aqui para não processar outras condições
           return updated;
-        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('%') && !normalizedLabel.includes('sazonalidade')) {
-          // Flexibilidade (%) - mas não sazonalidade
-          const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
-          const parsed = parseFloat(numericValue);
-          if (Number.isFinite(parsed)) {
-            updated.flex = `${parsed}%`;
-            updated.dadosContrato[fieldIndex].value = `${parsed}%`;
-          }
         } else if (normalizedLabel.includes('volume') && normalizedLabel.includes('contratado')) {
           // Volume contratado - verificação mais específica
           const volumeNum = parseFloat(fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.'));
@@ -648,16 +640,16 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
             };
             (updated as { flatPrice?: number | null }).flatPrice = priceNum;
           }
-        } else if (normalizedLabel.includes('limite superior')) {
-          // Limite Superior (%)
+        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('superior') && !normalizedLabel.includes('sazonalidade')) {
+          // Flexibilidade Superior (%)
           const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
           const parsed = parseFloat(numericValue);
           if (Number.isFinite(parsed)) {
             updated.limiteSuperior = `${parsed}%`;
             updated.dadosContrato[fieldIndex].value = `${parsed}%`;
           }
-        } else if (normalizedLabel.includes('limite inferior')) {
-          // Limite Inferior (%)
+        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('inferior') && !normalizedLabel.includes('sazonalidade')) {
+          // Flexibilidade Inferior (%)
           const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
           const parsed = parseFloat(numericValue);
           if (Number.isFinite(parsed)) {

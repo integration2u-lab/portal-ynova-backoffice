@@ -8,8 +8,8 @@
 // URL base da API de balanço energético e contratos
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://cb3b96abd14c.ngrok-free.app';
 
-// URL do webhook N8N para envio de emails de balanço
-export const ENERGY_BALANCE_WEBHOOK_URL = import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK || 'https://n8n.ynovamarketplace.com/webhook-test/email-balanco-unico';
+// URL do webhook N8N para upload de planilha CSV (base64-to-json)
+export const ENERGY_BALANCE_WEBHOOK_URL = import.meta.env.VITE_ENERGY_BALANCE_WEBHOOK || 'https://n8n.ynovamarketplace.com/webhook/base64-to-json';
 
 // URL do webhook N8N para processamento de faturas
 export const INVOICE_WEBHOOK_URL = import.meta.env.VITE_INVOICE_WEBHOOK || 'https://n8n.ynovamarketplace.com/webhook-test/8d7b84b3-f20d-4374-a812-76db38ebc77d';

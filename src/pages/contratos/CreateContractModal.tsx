@@ -33,7 +33,6 @@ type FormErrors = Partial<
     | 'endDate'
     | 'upperLimit'
     | 'lowerLimit'
-    | 'flexibility'
     | 'seasonalFlexUpper'
     | 'seasonalFlexLower'
     | 'emailBalanco'
@@ -60,7 +59,6 @@ type FormState = {
   endDate: string;
   upperLimit: string;
   lowerLimit: string;
-  flexibility: string;
   seasonalFlexUpper: string;
   seasonalFlexLower: string;
   submarket: SubmarketOption;
@@ -177,7 +175,6 @@ const buildInitialFormState = (): FormState => ({
   endDate: '',
   upperLimit: '200',
   lowerLimit: '0',
-  flexibility: '100',
   seasonalFlexUpper: '',
   seasonalFlexLower: '',
   submarket: '',
@@ -255,7 +252,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       | 'endDate'
       | 'upperLimit'
       | 'lowerLimit'
-      | 'flexibility'
       | 'medidor'
       | 'seasonalFlexUpper'
       | 'seasonalFlexLower'
@@ -372,20 +368,15 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const upper = Number(formState.upperLimit);
     const lower = Number(formState.lowerLimit);
-    const flex = Number(formState.flexibility);
     const seasonalUpper = formState.seasonalFlexUpper.trim() === '' ? null : Number(formState.seasonalFlexUpper);
     const seasonalLower = formState.seasonalFlexLower.trim() === '' ? null : Number(formState.seasonalFlexLower);
 
     if (!Number.isFinite(upper) || upper < 0 || upper > 500) {
-      nextErrors.upperLimit = 'Limite superior deve estar entre 0% e 500%';
+      nextErrors.upperLimit = 'Flexibilidade Superior deve estar entre 0% e 500%';
     }
 
     if (!Number.isFinite(lower) || lower < 0 || lower > 500) {
-      nextErrors.lowerLimit = 'Limite inferior deve estar entre 0% e 500%';
-    }
-
-    if (!Number.isFinite(flex) || flex < 0 || flex > 500) {
-      nextErrors.flexibility = 'Flexibilidade deve estar entre 0% e 500%';
+      nextErrors.lowerLimit = 'Flexibilidade inferior deve estar entre 0% e 500%';
     }
 
     if (
@@ -445,7 +436,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       lower <= 500 &&
       upper < lower
     ) {
-      nextErrors.upperLimit = 'Limite superior deve ser maior ou igual ao inferior';
+      nextErrors.upperLimit = 'Flexibilidade Superior deve ser maior ou igual à Inferior';
     }
 
     // billing cycle removed from manual creation
@@ -521,15 +512,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
   // ciclo de faturamento removed
       { label: 'Medidor', value: medidorValue || 'Não informado' },
       {
-        label: 'Flexibilidade (%)',
-        value: `${formState.flexibility || '0'}%`,
-      },
-      {
-        label: 'Limite Superior (%)',
+        label: 'Flexibilidade Superior (%)',
         value: `${formState.upperLimit || '0'}%`,
       },
       {
-        label: 'Limite Inferior (%)',
+        label: 'Flexibilidade Inferior (%)',
         value: `${formState.lowerLimit || '0'}%`,
       },
       {
@@ -592,7 +579,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       fimVigencia: formState.endDate,
       limiteSuperior: `${formState.upperLimit || '0'}%`,
       limiteInferior: `${formState.lowerLimit || '0'}%`,
-      flex: `${formState.flexibility || '0'}%`,
       flexSazonalSuperior: seasonalFlexUpperValue && seasonalFlexUpperValue !== '' ? `${seasonalFlexUpperValue}%` : null,
       flexSazonalInferior: seasonalFlexLowerValue && seasonalFlexLowerValue !== '' ? `${seasonalFlexLowerValue}%` : null,
       precoMedio: priceAverage,
@@ -940,7 +926,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 {/* billing cycle removed from manual contract creation */}
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Limite superior
+                  Flexibilidade Superior
                   <input
                     type="number"
                     min="0"
@@ -957,7 +943,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Limite inferior
+                  Flexibilidade Inferior
                   <input
                     type="number"
                     min="0"
@@ -971,23 +957,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                     placeholder="0"
                   />
                   {errors.lowerLimit && <span className="text-xs font-medium text-red-500">{errors.lowerLimit}</span>}
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Flexibilidade (%)
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="0.01"
-                    value={formState.flexibility}
-                    onChange={handleInputChange('flexibility')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.flexibility ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="100"
-                  />
-                  {errors.flexibility && <span className="text-xs font-medium text-red-500">{errors.flexibility}</span>}
                 </label>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">

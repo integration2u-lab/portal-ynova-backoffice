@@ -21,7 +21,6 @@ type EditableField =
   | 'fimVigencia'
   | 'limiteSuperior'
   | 'limiteInferior'
-  | 'flex'
   | 'flexSazonalSuperior'
   | 'flexSazonalInferior'
   | 'precoMedio'
@@ -68,9 +67,8 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'fornecedor', label: 'Fornecedor', type: 'select-supplier' },
   { key: 'inicioVigencia', label: 'Início da Vigência', type: 'date' },
   { key: 'fimVigencia', label: 'Fim da Vigência', type: 'date' },
-  { key: 'flex', label: 'Flexibilidade (%)', type: 'number', placeholder: '100' },
-  { key: 'limiteSuperior', label: 'Limite Superior (%)', type: 'number', placeholder: '200' },
-  { key: 'limiteInferior', label: 'Limite Inferior (%)', type: 'number', placeholder: '0' },
+  { key: 'limiteSuperior', label: 'Flexibilidade Superior (%)', type: 'number', placeholder: '200' },
+  { key: 'limiteInferior', label: 'Flexibilidade Inferior (%)', type: 'number', placeholder: '0' },
   { key: 'flexSazonalSuperior', label: 'Flexibilidade Sazonalidade - Superior (%)', type: 'number', placeholder: '0' },
   { key: 'flexSazonalInferior', label: 'Flexibilidade Sazonalidade - Inferior (%)', type: 'number', placeholder: '0' },
   { key: 'precoMedio', label: 'Preço Médio (R$/MWh)', type: 'number', placeholder: '0,00' },
@@ -201,8 +199,6 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
         return contract.limiteSuperior?.replace('%', '') || '';
       case 'limiteInferior':
         return contract.limiteInferior?.replace('%', '') || '';
-      case 'flex':
-        return contract.flex?.replace('%', '') || '';
       case 'precoMedio':
         return contract.precoMedio?.toString() || '';
       case 'balanceEmail':
@@ -320,9 +316,6 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
             break;
           case 'fimVigencia':
             updates.fimVigencia = value;
-            break;
-          case 'flex':
-            updates.flex = value ? `${value}%` : '0%';
             break;
           case 'limiteSuperior':
             updates.limiteSuperior = value ? `${value}%` : '0%';
