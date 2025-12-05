@@ -28,7 +28,6 @@ type FormErrors = Partial<
   Record<
     | 'client'
     | 'cnpj'
-    | 'volume'
     | 'startDate'
     | 'endDate'
     | 'upperLimit'
@@ -37,6 +36,8 @@ type FormErrors = Partial<
     | 'seasonalFlexLower'
     | 'emailBalanco'
     | 'emailFaturamento'
+    | 'nfVencimentoTipo'
+    | 'nfVencimentoDias'
   ,
     string
   >
@@ -70,6 +71,9 @@ type FormState = {
   // Price periods (per-month/periods) — optional detailed pricing
   pricePeriods: PricePeriods;
   status: ContractMock['status'];
+  // Vencimento da NF
+  nfVencimentoTipo: 'dias_uteis' | 'dias_corridos' | '';
+  nfVencimentoDias: string;
 };
 
 const HOURS_IN_MONTH = 730;
@@ -173,7 +177,7 @@ const buildInitialFormState = (): FormState => ({
   supplier: '',
   startDate: '',
   endDate: '',
-  upperLimit: '200',
+  upperLimit: '100',
   lowerLimit: '0',
   seasonalFlexUpper: '',
   seasonalFlexLower: '',
@@ -183,6 +187,8 @@ const buildInitialFormState = (): FormState => ({
   flatYears: 1,
   pricePeriods: { periods: [] },
   status: 'Ativo',
+  nfVencimentoTipo: '',
+  nfVencimentoDias: '',
 });
 
 const generateFallbackMonths = (total = 6): string[] => {
@@ -209,7 +215,14 @@ const deriveReferenceMonths = (formState: FormState): string[] => {
   return generateFallbackMonths();
 };
 
-const ensureId = (value?: string) => (value && value.trim().length ? value.trim() : `CT-${Date.now()}`);
+// Gera ID sequencial baseado no timestamp para garantir unicidade
+// O backend pode sobrescrever com seu próprio ID sequencial
+const ensureId = (value?: string) => {
+  if (value && value.trim().length) return value.trim();
+  // Gera um ID numérico baseado no timestamp (últimos 10 dígitos)
+  const timestamp = Date.now();
+  return String(timestamp).slice(-10);
+};
 
 type CreateContractModalProps = {
   open: boolean;
@@ -255,6 +268,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       | 'medidor'
       | 'seasonalFlexUpper'
       | 'seasonalFlexLower'
+      | 'nfVencimentoDias'
     >
   ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -297,6 +311,10 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
   const handleVolumeUnitChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setFormState((prev) => ({ ...prev, volumeUnit: event.target.value as VolumeUnit }));
+  };
+
+  const handleNfVencimentoTipoChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormState((prev) => ({ ...prev, nfVencimentoTipo: event.target.value as 'dias_uteis' | 'dias_corridos' | '' }));
   };
 
   const handleCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,10 +363,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       nextErrors.cnpj = 'Informe um CNPJ válido';
     }
 
-    const volumeValue = Number(formState.volume);
-    if (!Number.isFinite(volumeValue) || volumeValue <= 0) {
-      nextErrors.volume = 'Informe um volume maior que zero';
-    }
+    // Volume contratado removido de contratos manuais
 
     if (!formState.startDate) {
       nextErrors.startDate = 'Informe o início da vigência';
@@ -453,17 +468,11 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     if (!isValid) return;
 
     const id = ensureId();
-  // prefer detailed periods average when available, otherwise use flat price
-  const periodsAverage = priceSummary.averagePrice ?? 0;
-  const flatAverage = parseCurrencyInput(formState.flatPrice) ?? 0;
-  const priceAverage = priceSummary.filledMonths ? periodsAverage : flatAverage;
-  const referenceMonths = deriveReferenceMonths(formState);
-  const priceSummaryText = priceAverage ? formatCurrencyBRL(priceAverage) : 'Não informado';
-
-    const volumeValue = Number(formState.volume);
-    const normalizedVolume =
-      formState.volumeUnit === 'MW_MEDIO' ? volumeValue * HOURS_IN_MONTH : volumeValue;
-    const volumeBase = Number.isFinite(normalizedVolume) ? normalizedVolume : 0;
+    // Volume contratado e preço flat removidos de contratos manuais
+    // Usar apenas períodos de preço quando disponíveis
+    const periodsAverage = priceSummary.averagePrice ?? 0;
+    const priceAverage = priceSummary.filledMonths ? periodsAverage : 0;
+    const referenceMonths = deriveReferenceMonths(formState);
 
     const supplierValue = formState.supplier.trim();
     const normalizeEmails = (value: string) => value
@@ -520,22 +529,22 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
         value: `${formState.lowerLimit || '0'}%`,
       },
       {
-        label: 'Flexibilidade Sazonalidade - Superior (%)',
+        label: 'Sazonalidade - Superior (%)',
         value: seasonalFlexUpperValue ? `${seasonalFlexUpperValue}%` : 'Não informado',
       },
       {
-        label: 'Flexibilidade Sazonalidade - Inferior (%)',
+        label: 'Sazonalidade - Inferior (%)',
         value: seasonalFlexLowerValue ? `${seasonalFlexLowerValue}%` : 'Não informado',
       },
       {
-        label: 'Volume contratado',
-        value: Number.isFinite(volumeValue)
-          ? `${volumeFormatter.format(volumeValue)} ${
-              formState.volumeUnit === 'MW_MEDIO' ? 'MW médio' : 'MWh'
-            }`
-          : 'Não informado',
+        label: 'Vencimento da NF',
+        value:
+          formState.nfVencimentoTipo && formState.nfVencimentoDias
+            ? formState.nfVencimentoTipo === 'dias_uteis'
+              ? `${formState.nfVencimentoDias}º dia útil`
+              : `${formState.nfVencimentoDias}º dia`
+            : 'Não informado',
       },
-  { label: 'Preço flat (R$/MWh)', value: priceSummaryText },
       { label: 'Responsável', value: formState.contact.trim() || 'Não informado' },
     ];
 
@@ -550,9 +559,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const invoices: ContractMock['faturas'] = [];
 
-    const normalizedFlatPrice = parseCurrencyInput(formState.flatPrice) ?? null;
-    const normalizedFlatYears = Number.isFinite(formState.flatYears) ? formState.flatYears : null;
-
+    // Volume contratado e preço flat removidos de contratos manuais
     const hasPricePeriodsData = formState.pricePeriods.periods.some((period) => {
       const hasMonthsWithPrice = Array.isArray(period.months)
         ? period.months.some((month) => typeof month.price === 'number' && Number.isFinite(month.price))
@@ -562,8 +569,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     });
 
     const serializedPricePeriods = hasPricePeriodsData ? JSON.stringify(formState.pricePeriods) : null;
-    const resolvedFlatPrice = hasPricePeriodsData ? null : normalizedFlatPrice;
-    const resolvedFlatYears = hasPricePeriodsData ? null : normalizedFlatYears;
 
     const newContract: ContractMock = {
       id,
@@ -612,16 +617,25 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
       })),
       analises: buildAnalises(),
       faturas: invoices,
-      // Adiciona pricePeriods e flatPrice para serem enviados ao backend
+      // Volume contratado e preço flat removidos de contratos manuais
       pricePeriods: formState.pricePeriods,
-      flatPrice: resolvedFlatPrice,
-      flatYears: resolvedFlatYears ?? null,
+      flatPrice: null,
+      flatYears: null,
       periodPrice: {
         price_periods: serializedPricePeriods,
-        flat_price_mwh: resolvedFlatPrice,
-        flat_years: resolvedFlatYears,
+        flat_price_mwh: null,
+        flat_years: null,
       },
-    } as ContractMock & { pricePeriods: PricePeriods; flatPrice: number | null; flatYears: number | null };
+      // Vencimento da NF
+      nfVencimentoTipo: formState.nfVencimentoTipo || undefined,
+      nfVencimentoDias: formState.nfVencimentoDias ? Number(formState.nfVencimentoDias) : undefined,
+    } as ContractMock & { 
+      pricePeriods: PricePeriods; 
+      flatPrice: number | null; 
+      flatYears: number | null;
+      nfVencimentoTipo?: 'dias_uteis' | 'dias_corridos';
+      nfVencimentoDias?: number;
+    };
 
     console.log('📋 [CreateContractModal] Contrato montado antes de enviar:', {
       id: newContract.id,
@@ -757,34 +771,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   />
                 </label>
 
-                <div className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  <span>Volume contratado</span>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formState.volume}
-                      onChange={handleInputChange('volume')}
-                      className={`w-full rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                        errors.volume ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                      }`}
-                      placeholder="0,00"
-                    />
-                    <select
-                      value={formState.volumeUnit}
-                      onChange={handleVolumeUnitChange}
-                      className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    >
-                      {volumeUnitOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {errors.volume && <span className="text-xs font-medium text-red-500">{errors.volume}</span>}
-                </div>
 
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Fonte de energia
@@ -893,7 +879,128 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   )}
                 </label>
 
+
+                {/* billing cycle removed from manual contract creation */}
+
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Flexibilidade Superior
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.upperLimit}
+                    onChange={handleInputChange('upperLimit')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.upperLimit ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="100"
+                  />
+                  {errors.upperLimit && <span className="text-xs font-medium text-red-500">{errors.upperLimit}</span>}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Flexibilidade Inferior
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.lowerLimit}
+                    onChange={handleInputChange('lowerLimit')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.lowerLimit ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="0"
+                  />
+                  {errors.lowerLimit && <span className="text-xs font-medium text-red-500">{errors.lowerLimit}</span>}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Sazonalidade - Superior (%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.seasonalFlexUpper}
+                    onChange={handleInputChange('seasonalFlexUpper')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.seasonalFlexUpper ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="0"
+                  />
+                  {errors.seasonalFlexUpper && (
+                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexUpper}</span>
+                  )}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Sazonalidade - Inferior (%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="0.01"
+                    value={formState.seasonalFlexLower}
+                    onChange={handleInputChange('seasonalFlexLower')}
+                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                      errors.seasonalFlexLower ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
+                    }`}
+                    placeholder="0"
+                  />
+                  {errors.seasonalFlexLower && (
+                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexLower}</span>
+                  )}
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  Vencimento da NF
+                  <div className="flex gap-2">
+                    <select
+                      value={formState.nfVencimentoTipo}
+                      onChange={handleNfVencimentoTipoChange}
+                      className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                    >
+                      <option value="">Selecione o tipo</option>
+                      <option value="dias_uteis">Dias úteis</option>
+                      <option value="dias_corridos">Dias corridos</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      step="1"
+                      value={formState.nfVencimentoDias}
+                      onChange={handleInputChange('nfVencimentoDias')}
+                      disabled={!formState.nfVencimentoTipo}
+                      className={`flex-1 rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                        !formState.nfVencimentoTipo
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-600'
+                          : 'border-slate-300'
+                      }`}
+                      placeholder={formState.nfVencimentoTipo === 'dias_uteis' ? 'Ex: 6' : 'Ex: 20'}
+                    />
+                    {formState.nfVencimentoTipo && formState.nfVencimentoDias && (
+                      <span className="flex items-center text-sm text-slate-500 dark:text-slate-400">
+                        {formState.nfVencimentoTipo === 'dias_uteis'
+                          ? `${formState.nfVencimentoDias}º dia útil`
+                          : `${formState.nfVencimentoDias}º dia`}
+                      </span>
+                    )}
+                  </div>
+                  {errors.nfVencimentoTipo && (
+                    <span className="text-xs font-medium text-red-500">{errors.nfVencimentoTipo}</span>
+                  )}
+                  {errors.nfVencimentoDias && (
+                    <span className="text-xs font-medium text-red-500">{errors.nfVencimentoDias}</span>
+                  )}
+                  <span className="text-xs text-slate-500">
+                    Define quando a NF vence em relação ao mês de referência
+                  </span>
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
                   Ciclo de vigência
                   <div className="flex gap-2">
                     <input
@@ -923,113 +1030,16 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                   )}
                 </label>
 
-                {/* billing cycle removed from manual contract creation */}
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Flexibilidade Superior
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="0.01"
-                    value={formState.upperLimit}
-                    onChange={handleInputChange('upperLimit')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.upperLimit ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="200"
-                  />
-                  {errors.upperLimit && <span className="text-xs font-medium text-red-500">{errors.upperLimit}</span>}
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Flexibilidade Inferior
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="0.01"
-                    value={formState.lowerLimit}
-                    onChange={handleInputChange('lowerLimit')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.lowerLimit ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="0"
-                  />
-                  {errors.lowerLimit && <span className="text-xs font-medium text-red-500">{errors.lowerLimit}</span>}
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Flexibilidade Sazonalidade - Superior (%)
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="0.01"
-                    value={formState.seasonalFlexUpper}
-                    onChange={handleInputChange('seasonalFlexUpper')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.seasonalFlexUpper ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="0"
-                  />
-                  {errors.seasonalFlexUpper && (
-                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexUpper}</span>
-                  )}
-                </label>
-
-                <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-                  Flexibilidade Sazonalidade - Inferior (%)
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="0.01"
-                    value={formState.seasonalFlexLower}
-                    onChange={handleInputChange('seasonalFlexLower')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
-                      errors.seasonalFlexLower ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
-                    }`}
-                    placeholder="0"
-                  />
-                  {errors.seasonalFlexLower && (
-                    <span className="text-xs font-medium text-red-500">{errors.seasonalFlexLower}</span>
-                  )}
-                </label>
-
                 <div className="flex flex-col gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-                  <div className="grid md:grid-cols-3 gap-2 items-center">
-                    <label className="flex flex-col gap-1 md:col-span-2">
-                      Preço flat (R$/MWh)
-                      <div className="flex gap-2 items-center">
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">R$</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={formState.flatPrice}
-                            onChange={handleFlatPriceChange}
-                            onBlur={handleFlatPriceBlur}
-                            placeholder="0,00"
-                            className="w-full rounded-lg border px-3 py-2 pl-7 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                          />
-                        </div>
-                        <select value={String(formState.flatYears)} onChange={handleFlatYearsChange} className="min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm">
-                          {[1,2,3,4,5,6,7,8,9,10].map((y) => <option key={y} value={String(y)}>{y} ano{y>1?'s':''}</option>)}
-                        </select>
-                      </div>
-                    </label>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsPriceModalOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
-                      >
-                        <PencilLine size={16} /> Editar preços por período
-                      </button>
-                      <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}</div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPriceModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
+                    >
+                      <PencilLine size={16} /> Editar preços e volumes por período
+                    </button>
+                    <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}</div>
                   </div>
                 </div>
               </div>
@@ -1089,8 +1099,34 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
           onSave={handlePricePeriodsSave}
           contractStartDate={formState.startDate}
           contractEndDate={formState.endDate}
-          flexibilityUpper={formState.seasonalFlexUpper ? Number(formState.seasonalFlexUpper) : 0}
-          flexibilityLower={formState.seasonalFlexLower ? Number(formState.seasonalFlexLower) : 0}
+          flexibilityUpper={(() => {
+            // IMPORTANTE: Usa Flexibilidade Superior (upperLimit), NÃO Flexibilidade Sazonalidade
+            const rawValue = String(formState.upperLimit || '100').trim();
+            const value = parseFloat(rawValue);
+            const result = !isNaN(value) && isFinite(value) && value >= 0 ? value : 100;
+            console.log('[CreateContractModal] 📤 Passando flexibilityUpper (Flexibilidade Superior) para PricePeriodsModal:', {
+              upperLimit: formState.upperLimit,
+              seasonalFlexUpper: formState.seasonalFlexUpper,
+              result,
+              '✅ USANDO': 'Flexibilidade Superior (upperLimit)',
+              '❌ NÃO USANDO': 'Flexibilidade Sazonalidade (seasonalFlexUpper)',
+            });
+            return result;
+          })()}
+          flexibilityLower={(() => {
+            // IMPORTANTE: Usa Flexibilidade Inferior (lowerLimit), NÃO Flexibilidade Sazonalidade
+            const rawValue = String(formState.lowerLimit || '0').trim();
+            const value = parseFloat(rawValue);
+            const result = !isNaN(value) && isFinite(value) && value >= 0 ? value : 0;
+            console.log('[CreateContractModal] 📤 Passando flexibilityLower (Flexibilidade Inferior) para PricePeriodsModal:', {
+              lowerLimit: formState.lowerLimit,
+              seasonalFlexLower: formState.seasonalFlexLower,
+              result,
+              '✅ USANDO': 'Flexibilidade Inferior (lowerLimit)',
+              '❌ NÃO USANDO': 'Flexibilidade Sazonalidade (seasonalFlexLower)',
+            });
+            return result;
+          })()}
         />
       )}
     </div>

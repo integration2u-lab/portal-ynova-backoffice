@@ -26,12 +26,14 @@ type EditableField =
   | 'precoMedio'
   | 'balanceEmail'
   | 'billingEmail'
-  | 'medidor';
+  | 'medidor'
+  | 'nfVencimentoTipo'
+  | 'nfVencimentoDias';
 
 type FieldConfig = {
   key: EditableField;
   label: string;
-  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier' | 'select-status' | 'select-submarket';
+  type: 'text' | 'email' | 'number' | 'date' | 'select' | 'select-supplier' | 'select-status' | 'select-submarket' | 'select-nf-vencimento-tipo';
   options?: string[];
   placeholder?: string;
 };
@@ -69,12 +71,14 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'fimVigencia', label: 'Fim da Vigência', type: 'date' },
   { key: 'limiteSuperior', label: 'Flexibilidade Superior (%)', type: 'number', placeholder: '200' },
   { key: 'limiteInferior', label: 'Flexibilidade Inferior (%)', type: 'number', placeholder: '0' },
-  { key: 'flexSazonalSuperior', label: 'Flexibilidade Sazonalidade - Superior (%)', type: 'number', placeholder: '0' },
-  { key: 'flexSazonalInferior', label: 'Flexibilidade Sazonalidade - Inferior (%)', type: 'number', placeholder: '0' },
+  { key: 'flexSazonalSuperior', label: 'Sazonalidade - Superior (%)', type: 'number', placeholder: '0' },
+  { key: 'flexSazonalInferior', label: 'Sazonalidade - Inferior (%)', type: 'number', placeholder: '0' },
   { key: 'precoMedio', label: 'Preço Médio (R$/MWh)', type: 'number', placeholder: '0,00' },
   { key: 'balanceEmail', label: 'E-mail do Balanço', type: 'text', placeholder: 'balanco@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
   { key: 'billingEmail', label: 'E-mail de Faturamento', type: 'text', placeholder: 'faturamento@exemplo.com ou email1@exemplo.com, email2@exemplo.com' },
   { key: 'medidor', label: 'Medidor', type: 'text', placeholder: 'Nome do medidor / grupo' },
+  { key: 'nfVencimentoTipo', label: 'Vencimento da NF - Tipo', type: 'select-nf-vencimento-tipo' },
+  { key: 'nfVencimentoDias', label: 'Vencimento da NF - Dias', type: 'number', placeholder: '1-31' },
 ];
 
 type EditContractModalProps = {
@@ -122,39 +126,7 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
       setIsCustomSupplier(isCustom);
       setSupplierCustom(isCustom && currentSupplier ? currentSupplier : '');
       
-      // Initialize volume from dadosContrato
-      const volumeField = contract.dadosContrato.find((item) => {
-        const label = item.label.toLowerCase();
-        return label.includes('volume') || label.includes('contratado');
-      });
-      if (volumeField?.value) {
-        const volumeMatch = volumeField.value.match(/([\d.,]+)\s*(MWh|MW\s*médio)/i);
-        if (volumeMatch) {
-          const volumeNum = volumeMatch[1].replace(/\./g, '').replace(',', '.');
-          setVolume(volumeNum);
-          setVolumeUnit(volumeMatch[2].toLowerCase().includes('médio') ? 'MW_MEDIO' : 'MWH');
-        } else {
-          // Try to parse just the number
-          const numMatch = volumeField.value.match(/[\d.,]+/);
-          if (numMatch) {
-            setVolume(numMatch[0].replace(/\./g, '').replace(',', '.'));
-          }
-        }
-      }
-      
-      // Initialize flat price from dadosContrato or precoMedio
-      const flatPriceField = contract.dadosContrato.find((item) => {
-        const label = item.label.toLowerCase();
-        return label.includes('preço flat') || label.includes('flat');
-      });
-      if (flatPriceField?.value) {
-        const priceMatch = flatPriceField.value.match(/R\$\s*([\d.,]+)/i);
-        if (priceMatch) {
-          setFlatPrice(priceMatch[1].replace(/\./g, '').replace(',', '.'));
-        }
-      } else if (contract.precoMedio && contract.precoMedio > 0) {
-        setFlatPrice(contract.precoMedio.toFixed(2).replace('.', ','));
-      }
+      // Volume contratado e preço flat removidos de contratos manuais
       
       // Initialize price periods from contract (if available in periodos or volumeByYear)
       // This would need to be stored separately or derived from periodos
@@ -219,6 +191,10 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
         });
         return medidorField?.value || '';
       }
+      case 'nfVencimentoTipo':
+        return contract.nfVencimentoTipo || '';
+      case 'nfVencimentoDias':
+        return contract.nfVencimentoDias?.toString() || '';
       default:
         return '';
     }
@@ -357,6 +333,14 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
             }
             break;
           }
+          case 'nfVencimentoTipo':
+            updates.nfVencimentoTipo = value ? (value as 'dias_uteis' | 'dias_corridos') : undefined;
+            break;
+          case 'nfVencimentoDias': {
+            const diasValue = value.trim() ? Number(value) : undefined;
+            updates.nfVencimentoDias = diasValue !== undefined && Number.isFinite(diasValue) && diasValue >= 1 && diasValue <= 31 ? diasValue : undefined;
+            break;
+          }
         }
       });
 
@@ -365,12 +349,11 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
         updates.dadosContrato = updatedDadosContrato;
       }
 
-      // Update precoMedio from flatPrice or pricePeriods
+      // Volume contratado e preço flat removidos de contratos manuais
+      // Update precoMedio apenas de pricePeriods
       const periodsAverage = priceSummary.averagePrice ?? 0;
-      const flatAverage = parseCurrencyInput(flatPrice) ?? 0;
-      const priceAverage = priceSummary.filledMonths ? periodsAverage : flatAverage;
-      if (priceAverage > 0) {
-        updates.precoMedio = priceAverage;
+      if (priceSummary.filledMonths && periodsAverage > 0) {
+        updates.precoMedio = periodsAverage;
       }
 
       // Update resumoConformidades
@@ -525,7 +508,41 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                             />
                           )}
                         </div>
-                      ) : (
+                      ) : config.type === 'select-nf-vencimento-tipo' ? (
+                        <div className="flex gap-2">
+                          <select
+                            value={value}
+                            onChange={(e) => handleFieldChange(config.key, e.target.value)}
+                            className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
+                          >
+                            <option value="">Não informado</option>
+                            <option value="dias_uteis">Dias úteis</option>
+                            <option value="dias_corridos">Dias corridos</option>
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            step="1"
+                            value={fieldValues.nfVencimentoDias || ''}
+                            onChange={(e) => handleFieldChange('nfVencimentoDias', e.target.value)}
+                            disabled={!value}
+                            placeholder={value === 'dias_uteis' ? 'Ex: 6' : value === 'dias_corridos' ? 'Ex: 20' : '1-31'}
+                            className={`flex-1 rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                              !value
+                                ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-600'
+                                : 'border-slate-300'
+                            }`}
+                          />
+                          {value && fieldValues.nfVencimentoDias && (
+                            <span className="flex items-center text-sm text-slate-500 dark:text-slate-400">
+                              {value === 'dias_uteis'
+                                ? `${fieldValues.nfVencimentoDias}º dia útil`
+                                : `${fieldValues.nfVencimentoDias}º dia`}
+                            </span>
+                          )}
+                        </div>
+                      ) : config.key === 'nfVencimentoDias' ? null : (
                         <>
                           <input
                             type={config.type}
@@ -546,60 +563,11 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                 })}
               </div>
 
-              {/* Volume Contratado */}
-              <div className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-                <span>Volume contratado</span>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={volume}
-                    onChange={(e) => setVolume(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                    placeholder="0,00"
-                  />
-                  <select
-                    value={volumeUnit}
-                    onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
-                    className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                  >
-                    {volumeUnitOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Preço Flat e Períodos */}
+              {/* Volume Contratado e Preço Flat removidos de contratos manuais */}
+              
+              {/* Períodos de Preço */}
               <div className="flex flex-col gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-                <div className="grid md:grid-cols-3 gap-2 items-center">
-                  <label className="flex flex-col gap-1 md:col-span-2">
-                    Preço flat (R$/MWh)
-                    <div className="flex gap-2 items-center">
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">R$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={flatPrice}
-                          onChange={handleFlatPriceChange}
-                          onBlur={handleFlatPriceBlur}
-                          placeholder="0,00"
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 pl-7 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                        />
-                      </div>
-                      <select 
-                        value={String(flatYears)} 
-                        onChange={(e) => setFlatYears(Number(e.target.value) || 1)} 
-                        className="min-w-[120px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"
-                      >
-                        {[1,2,3,4,5,6,7,8,9,10].map((y) => <option key={y} value={String(y)}>{y} ano{y>1?'s':''}</option>)}
-                      </select>
-                    </div>
-                  </label>
+                <div className="flex items-center gap-2">
 
                   <div className="flex items-center gap-2">
                     <button
@@ -607,7 +575,7 @@ export default function EditContractModal({ open, contract, onClose, onSave }: E
                       onClick={() => setIsPriceModalOpen(true)}
                       className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
                     >
-                      <PencilLine size={16} /> Editar preços por período
+                      <PencilLine size={16} /> Editar preços e volumes por período
                     </button>
                     <div className="text-sm text-slate-500 dark:text-slate-400">
                       {priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}

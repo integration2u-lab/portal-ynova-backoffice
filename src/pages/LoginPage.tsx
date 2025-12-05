@@ -43,15 +43,15 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(regEmail)) {
-      setRegError('E-mail invalido');
+      setRegError('E-mail inválido');
       return;
     }
     if (regPassword.length < 8 || !/\d/.test(regPassword)) {
-      setRegError('Senha deve ter ao menos 8 caracteres e numeros');
+      setRegError('Senha deve ter ao menos 8 caracteres e números');
       return;
     }
     if (regPassword !== regConfirm) {
-      setRegError('As senhas nao sao iguais');
+      setRegError('As senhas não são iguais');
       return;
     }
     setRegError('');
@@ -65,9 +65,9 @@ export default function LoginPage({ onLogin, isLoading, error }: LoginPageProps)
     }
     try {
       await AuthAPI.forgotPassword(email);
-      alert('Se o e-mail existir, enviaremos instrucoes para redefinicao.');
+      alert('Se o e-mail existir, enviaremos instruções para redefinição.');
     } catch (err) {
-      alert('Nao foi possivel solicitar a redefinicao agora.');
+      alert('Não foi possível solicitar a redefinição agora.');
     }
   };
 

@@ -1,10 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Zap, Check, AlertTriangle, Circle, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import UploadCsvModal from '../../components/balancos/UploadCsvModal';
+import SyncResultModal, { type SyncResult } from '../../components/balancos/SyncResultModal';
 import { getList } from '../../services/energyBalanceApi';
+import { syncAllContractsWithBalances } from '../../services/syncContractsBalances';
 import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
 import type { EnergyBalanceListItem } from '../../types/energyBalance';
+import { useContracts } from '../contratos/ContractsContext';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -77,6 +81,7 @@ function ProinfaBadge({ proinfa }: ProinfaBadgeProps) {
 
 export default function EnergyBalanceListPage() {
   const navigate = useNavigate();
+  const { contracts, isLoading: contractsLoading } = useContracts();
   const [items, setItems] = React.useState<EnergyBalanceListItem[]>([]);
   const itemsRef = React.useRef<EnergyBalanceListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -89,6 +94,38 @@ export default function EnergyBalanceListPage() {
   const controllerRef = React.useRef<AbortController | null>(null);
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<string>('');
+  
+  // Estados para sincronização de contratos/balanços
+  const [isSyncModalOpen, setIsSyncModalOpen] = React.useState(false);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [syncResult, setSyncResult] = React.useState<SyncResult | null>(null);
+
+  // Handler para sincronizar contratos com balanços
+  const handleSyncContractsBalances = React.useCallback(async () => {
+    if (isSyncing || !contracts || contracts.length === 0) return;
+    
+    setIsSyncModalOpen(true);
+    setIsSyncing(true);
+    setSyncResult(null);
+    
+    try {
+      const result = await syncAllContractsWithBalances(contracts);
+      setSyncResult(result);
+      
+      if (result.synced > 0) {
+        toast.success(`${result.synced} balanço(s) sincronizado(s) com sucesso!`);
+        // Recarregar os balanços
+        void fetchBalances();
+      } else if (result.skipped > 0) {
+        toast.info(`${result.skipped} balanço(s) ignorado(s). Verifique os detalhes.`);
+      }
+    } catch (error) {
+      console.error('[EnergyBalanceList] Erro ao sincronizar:', error);
+      toast.error('Erro ao sincronizar contratos com balanços');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [contracts, isSyncing]);
 
   const fetchBalances = React.useCallback(async () => {
     controllerRef.current?.abort();
@@ -268,6 +305,17 @@ export default function EnergyBalanceListPage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                onClick={handleSyncContractsBalances}
+                disabled={isSyncing || contractsLoading || !contracts || contracts.length === 0}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-emerald-500 bg-white px-4 text-sm font-bold text-emerald-600 shadow-sm transition hover:bg-emerald-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Sincronizar contratos com balanços"
+                title="Sincronizar dados dos contratos com os balanços"
+              >
+                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+                {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
+              </button>
+              <button
+                type="button"
                 onClick={() => void fetchBalances()}
                 disabled={isRefreshing || loading}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 text-sm font-bold text-gray-700 shadow-sm transition hover:border-yn-orange hover:bg-gray-50 hover:text-yn-orange disabled:cursor-not-allowed disabled:opacity-60"
@@ -407,6 +455,17 @@ export default function EnergyBalanceListPage() {
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         onUploadComplete={handleUploadComplete}
+      />
+      
+      {/* Modal de Resultado da Sincronização */}
+      <SyncResultModal
+        open={isSyncModalOpen}
+        onClose={() => {
+          setIsSyncModalOpen(false);
+          setSyncResult(null);
+        }}
+        result={syncResult}
+        isLoading={isSyncing}
       />
     </div>
   );

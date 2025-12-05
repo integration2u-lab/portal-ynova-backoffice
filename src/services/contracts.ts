@@ -51,6 +51,9 @@ export type Contract = {
   supplierEmail?: string | null;
   seasonalFlexibilityMinPercentage?: string | number | null;
   seasonalFlexibilityUpperPercentage?: string | number | null;
+  // Vencimento da NF
+  nf_vencimento_tipo?: 'dias_uteis' | 'dias_corridos' | null;
+  nf_vencimento_dias?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -304,6 +307,10 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
     supplierEmailProcessed: supplierEmailValue,
     seasonalFlexibilityMinPercentage: seasonalFlexMin,
     seasonalFlexibilityUpperPercentage: seasonalFlexUpper,
+    nfVencimentoTipo: payload.nf_vencimento_tipo,
+    nfVencimentoDias: payload.nf_vencimento_dias,
+    price_periods: payload.price_periods ? `STRING (${typeof payload.price_periods === 'string' ? payload.price_periods.length : 'N/A'} chars)` : 'NULL/UNDEFINED',
+    periodPrice: payload.periodPrice ? 'EXISTS' : 'NULL/UNDEFINED',
   });
 
   // Map legal_name to social_reason for API
@@ -324,7 +331,17 @@ const prepareWritePayload = (payload: Partial<CreateContractPayload>) => {
     seasonal_flexibility_min_percentage: seasonalFlexMin === undefined ? undefined : seasonalFlexMin === '' ? null : seasonalFlexMin,
     seasonal_flexibility_upper_percentage: seasonalFlexUpper === undefined ? undefined : seasonalFlexUpper === '' ? null : seasonalFlexUpper,
     groupName: typeof payload.groupName === 'string' && payload.groupName.trim() ? payload.groupName : 'default',
+    // Vencimento da NF - preserva os valores do payload original
+    ...(payload.nf_vencimento_tipo !== undefined ? { nf_vencimento_tipo: payload.nf_vencimento_tipo } : {}),
+    ...(payload.nf_vencimento_dias !== undefined ? { nf_vencimento_dias: payload.nf_vencimento_dias } : {}),
   };
+
+  console.log('🔍 [prepareWritePayload] Payload final (incluindo vencimento NF):', {
+    nf_vencimento_tipo: finalPayload.nf_vencimento_tipo,
+    nf_vencimento_dias: finalPayload.nf_vencimento_dias,
+    price_periods: (finalPayload as any).price_periods ? `STRING (${typeof (finalPayload as any).price_periods === 'string' ? (finalPayload as any).price_periods.length : 'N/A'} chars)` : 'NULL/UNDEFINED',
+    periodPrice: (finalPayload as any).periodPrice ? 'EXISTS' : 'NULL/UNDEFINED',
+  });
 
   return finalPayload;
 };

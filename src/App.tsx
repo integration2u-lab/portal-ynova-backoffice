@@ -23,7 +23,9 @@ import DetalheContratoPage from './pages/contratos/DetalheContrato';
 import EditarContratoPage from './pages/contratos/EditContractPage';
 import ContractsLayout from './pages/contratos/ContractsLayout';
 import EnergyBalanceListPage from './pages/Balancos/EnergyBalanceListPage';
+import EnergyBalanceYearViewPage from './pages/Balancos/EnergyBalanceYearViewPage';
 import EnergyBalanceDetailPage from './pages/Balancos/EnergyBalanceDetailPage';
+import BalancosLayout from './pages/Balancos/BalancosLayout';
 // import EmailPage from './pages/EmailPage'; // Temporariamente desabilitada
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
@@ -56,8 +58,9 @@ function AppRoutes() {
             <Route path="inteligencia" element={<InteligenciaPage />} />
             <Route path="analise-fatura" element={<InvoiceProcessingPage />} />
             <Route path="simulacao" element={<SimulationPage />} />
-            <Route path="balancos">
-              <Route index element={<EnergyBalanceListPage />} />
+            <Route path="balancos" element={<BalancosLayout />}>
+              <Route index element={<EnergyBalanceYearViewPage />} />
+              <Route path="lista" element={<EnergyBalanceListPage />} />
               <Route path=":id" element={<EnergyBalanceDetailPage />} />
             </Route>
 
@@ -69,9 +72,6 @@ function AppRoutes() {
               <Route path=":id" element={<DetalheContratoPage />} />
               <Route path=":id/editar" element={<EditarContratoPage />} />
             </Route>
-
-            <Route path="balancos" element={<EnergyBalanceListPage />} />
-            <Route path="balancos/:id" element={<EnergyBalanceDetailPage />} />
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
             <Route path="leads" element={<SimulationClientsPage />} />

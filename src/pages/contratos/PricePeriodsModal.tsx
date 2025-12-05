@@ -6,6 +6,7 @@ import type { MonthRow, YearTab } from '../../types/pricePeriods';
 import { 
   getHoursInMonth, 
   calculateVolumeMWh, 
+  calculateVolumeMWm,
   calculateFlexibilityMax, 
   calculateFlexibilityMin 
 } from '../../utils/contractPricing';
@@ -195,6 +196,25 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
   flexibilityUpper = 0,
   flexibilityLower = 0,
 }) => {
+  // Normaliza os valores recebidos (Flexibilidade Superior e Inferior do contrato)
+  const upperValue = React.useMemo(() => {
+    const num = Number(flexibilityUpper);
+    return Number.isFinite(num) && num >= 0 ? num : 200;
+  }, [flexibilityUpper]);
+  
+  const lowerValue = React.useMemo(() => {
+    const num = Number(flexibilityLower);
+    return Number.isFinite(num) && num >= 0 ? num : 0;
+  }, [flexibilityLower]);
+  
+  console.log('[PricePeriodsModal] 🔧 Valores de flexibilidade recebidos (Flexibilidade Superior e Inferior):', {
+    flexibilityUpper,
+    flexibilityLower,
+    upperValue,
+    lowerValue,
+    '✅ USANDO': 'Flexibilidade Superior e Inferior do contrato',
+  });
+  
   const years = React.useMemo(() => 
     getYearsFromContract(contractStartDate, contractEndDate), 
     [contractStartDate, contractEndDate]
@@ -250,7 +270,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
       setEditingVolumeSeasonal({});
       setEditingPrice({});
     }
-  }, [open, years, value.periods, contractStartDate, contractEndDate]);
+  }, [open, years, value.periods, contractStartDate, contractEndDate, upperValue, lowerValue]);
   
   // Limpa estados de edição ao trocar de aba
   React.useEffect(() => {
@@ -266,6 +286,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
       prev.map((tab) => ({
         ...tab,
         months: tab.months.map((month) => {
+          let volumeMWm = month.volumeMWm;
           let volumeMWh = month.volumeMWh;
           let volumeSeasonalizedMWh = month.volumeSeasonalizedMWh;
           let flexibilityMaxMWh = month.flexibilityMaxMWh;
@@ -273,8 +294,13 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
           let adjustedPrice = month.adjustedPrice;
           
           // Calcula Volume MWh se tiver volumeMWm (apenas se volumeMWh ainda não foi definido manualmente)
-          if (month.volumeMWm !== null && Number.isFinite(month.volumeMWm)) {
-            volumeMWh = calculateVolumeMWh(month.volumeMWm, month.hoursInMonth);
+          if (volumeMWm !== null && Number.isFinite(volumeMWm) && (volumeMWh === null || volumeMWh === undefined)) {
+            volumeMWh = calculateVolumeMWh(volumeMWm, month.hoursInMonth);
+          }
+          
+          // Calcula Volume MWm se tiver volumeMWh (apenas se volumeMWm ainda não foi definido manualmente)
+          if (volumeMWh !== null && Number.isFinite(volumeMWh) && (volumeMWm === null || volumeMWm === undefined)) {
+            volumeMWm = calculateVolumeMWm(volumeMWh, month.hoursInMonth);
           }
           
           // Se tem volumeMWh (calculado ou manual), calcula os campos dependentes
@@ -282,10 +308,10 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
             // Volume Sazonalizado replica o Volume MWh
             volumeSeasonalizedMWh = volumeMWh;
             
-            // Calcula flexibilidades
-            if (volumeSeasonalizedMWh !== null) {
-              flexibilityMaxMWh = calculateFlexibilityMax(volumeSeasonalizedMWh, flexibilityUpper);
-              flexibilityMinMWh = calculateFlexibilityMin(volumeSeasonalizedMWh, flexibilityLower);
+            // Calcula flexibilidades usando Flexibilidade Superior e Inferior do contrato
+            if (volumeSeasonalizedMWh !== null && Number.isFinite(volumeSeasonalizedMWh)) {
+              flexibilityMaxMWh = calculateFlexibilityMax(volumeSeasonalizedMWh, upperValue);
+              flexibilityMinMWh = calculateFlexibilityMin(volumeSeasonalizedMWh, lowerValue);
             }
           }
           
@@ -299,6 +325,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
           
           return {
             ...month,
+            volumeMWm,
             volumeMWh,
             volumeSeasonalizedMWh,
             flexibilityMaxMWh,
@@ -308,7 +335,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         }),
       }))
     );
-  }, [flexibilityUpper, flexibilityLower, ipcaMultipliers]);
+  }, [upperValue, lowerValue, ipcaMultipliers]);
 
   const handleVolumeMWmChange = React.useCallback((yearIndex: number, monthIndex: number, value: string, monthYm: string) => {
     const key = `${yearIndex}-${monthIndex}`;
@@ -345,18 +372,26 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         // Atualiza Volume MWm
         month.volumeMWm = parsed;
         
-        // Recalcula toda a cadeia automaticamente
-        const [year, monthNum] = monthYm.split('-').map(Number);
-        const hours = getHoursInMonth(year, monthNum);
-        month.volumeMWh = calculateVolumeMWh(parsed, hours);
-        month.volumeSeasonalizedMWh = month.volumeMWh;
-        month.flexibilityMaxMWh = calculateFlexibilityMax(month.volumeSeasonalizedMWh, flexibilityUpper);
-        month.flexibilityMinMWh = calculateFlexibilityMin(month.volumeSeasonalizedMWh, flexibilityLower);
+        // Calcula Volume MWh automaticamente se ainda não foi preenchido manualmente
+        // ou se foi preenchido mas está vazio/null
+        if (month.volumeMWh === null || month.volumeMWh === undefined) {
+          const [year, monthNum] = monthYm.split('-').map(Number);
+          const hours = getHoursInMonth(year, monthNum);
+          month.volumeMWh = calculateVolumeMWh(parsed, hours);
+          month.volumeSeasonalizedMWh = month.volumeMWh;
+          month.flexibilityMaxMWh = calculateFlexibilityMax(month.volumeSeasonalizedMWh, upperValue);
+          month.flexibilityMinMWh = calculateFlexibilityMin(month.volumeSeasonalizedMWh, lowerValue);
+        } else {
+          // Se Volume MWh já foi preenchido, mantém os campos dependentes baseados nele
+          month.volumeSeasonalizedMWh = month.volumeMWh;
+          month.flexibilityMaxMWh = calculateFlexibilityMax(month.volumeSeasonalizedMWh, upperValue);
+          month.flexibilityMinMWh = calculateFlexibilityMin(month.volumeSeasonalizedMWh, lowerValue);
+        }
         
         return updated;
       });
     }
-  }, [flexibilityUpper, flexibilityLower]);
+  }, [upperValue, lowerValue]);
   
   const handleVolumeMWmBlur = React.useCallback((yearIndex: number, monthIndex: number) => {
     const key = `${yearIndex}-${monthIndex}`;
@@ -367,7 +402,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
     });
   }, []);
 
-  const handleVolumeMWhChange = React.useCallback((yearIndex: number, monthIndex: number, value: string) => {
+  const handleVolumeMWhChange = React.useCallback((yearIndex: number, monthIndex: number, value: string, monthYm: string) => {
     const key = `${yearIndex}-${monthIndex}`;
     
     // Remove espaços e caracteres inválidos, mas mantém números, vírgula e ponto
@@ -381,9 +416,16 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         const updated = [...prev];
         const month = updated[yearIndex].months[monthIndex];
         month.volumeMWh = null;
+        month.volumeMWm = null;
         month.volumeSeasonalizedMWh = null;
         month.flexibilityMaxMWh = null;
         month.flexibilityMinMWh = null;
+        return updated;
+      });
+      // Limpa o estado de edição também
+      setEditingVolumeMWh((prev) => {
+        const updated = { ...prev };
+        delete updated[key];
         return updated;
       });
       return;
@@ -401,15 +443,35 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         // Atualiza Volume MWh diretamente
         month.volumeMWh = parsed;
         
+        // Sempre calcula Volume MWm quando Volume MWh é preenchido manualmente
+        const [year, monthNum] = monthYm.split('-').map(Number);
+        const hours = getHoursInMonth(year, monthNum);
+        const calculatedVolumeMWm = calculateVolumeMWm(parsed, hours);
+        month.volumeMWm = calculatedVolumeMWm;
+        
+        // Atualiza o estado de edição do Volume MWm para que o valor calculado seja exibido imediatamente
+        const mwmKey = `${yearIndex}-${monthIndex}`;
+        setEditingVolumeMWm((prev) => ({
+          ...prev,
+          [mwmKey]: calculatedVolumeMWm.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        }));
+        
+        console.log('[PricePeriodsModal] 📊 Volume MWh preenchido:', {
+          monthYm,
+          volumeMWh: parsed,
+          hours,
+          volumeMWmCalculado: calculatedVolumeMWm,
+        });
+        
         // Recalcula campos dependentes
         month.volumeSeasonalizedMWh = parsed;
-        month.flexibilityMaxMWh = calculateFlexibilityMax(parsed, flexibilityUpper);
-        month.flexibilityMinMWh = calculateFlexibilityMin(parsed, flexibilityLower);
+        month.flexibilityMaxMWh = calculateFlexibilityMax(parsed, upperValue);
+        month.flexibilityMinMWh = calculateFlexibilityMin(parsed, lowerValue);
         
         return updated;
       });
     }
-  }, [flexibilityUpper, flexibilityLower]);
+  }, [upperValue, lowerValue]);
   
   const handleVolumeMWhBlur = React.useCallback((yearIndex: number, monthIndex: number) => {
     const key = `${yearIndex}-${monthIndex}`;
@@ -453,14 +515,14 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         // Atualiza Volume Sazonalizado diretamente
         month.volumeSeasonalizedMWh = parsed;
         
-        // Recalcula flexibilidades
-        month.flexibilityMaxMWh = calculateFlexibilityMax(parsed, flexibilityUpper);
-        month.flexibilityMinMWh = calculateFlexibilityMin(parsed, flexibilityLower);
+        // Recalcula flexibilidades usando Flexibilidade Superior e Inferior do contrato
+        month.flexibilityMaxMWh = calculateFlexibilityMax(parsed, upperValue);
+        month.flexibilityMinMWh = calculateFlexibilityMin(parsed, lowerValue);
         
         return updated;
       });
     }
-  }, [flexibilityUpper, flexibilityLower]);
+  }, [upperValue, lowerValue]);
   
   const handleVolumeSeasonalBlur = React.useCallback((yearIndex: number, monthIndex: number) => {
     const key = `${yearIndex}-${monthIndex}`;
@@ -547,10 +609,10 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
           volumeMWh = calculateVolumeMWh(volumeMWm, hours);
         }
         
-        // Recalcula campos dependentes
+        // Recalcula campos dependentes usando Flexibilidade Superior e Inferior do contrato
         const volumeSeasonalizedMWh = volumeMWh;
-        const flexibilityMaxMWh = volumeMWh !== null ? calculateFlexibilityMax(volumeMWh, flexibilityUpper) : null;
-        const flexibilityMinMWh = volumeMWh !== null ? calculateFlexibilityMin(volumeMWh, flexibilityLower) : null;
+        const flexibilityMaxMWh = volumeMWh !== null ? calculateFlexibilityMax(volumeMWh, upperValue) : null;
+        const flexibilityMinMWh = volumeMWh !== null ? calculateFlexibilityMin(volumeMWh, lowerValue) : null;
         
         return {
           ...month,
@@ -563,7 +625,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
       });
       return updated;
     });
-  }, [yearTabs, flexibilityUpper, flexibilityLower]);
+  }, [yearTabs, upperValue, lowerValue]);
 
   const handleFillPrice = React.useCallback((yearIndex: number) => {
     const firstMonth = yearTabs[yearIndex].months[0];
@@ -589,6 +651,68 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
       return updated;
     });
   }, [yearTabs, ipcaMultipliers]);
+
+  const handleFillAllYears = React.useCallback(() => {
+    setYearTabs((prev) => {
+      // Pega o primeiro mês da primeira aba para obter os valores a replicar
+      if (prev.length === 0) return prev;
+      const firstMonth = prev[0].months[0];
+      if (!firstMonth) return prev;
+      
+      // Verifica se tem volumeMWm ou volumeMWh para replicar
+      const hasVolumeMWm = firstMonth.volumeMWm !== null;
+      const hasVolumeMWh = firstMonth.volumeMWh !== null;
+      const hasPrice = firstMonth.basePrice !== null;
+      
+      // Se não tem nada para replicar, não faz nada
+      if (!hasVolumeMWm && !hasVolumeMWh && !hasPrice) return prev;
+      
+      const volumeMWmToFill = hasVolumeMWm ? firstMonth.volumeMWm : null;
+      const volumeMWhToFill = hasVolumeMWh ? firstMonth.volumeMWh : null;
+      const priceToFill = hasPrice ? firstMonth.basePrice : null;
+      
+      const updated = [...prev];
+      // Itera sobre todas as abas de anos
+      updated.forEach((yearTab, yearIndex) => {
+        updated[yearIndex].months = yearTab.months.map((month) => {
+          // Preenche volume apenas se houver valor para replicar
+          let volumeMWm = volumeMWmToFill !== null ? volumeMWmToFill : month.volumeMWm;
+          let volumeMWh = volumeMWhToFill !== null ? volumeMWhToFill : month.volumeMWh;
+          
+          // Se estamos replicando volumeMWm, recalcula volumeMWh
+          if (volumeMWmToFill !== null && volumeMWm !== null) {
+            const [year, monthNum] = month.ym.split('-').map(Number);
+            const hours = getHoursInMonth(year, monthNum);
+            volumeMWh = calculateVolumeMWh(volumeMWm, hours);
+          }
+          
+          // Recalcula campos dependentes usando Flexibilidade Superior e Inferior do contrato
+          const volumeSeasonalizedMWh = volumeMWh;
+          const flexibilityMaxMWh = volumeMWh !== null ? calculateFlexibilityMax(volumeMWh, upperValue) : null;
+          const flexibilityMinMWh = volumeMWh !== null ? calculateFlexibilityMin(volumeMWh, lowerValue) : null;
+          
+          // Preenche o preço base apenas se houver valor para replicar
+          const basePrice = priceToFill !== null ? priceToFill : month.basePrice;
+          
+          // Recalcula o preço reajustado com IPCA
+          const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, month.ym);
+          const adjustedPrice = basePrice !== null ? basePrice * multiplier : null;
+          
+          return {
+            ...month,
+            volumeMWm,
+            volumeMWh,
+            volumeSeasonalizedMWh,
+            flexibilityMaxMWh,
+            flexibilityMinMWh,
+            basePrice,
+            adjustedPrice,
+          };
+        });
+      });
+      return updated;
+    });
+  }, [upperValue, lowerValue, ipcaMultipliers]);
 
   const handleSubmit = React.useCallback(
     (event: React.FormEvent) => {
@@ -739,9 +863,16 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                     >
                       Preencher Preço Flat
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleFillAllYears}
+                      className="rounded-lg border border-yn-orange bg-white px-4 py-2 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange hover:text-white dark:bg-slate-900 dark:hover:bg-yn-orange"
+                    >
+                      Preencher Volume e Preço Flat (Todos os Anos)
+                    </button>
                   </div>
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Replica o primeiro valor preenchido para todos os meses do ano
+                    Os dois primeiros botões replicam o primeiro valor preenchido para todos os meses do ano atual. O terceiro botão replica volume e preço para todos os meses de todas as abas de anos.
                   </p>
                 </div>
 
@@ -764,14 +895,14 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500 dark:text-slate-400">Superior</span>
                       <span className="rounded bg-green-100 px-2 py-1 text-sm font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                        +{flexibilityUpper}%
+                        +{upperValue}%
                       </span>
                     </div>
                     <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500 dark:text-slate-400">Inferior</span>
                       <span className="rounded bg-orange-100 px-2 py-1 text-sm font-semibold text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
-                        -{flexibilityLower}%
+                        -{lowerValue}%
                       </span>
                     </div>
                   </div>
@@ -855,7 +986,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                                     ? month.volumeMWh.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                     : ''
                                 }
-                                onChange={(e) => handleVolumeMWhChange(activeTab, monthIndex, e.target.value)}
+                                onChange={(e) => handleVolumeMWhChange(activeTab, monthIndex, e.target.value, month.ym)}
                                 onBlur={() => handleVolumeMWhBlur(activeTab, monthIndex)}
                                 placeholder="0,00"
                                 className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950"

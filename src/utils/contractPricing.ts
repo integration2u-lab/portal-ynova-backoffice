@@ -356,6 +356,17 @@ export function calculateVolumeMWh(volumeMWm: number, hours: number): number {
 }
 
 /**
+ * Calcula Volume MWm a partir de Volume MWh e horas
+ * @param volumeMWh Volume em MWh
+ * @param hours Número de horas no mês
+ * @returns Volume em MWm
+ */
+export function calculateVolumeMWm(volumeMWh: number, hours: number): number {
+  if (hours === 0) return 0;
+  return volumeMWh / hours;
+}
+
+/**
  * Calcula a flexibilidade máxima em MWh
  * @param volumeSeasonalized Volume sazonalizado em MWh
  * @param flexUpper Flexibilidade superior em percentual (ex: 50 para 50%)

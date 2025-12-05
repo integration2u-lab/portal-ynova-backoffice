@@ -273,6 +273,12 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
   const [savingField, setSavingField] = React.useState<string | null>(null);
   const fieldInputRef = React.useRef<HTMLInputElement | HTMLSelectElement>(null);
   
+  // Estado para edição do vencimento da NF
+  const [isEditingNfVencimento, setIsEditingNfVencimento] = React.useState(false);
+  const [isSavingNfVencimento, setIsSavingNfVencimento] = React.useState(false);
+  const [nfVencimentoTipoValue, setNfVencimentoTipoValue] = React.useState<'dias_uteis' | 'dias_corridos' | ''>('');
+  const [nfVencimentoDiasValue, setNfVencimentoDiasValue] = React.useState('');
+  
   // Migra campos antigos para campos separados
   const contrato = React.useMemo(() => {
     const updated = { ...contratoOriginal };
@@ -298,7 +304,7 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
       // Remove campos antigos
       updated.dadosContrato = updated.dadosContrato.filter(f => {
         const label = f.label.toLowerCase();
-        return !label.includes('flex / limites') && !label.includes('flex sazonalidade');
+        return !label.includes('flex / limites') && !label.includes('sazonalidade');
       });
       
       // Adiciona campos novos separados
@@ -321,8 +327,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
       const newFields = [
         { label: 'Flexibilidade Superior (%)', value: `${limiteSupValue}%` },
         { label: 'Flexibilidade Inferior (%)', value: `${limiteInfValue}%` },
-        { label: 'Flexibilidade Sazonalidade - Superior (%)', value: flexSazSupValue ? `${flexSazSupValue}%` : 'Não informado' },
-        { label: 'Flexibilidade Sazonalidade - Inferior (%)', value: flexSazInfValue ? `${flexSazInfValue}%` : 'Não informado' },
+        { label: 'Sazonalidade - Superior (%)', value: flexSazSupValue ? `${flexSazSupValue}%` : 'Não informado' },
+        { label: 'Sazonalidade - Inferior (%)', value: flexSazInfValue ? `${flexSazInfValue}%` : 'Não informado' },
       ];
       
       updated.dadosContrato.splice(insertIndex, 0, ...newFields);
@@ -330,6 +336,12 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
     
     return updated;
   }, [contratoOriginal]);
+  
+  // Inicializa valores de vencimento da NF quando o contrato muda
+  React.useEffect(() => {
+    setNfVencimentoTipoValue(contrato.nfVencimentoTipo || '');
+    setNfVencimentoDiasValue(contrato.nfVencimentoDias?.toString() || '');
+  }, [contrato.nfVencimentoTipo, contrato.nfVencimentoDias]);
   
   // Função auxiliar para extrair periodPrice do contrato
   const extractPeriodPrice = React.useCallback(() => {
@@ -484,6 +496,85 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
     setFieldInputValue('');
   };
 
+  // Handlers para edição do vencimento da NF
+  const handleStartEditingNfVencimento = () => {
+    setNfVencimentoTipoValue(contrato.nfVencimentoTipo || '');
+    setNfVencimentoDiasValue(contrato.nfVencimentoDias?.toString() || '');
+    setIsEditingNfVencimento(true);
+  };
+
+  const handleCancelEditingNfVencimento = () => {
+    setIsEditingNfVencimento(false);
+    setNfVencimentoTipoValue(contrato.nfVencimentoTipo || '');
+    setNfVencimentoDiasValue(contrato.nfVencimentoDias?.toString() || '');
+  };
+
+  const handleSaveNfVencimento = async () => {
+    if (!contrato || isSavingNfVencimento) return;
+
+    // Validação
+    const hasTipo = Boolean(nfVencimentoTipoValue && nfVencimentoTipoValue.trim());
+    const hasDias = Boolean(nfVencimentoDiasValue && nfVencimentoDiasValue.trim());
+
+    if (hasTipo && !hasDias) {
+      alert('Informe o número de dias quando o tipo estiver selecionado');
+      return;
+    }
+
+    if (hasDias && !hasTipo) {
+      alert('Selecione o tipo de vencimento quando informar o número de dias');
+      return;
+    }
+
+    if (hasDias) {
+      const diasValue = Number(nfVencimentoDiasValue);
+      if (!Number.isFinite(diasValue) || diasValue < 1 || diasValue > 31 || !Number.isInteger(diasValue)) {
+        alert('O número de dias deve ser um número inteiro entre 1 e 31');
+        return;
+      }
+    }
+
+    setIsSavingNfVencimento(true);
+    try {
+      await updateContract(contrato.id, (current) => {
+        const updated = { ...current };
+        
+        updated.nfVencimentoTipo = nfVencimentoTipoValue || undefined;
+        updated.nfVencimentoDias = nfVencimentoDiasValue ? Number(nfVencimentoDiasValue) : undefined;
+        
+        // Atualiza o campo no dadosContrato
+        const vencimentoIndex = updated.dadosContrato.findIndex(f => {
+          const label = f.label.toLowerCase();
+          return label.includes('vencimento') && label.includes('nf');
+        });
+        
+        const vencimentoNFValue = updated.nfVencimentoTipo && updated.nfVencimentoDias
+          ? updated.nfVencimentoTipo === 'dias_uteis'
+            ? `${updated.nfVencimentoDias}º dia útil`
+            : `${updated.nfVencimentoDias}º dia`
+          : 'Não informado';
+        
+        if (vencimentoIndex >= 0) {
+          updated.dadosContrato[vencimentoIndex].value = vencimentoNFValue;
+        } else {
+          updated.dadosContrato.push({
+            label: 'Vencimento da NF',
+            value: vencimentoNFValue,
+          });
+        }
+        
+        return updated;
+      });
+
+      setIsEditingNfVencimento(false);
+    } catch (error) {
+      console.error('[ContractDetail] Falha ao salvar vencimento da NF:', error);
+      alert('Não foi possível salvar o vencimento da NF. Tente novamente.');
+    } finally {
+      setIsSavingNfVencimento(false);
+    }
+  };
+
   // Função para salvar um campo individual
   const handleSaveField = async (fieldLabel: string, fieldIndex: number) => {
     if (!contrato || savingField) return;
@@ -516,9 +607,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
         }
         
         // ORDEM IMPORTANTE: Verificações mais específicas primeiro
-        // Verifica se é Flexibilidade Sazonalidade - Superior
-        if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('superior') && !normalizedLabel.includes('inferior')) {
-          // Flexibilidade Sazonalidade - Superior - APENAS ESTE CAMPO
+        // Verifica se é Sazonalidade - Superior
+        if (normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('superior') && !normalizedLabel.includes('inferior')) {
+          // Sazonalidade - Superior - APENAS ESTE CAMPO
           const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
           const parsed = parseFloat(numericValue);
           console.log('✅ [ContractDetail] Salvando APENAS flexibilidade sazonal SUPERIOR:', {
@@ -558,8 +649,8 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
           }
           // IMPORTANTE: Retorna aqui para não processar outras condições
           return updated;
-        } else if (normalizedLabel.includes('flexibilidade') && normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('inferior') && !normalizedLabel.includes('superior')) {
-          // Flexibilidade Sazonalidade - Inferior - APENAS ESTE CAMPO
+        } else if (normalizedLabel.includes('sazonalidade') && normalizedLabel.includes('inferior') && !normalizedLabel.includes('superior')) {
+          // Sazonalidade - Inferior - APENAS ESTE CAMPO
           const numericValue = fieldInputValue.replace(/[^\d.,]/g, '').replace(',', '.');
           const parsed = parseFloat(numericValue);
           console.log('✅ [ContractDetail] Salvando APENAS flexibilidade sazonal INFERIOR:', {
@@ -839,7 +930,9 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
               'ciclo faturamento',
             ];
 
+            // Oculta o campo "Vencimento da NF" do map normal (será renderizado separadamente)
             if (
+              (normalizedLabel.includes('vencimento') && normalizedLabel.includes('nf')) ||
               hiddenLabelFragments.some(
                 (fragment) =>
                   normalizedLabel.includes(fragment) ||
@@ -899,6 +992,101 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
               />
             );
           })}
+          
+          {/* Componente especial para edição de Vencimento da NF */}
+          <div className="col-span-full">
+            <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm transition hover:border-yn-orange/60 hover:shadow">
+              <div className="flex items-center justify-between mb-2">
+                <dt className="text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  Vencimento da NF
+                </dt>
+                {!isEditingNfVencimento && (
+                  <button
+                    type="button"
+                    onClick={handleStartEditingNfVencimento}
+                    disabled={isSavingNfVencimento}
+                    className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50"
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+              {isEditingNfVencimento ? (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <select
+                      value={nfVencimentoTipoValue}
+                      onChange={(e) => setNfVencimentoTipoValue(e.target.value as 'dias_uteis' | 'dias_corridos' | '')}
+                      disabled={isSavingNfVencimento}
+                      className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 disabled:opacity-50"
+                    >
+                      <option value="">Selecione o tipo</option>
+                      <option value="dias_uteis">Dias úteis</option>
+                      <option value="dias_corridos">Dias corridos</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      step="1"
+                      value={nfVencimentoDiasValue}
+                      onChange={(e) => setNfVencimentoDiasValue(e.target.value)}
+                      disabled={!nfVencimentoTipoValue || isSavingNfVencimento}
+                      placeholder={nfVencimentoTipoValue === 'dias_uteis' ? 'Ex: 6' : nfVencimentoTipoValue === 'dias_corridos' ? 'Ex: 20' : '1-31'}
+                      className={`flex-1 rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-slate-700 dark:bg-slate-950 ${
+                        !nfVencimentoTipoValue
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-600'
+                          : 'border-slate-300'
+                      } disabled:opacity-50`}
+                    />
+                    {nfVencimentoTipoValue && nfVencimentoDiasValue && (
+                      <span className="flex items-center text-sm text-slate-500 dark:text-slate-400">
+                        {nfVencimentoTipoValue === 'dias_uteis'
+                          ? `${nfVencimentoDiasValue}º dia útil`
+                          : `${nfVencimentoDiasValue}º dia`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveNfVencimento}
+                      disabled={isSavingNfVencimento}
+                      className="inline-flex items-center gap-2 rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSavingNfVencimento ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        '✓ Salvar'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEditingNfVencimento}
+                      disabled={isSavingNfVencimento}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      ✕ Cancelar
+                    </button>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    Define quando a NF vence em relação ao mês de referência
+                  </span>
+                </div>
+              ) : (
+                <dd className="mt-1 text-sm font-bold text-gray-900">
+                  {contrato.nfVencimentoTipo && contrato.nfVencimentoDias
+                    ? contrato.nfVencimentoTipo === 'dias_uteis'
+                      ? `${contrato.nfVencimentoDias}º dia útil`
+                      : `${contrato.nfVencimentoDias}º dia`
+                    : 'Não informado'}
+                </dd>
+              )}
+            </div>
+          </div>
         </dl>
       </section>
 
@@ -914,7 +1102,7 @@ export const ContractDetail: React.FC<Props> = ({ contrato: contratoOriginal, on
               className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
             >
               <PencilLine size={16} />
-              Editar preços
+              Editar preços e volumes por período
             </button>
           )}
         </div>

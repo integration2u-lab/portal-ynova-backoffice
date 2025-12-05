@@ -96,10 +96,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     });
     console.log(`[energyBalanceApi] ✅ Status: ${response.status} ${response.statusText}`);
   } catch (error) {
-    console.error(`[energyBalanceApi] ❌ Erro na requisição:`, error);
     if (error instanceof Error && error.name === 'AbortError') {
+      // Não logar erros de aborto, são esperados quando componentes são desmontados
       throw error;
     }
+    console.error(`[energyBalanceApi] ❌ Erro na requisição:`, error);
     const message = error instanceof Error ? error.message : 'Falha ao conectar com a API';
     throw new HttpError(message);
   }

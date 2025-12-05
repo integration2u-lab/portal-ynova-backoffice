@@ -9,6 +9,7 @@ import {
 } from '../../services/contracts';
 import { parseContractPricePeriods } from '../../utils/contractPricing';
 import { API_BASE_URL } from '../../config/api';
+import { getList as getEnergyBalanceList, energyBalanceRequest } from '../../services/energyBalanceApi';
 
 const DEFAULT_API_URL = API_BASE_URL;
 
@@ -1018,6 +1019,23 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
       faturas: normalizeFaturas((item as { faturas?: unknown; invoices?: unknown }).faturas ?? (item as { invoices?: unknown }).invoices),
       createdAt: createdAt || undefined,
       updatedAt: updatedAt || undefined,
+      // Vencimento da NF
+      nfVencimentoTipo: (() => {
+        const tipo = (item as { nf_vencimento_tipo?: unknown; nfVencimentoTipo?: unknown }).nf_vencimento_tipo ?? 
+                     (item as { nfVencimentoTipo?: unknown }).nfVencimentoTipo;
+        if (tipo === 'dias_uteis' || tipo === 'dias_corridos') return tipo;
+        return undefined;
+      })(),
+      nfVencimentoDias: (() => {
+        const dias = (item as { nf_vencimento_dias?: unknown; nfVencimentoDias?: unknown }).nf_vencimento_dias ?? 
+                     (item as { nfVencimentoDias?: unknown }).nfVencimentoDias;
+        if (typeof dias === 'number' && Number.isFinite(dias) && dias > 0) return dias;
+        if (typeof dias === 'string') {
+          const parsed = Number(dias);
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+        return undefined;
+      })(),
     } satisfies ContractMock & { periodPrice: { price_periods: string | null; flat_price_mwh: number | null; flat_years: number | null } };
   });
 };
@@ -1062,6 +1080,10 @@ const fetchContractsFromEndpoints = async (
       });
 
       if (!response.ok) {
+        // Não logar 404 durante fallback de endpoints
+        if (response.status === 404) {
+          throw new Error(`404`);
+        }
         const message = await response.text().catch(() => '');
         throw new Error(
           message || `[ContractsContext] Erro ao buscar contratos em ${endpoint} (status ${response.status}).`
@@ -1095,16 +1117,22 @@ const fetchContractsFromEndpoints = async (
         throw error instanceof Error ? error : new Error(String(error));
       }
       lastError = error;
-      console.error(
-        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
-        error instanceof Error ? error : new Error(String(error))
-      );
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      // Não logar erros de aborto ou 404 durante fallback de endpoints
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const is404Error = errorMessage.includes('404') || (error instanceof Error && errorMessage.includes('status 404'));
+      
+      if (!is404Error) {
         console.error(
-          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
+          `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
+          error instanceof Error ? error : new Error(String(error))
         );
+        if (error instanceof TypeError && errorMessage === 'Failed to fetch') {
+          console.error(
+            '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
+          );
+        }
+        console.info('[ContractsContext] Tentando próximo endpoint disponível...');
       }
-      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
     }
   }
 
@@ -1217,8 +1245,43 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const flatYears = (contract as { flatYears?: unknown }).flatYears ?? periodPriceFromContract?.flat_years;
 
   // Prepara price_periods como JSON string se existir
+  // IMPORTANTE: Prioriza periodPrice.price_periods (atualizado pelo modal) sobre pricePeriods (objeto antigo)
   let pricePeriodsJson: string | undefined = undefined;
-  if (pricePeriods && typeof pricePeriods === 'object') {
+  
+  // PRIORIDADE 1: periodPrice.price_periods (string) - usado pelo VolumeContratadoModal
+  if (periodPriceFromContract?.price_periods) {
+    const raw = periodPriceFromContract.price_periods;
+    if (typeof raw === 'string' && raw.trim() && raw.trim() !== 'null') {
+      // Valida se é um JSON válido antes de usar
+      try {
+        const parsed = JSON.parse(raw);
+        // Se tem períodos (mesmo sem preços, pode ter volumes), usa
+        if (parsed && typeof parsed === 'object' && (parsed.periods || Array.isArray(parsed))) {
+          pricePeriodsJson = raw;
+          console.log('[contractToApiPayload] ✅ PRIORIDADE 1: Usando periodPrice.price_periods (string JSON válido):', {
+            length: raw.length,
+            hasPeriods: !!parsed.periods,
+            periodsCount: Array.isArray(parsed.periods) ? parsed.periods.length : 0,
+            preview: raw.substring(0, 100),
+          });
+        } else {
+          console.warn('[contractToApiPayload] ⚠️ periodPrice.price_periods não tem estrutura válida (periods)');
+        }
+      } catch (error) {
+        console.warn('[contractToApiPayload] ⚠️ periodPrice.price_periods não é JSON válido:', error);
+      }
+    } else if (raw && typeof raw === 'object') {
+      try {
+        pricePeriodsJson = JSON.stringify(raw);
+        console.log('[contractToApiPayload] ✅ PRIORIDADE 1: Serializou periodPrice.price_periods (objeto) para JSON');
+      } catch (error) {
+        console.warn('[ContractsContext] Falha ao serializar periodPrice.price_periods para JSON:', error);
+      }
+    }
+  }
+  
+  // PRIORIDADE 2: pricePeriods (objeto) - formato antigo, só usa se periodPrice não tiver dados
+  if (!pricePeriodsJson && pricePeriods && typeof pricePeriods === 'object') {
     try {
       // Verifica se tem períodos preenchidos
       const periods = (pricePeriods as { periods?: unknown }).periods;
@@ -1235,6 +1298,7 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
 
         if (hasData) {
           pricePeriodsJson = JSON.stringify(pricePeriods);
+          console.log('[contractToApiPayload] ✅ PRIORIDADE 2: Usando pricePeriods (objeto) serializado');
         }
       }
     } catch (error) {
@@ -1242,18 +1306,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     }
   }
 
-  if (!pricePeriodsJson && periodPriceFromContract?.price_periods) {
-    const raw = periodPriceFromContract.price_periods;
-    if (typeof raw === 'string' && raw.trim()) {
-      pricePeriodsJson = raw;
-    } else if (raw && typeof raw === 'object') {
-      try {
-        pricePeriodsJson = JSON.stringify(raw);
-      } catch (error) {
-        console.warn('[ContractsContext] Falha ao serializar periodPrice.price_periods para JSON:', error);
-      }
-    }
-  }
+  console.log('[contractToApiPayload] 📊 price_periods final:', {
+    hasPricePeriodsJson: !!pricePeriodsJson,
+    pricePeriodsJsonType: typeof pricePeriodsJson,
+    pricePeriodsJsonLength: typeof pricePeriodsJson === 'string' ? pricePeriodsJson.length : 'N/A',
+    pricePeriodsJsonPreview: typeof pricePeriodsJson === 'string' ? pricePeriodsJson.substring(0, 200) : 'N/A',
+  });
 
   const normalizeFlatPrice = (value: unknown): number | null => {
     const parsed = parseNumericInput(value);
@@ -1287,6 +1345,12 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   const hasPricePeriods = Boolean(pricePeriodsJson && pricePeriodsJson.trim() && pricePeriodsJson.trim() !== 'null');
 
   const payloadPricePeriods = hasPricePeriods ? pricePeriodsJson : null;
+  
+  console.log('[contractToApiPayload] 🎯 Payload final de price_periods:', {
+    hasPricePeriods,
+    payloadPricePeriods: payloadPricePeriods ? 'STRING (não-null)' : 'NULL',
+    payloadPricePeriodsLength: typeof payloadPricePeriods === 'string' ? payloadPricePeriods.length : 'N/A',
+  });
   const payloadFlatPrice = hasPricePeriods ? null : flatPriceValue ?? null;
   const payloadFlatYears = hasPricePeriods ? null : flatYearsValue ?? null;
 
@@ -1320,6 +1384,24 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     seasonalFlexUpper,
     seasonalFlexLower,
   });
+
+  // Extrai vencimento da NF do contrato
+  const nfVencimentoTipo = (contract as { nfVencimentoTipo?: 'dias_uteis' | 'dias_corridos' }).nfVencimentoTipo;
+  const nfVencimentoDias = (contract as { nfVencimentoDias?: number }).nfVencimentoDias;
+  const nfVencimentoTipoFromDados = findDadosValue(['vencimento', 'nf vencimento', 'vencimento nf']);
+  
+  // Tenta extrair tipo e dias do campo de dados do contrato se não estiver no contrato diretamente
+  let finalNfVencimentoTipo: 'dias_uteis' | 'dias_corridos' | undefined = nfVencimentoTipo;
+  let finalNfVencimentoDias: number | undefined = nfVencimentoDias;
+  
+  if (!finalNfVencimentoTipo && nfVencimentoTipoFromDados) {
+    const dadosLower = nfVencimentoTipoFromDados.toLowerCase();
+    if (dadosLower.includes('dia útil') || dadosLower.includes('dias úteis') || dadosLower.includes('dia_util')) {
+      finalNfVencimentoTipo = 'dias_uteis';
+    } else if (dadosLower.includes('dia corrido') || dadosLower.includes('dias corridos') || dadosLower.includes('dia_corrido')) {
+      finalNfVencimentoTipo = 'dias_corridos';
+    }
+  }
 
   const payload: Record<string, unknown> = {
     contract_code: normalizeString(contract.codigo) || contract.id,
@@ -1373,6 +1455,9 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
       flat_price_mwh: payloadFlatPrice,
       flat_years: payloadFlatYears,
     },
+    // Vencimento da NF
+    ...(finalNfVencimentoTipo ? { nf_vencimento_tipo: finalNfVencimentoTipo } : {}),
+    ...(finalNfVencimentoDias !== undefined ? { nf_vencimento_dias: finalNfVencimentoDias } : {}),
   };
 
   return Object.fromEntries(
@@ -1532,7 +1617,29 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
     compliance_invoice: pickNullableValue('compliance_invoice'),
     compliance_charges: pickNullableValue('compliance_charges'),
     compliance_overall: pickNullableValue('compliance_overall'),
-    price_periods: typeof record.price_periods === 'string' ? record.price_periods : null,
+    // PRIORIDADE: periodPrice.price_periods > price_periods (raiz)
+    price_periods: (() => {
+      // Tenta pegar de periodPrice primeiro (atualizado pelo modal)
+      if (record.periodPrice && typeof record.periodPrice === 'object') {
+        const periodPriceRecord = record.periodPrice as { price_periods?: unknown };
+        if (typeof periodPriceRecord.price_periods === 'string' && periodPriceRecord.price_periods.trim() && periodPriceRecord.price_periods.trim() !== 'null') {
+          console.log('[contractToServicePayload] ✅ Usando periodPrice.price_periods:', {
+            length: periodPriceRecord.price_periods.length,
+            preview: periodPriceRecord.price_periods.substring(0, 100),
+          });
+          return periodPriceRecord.price_periods;
+        }
+      }
+      // Fallback para price_periods na raiz
+      if (typeof record.price_periods === 'string' && record.price_periods.trim() && record.price_periods.trim() !== 'null') {
+        console.log('[contractToServicePayload] ✅ Usando price_periods (raiz):', {
+          length: record.price_periods.length,
+        });
+        return record.price_periods;
+      }
+      console.log('[contractToServicePayload] ⚠️ Nenhum price_periods válido encontrado');
+      return null;
+    })(),
     flat_price_mwh: pickNullableValue('flat_price_mwh'),
     flat_years: pickNullableValue('flat_years'),
     // Novos campos solicitados
@@ -1549,9 +1656,9 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
           flat_years?: unknown;
         };
         const pricePeriodsValue =
-          typeof periodPriceRecord.price_periods === 'string'
+          typeof periodPriceRecord.price_periods === 'string' && periodPriceRecord.price_periods.trim() && periodPriceRecord.price_periods.trim() !== 'null'
             ? periodPriceRecord.price_periods
-            : typeof record.price_periods === 'string'
+            : typeof record.price_periods === 'string' && record.price_periods.trim() && record.price_periods.trim() !== 'null'
             ? record.price_periods
             : null;
         const flatPriceValue =
@@ -1588,7 +1695,23 @@ const contractToServicePayload = (contract: ContractMock): CreateContractPayload
         flat_years: null,
       };
     })(),
+    // Vencimento da NF - extrai do record (já processado por contractToApiPayload)
+    nf_vencimento_tipo: typeof record.nf_vencimento_tipo === 'string' && record.nf_vencimento_tipo.trim()
+      ? (record.nf_vencimento_tipo as 'dias_uteis' | 'dias_corridos')
+      : (contract.nfVencimentoTipo || null),
+    nf_vencimento_dias: typeof record.nf_vencimento_dias === 'number' && Number.isFinite(record.nf_vencimento_dias)
+      ? record.nf_vencimento_dias
+      : (contract.nfVencimentoDias !== undefined ? contract.nfVencimentoDias : null),
   };
+  
+  console.log('🔍 [contractToServicePayload] Campos de vencimento da NF:', {
+    nf_vencimento_tipo: servicePayload.nf_vencimento_tipo,
+    nf_vencimento_dias: servicePayload.nf_vencimento_dias,
+    recordNfVencimentoTipo: record.nf_vencimento_tipo,
+    recordNfVencimentoDias: record.nf_vencimento_dias,
+    contractNfVencimentoTipo: contract.nfVencimentoTipo,
+    contractNfVencimentoDias: contract.nfVencimentoDias,
+  });
   
   return servicePayload;
 };
@@ -1649,6 +1772,8 @@ const createContractInApi = async (contract: ContractMock): Promise<ContractMock
     submercado: contract.submercado,
     flexSazonalSuperior: contract.flexSazonalSuperior,
     flexSazonalInferior: contract.flexSazonalInferior,
+    nfVencimentoTipo: contract.nfVencimentoTipo,
+    nfVencimentoDias: contract.nfVencimentoDias,
   });
   
   // Sempre usa createContractService quando disponível, pois ele usa apiClient que já está configurado
@@ -1692,6 +1817,180 @@ const createContractInApi = async (contract: ContractMock): Promise<ContractMock
     }
     const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
     return normalized[0] ?? contract;
+  }
+};
+
+/**
+ * Sincroniza os balanços energéticos após criar/atualizar um contrato.
+ * Busca balanços pelo medidor do contrato e atualiza os campos relevantes.
+ */
+const syncEnergyBalancesAfterContractSave = async (contract: ContractMock): Promise<void> => {
+  try {
+    // Extrair medidor do contrato
+    const medidor = contract.dadosContrato?.find((item) => {
+      const label = item.label.toLowerCase();
+      return label.includes('medidor') || label.includes('meter') || label.includes('grupo');
+    })?.value;
+
+    if (!medidor || medidor === 'Não informado') {
+      console.log('[ContractsContext] ⏭️ Contrato sem medidor, pulando sincronização de balanços');
+      return;
+    }
+
+    console.log('[ContractsContext] 🔄 Sincronizando balanços para medidor:', medidor);
+
+    // Buscar todos os balanços
+    const balances = await getEnergyBalanceList();
+    
+    if (!balances || balances.length === 0) {
+      console.log('[ContractsContext] ℹ️ Nenhum balanço encontrado no sistema');
+      return;
+    }
+
+    // Filtrar balanços pelo medidor
+    const matchingBalances = balances.filter((balance) => {
+      const balanceMeter = balance.meter || balance.medidor || balance.groupName || '';
+      return balanceMeter.toLowerCase().trim() === medidor.toLowerCase().trim();
+    });
+
+    if (matchingBalances.length === 0) {
+      console.log('[ContractsContext] ℹ️ Nenhum balanço encontrado para o medidor:', medidor);
+      return;
+    }
+
+    console.log(`[ContractsContext] 📊 Encontrados ${matchingBalances.length} balanços para atualizar`);
+
+    // Parsear price_periods do contrato para extrair volumes por mês
+    const pricePeriodsJson = contract.periodPrice?.price_periods;
+    const monthDataMap = new Map<string, {
+      volumeSeasonalizedMWh: number | null;
+      flexibilityMaxMWh: number | null;
+      flexibilityMinMWh: number | null;
+      price: number | null;
+    }>();
+
+    if (pricePeriodsJson) {
+      try {
+        let parsed = typeof pricePeriodsJson === 'string' 
+          ? JSON.parse(pricePeriodsJson) 
+          : pricePeriodsJson;
+        
+        if (typeof parsed === 'string') {
+          parsed = JSON.parse(parsed);
+        }
+
+        if (parsed?.periods) {
+          parsed.periods.forEach((period: { months?: Array<{
+            ym: string;
+            volumeSeasonalizedMWh?: number;
+            flexibilityMaxMWh?: number;
+            flexibilityMinMWh?: number;
+            price?: number;
+          }> }) => {
+            period.months?.forEach((month) => {
+              if (month.ym) {
+                monthDataMap.set(month.ym, {
+                  volumeSeasonalizedMWh: month.volumeSeasonalizedMWh ?? null,
+                  flexibilityMaxMWh: month.flexibilityMaxMWh ?? null,
+                  flexibilityMinMWh: month.flexibilityMinMWh ?? null,
+                  price: month.price ?? null,
+                });
+              }
+            });
+          });
+        }
+      } catch (parseError) {
+        console.warn('[ContractsContext] ⚠️ Erro ao parsear price_periods:', parseError);
+      }
+    }
+
+    // Atualizar cada balanço encontrado
+    for (const balance of matchingBalances) {
+      try {
+        const balanceId = balance.id;
+        if (!balanceId) continue;
+
+        // Extrair o mês do balanço (formato YYYY-MM)
+        const balanceMonth = balance.month || balance.mes || balance.referenceBase;
+        let balanceYM: string | null = null;
+
+        if (balanceMonth) {
+          // Tenta extrair YYYY-MM
+          const isoMatch = String(balanceMonth).match(/(\d{4})-(\d{2})/);
+          if (isoMatch) {
+            balanceYM = `${isoMatch[1]}-${isoMatch[2]}`;
+          } else {
+            // Tenta parsear formato "jan. 2025" ou similar
+            const monthNames: Record<string, string> = {
+              'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
+              'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
+              'set': '09', 'out': '10', 'nov': '11', 'dez': '12',
+            };
+            const ptBrMatch = String(balanceMonth).toLowerCase().match(/([a-z]{3})\.?\s*(\d{4})/);
+            if (ptBrMatch && monthNames[ptBrMatch[1]]) {
+              balanceYM = `${ptBrMatch[2]}-${monthNames[ptBrMatch[1]]}`;
+            }
+          }
+        }
+
+        // Buscar dados do mês no contrato
+        const monthData = balanceYM ? monthDataMap.get(balanceYM) : null;
+
+        if (!monthData) {
+          console.log(`[ContractsContext] ⏭️ Balanço ${balanceId} (${balanceYM}): mês não encontrado no contrato`);
+          continue;
+        }
+
+        // Preparar payload de atualização
+        const updatePayload: Record<string, unknown> = {};
+        
+        if (monthData.volumeSeasonalizedMWh !== null) {
+          updatePayload.contract = monthData.volumeSeasonalizedMWh;
+          updatePayload.contrato = monthData.volumeSeasonalizedMWh;
+        }
+        if (monthData.flexibilityMaxMWh !== null) {
+          updatePayload.maxDemand = monthData.flexibilityMaxMWh;
+          updatePayload.max_demand = monthData.flexibilityMaxMWh;
+          updatePayload.maximo = monthData.flexibilityMaxMWh;
+        }
+        if (monthData.flexibilityMinMWh !== null) {
+          updatePayload.minDemand = monthData.flexibilityMinMWh;
+          updatePayload.min_demand = monthData.flexibilityMinMWh;
+          updatePayload.minimo = monthData.flexibilityMinMWh;
+        }
+        if (monthData.price !== null) {
+          updatePayload.price = monthData.price;
+          updatePayload.preco = monthData.price;
+        }
+
+        // Só atualiza se tiver algo para enviar
+        if (Object.keys(updatePayload).length === 0) {
+          console.log(`[ContractsContext] ⏭️ Balanço ${balanceId}: nenhum dado para atualizar`);
+          continue;
+        }
+
+        console.log(`[ContractsContext] 📤 Atualizando balanço ${balanceId} (${balanceYM}):`, updatePayload);
+
+        await energyBalanceRequest(`/energy-balance/${balanceId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: JSON.stringify(updatePayload),
+        });
+
+        console.log(`[ContractsContext] ✅ Balanço ${balanceId} atualizado com sucesso`);
+      } catch (balanceError) {
+        console.warn(`[ContractsContext] ⚠️ Erro ao atualizar balanço ${balance.id}:`, balanceError);
+        // Continua para o próximo balanço
+      }
+    }
+
+    console.log('[ContractsContext] ✅ Sincronização de balanços concluída');
+  } catch (error) {
+    console.error('[ContractsContext] ❌ Erro ao sincronizar balanços:', error);
+    // Não propaga o erro para não afetar o salvamento do contrato
   }
 };
 
@@ -1909,6 +2208,10 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
       setError(null);
+      
+      // Sincronizar balanços energéticos após criar o contrato
+      void syncEnergyBalancesAfterContractSave(savedWithTimestamps);
+      
       return savedWithTimestamps;
     } catch (apiError) {
       console.error('[ContractsProvider] ❌ Falha ao criar contrato na API:', apiError);
@@ -1941,6 +2244,10 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
           prev.map((contract) => (contract.id === saved.id ? cloneContract(saved) : contract))
         );
         setError(null);
+        
+        // Sincronizar balanços energéticos após atualizar o contrato
+        void syncEnergyBalancesAfterContractSave(saved);
+        
         return saved;
       } catch (apiError) {
         console.error('[ContractsProvider] Falha ao atualizar contrato na API.', apiError);
@@ -1985,8 +2292,24 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
 
   const getContractById = React.useCallback(
     (id: string) => {
-      const found = contracts.find((contract) => contract.id === id || contract.codigo === id);
+      console.log('[ContractsContext] 🔍 getContractById chamado com id:', id);
+      console.log('[ContractsContext] 🔍 Tipo do id:', typeof id);
+      console.log('[ContractsContext] 🔍 Total de contratos:', contracts.length);
+      
+      const found = contracts.find((contract) => {
+        const idMatch = contract.id === id || String(contract.id) === String(id);
+        const codigoMatch = contract.codigo === id || String(contract.codigo) === String(id);
+        return idMatch || codigoMatch;
+      });
+      
       if (found) {
+        console.log('[ContractsContext] ✅ Contrato encontrado:', found.id, found.codigo, found.cliente);
+      } else {
+        console.log('[ContractsContext] ❌ Contrato NÃO encontrado para id:', id);
+        // Lista os primeiros 5 contratos para debug
+        console.log('[ContractsContext] 📋 Primeiros 5 contratos:', 
+          contracts.slice(0, 5).map(c => ({ id: c.id, codigo: c.codigo, cliente: c.cliente }))
+        );
       }
       return found;
     },

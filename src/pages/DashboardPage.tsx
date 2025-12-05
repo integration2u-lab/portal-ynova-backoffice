@@ -1,5 +1,5 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Activity, BarChart3, AlertTriangle, FileWarning, Receipt, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
@@ -58,7 +58,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Falha ao carregar overview');
       return res.json();
     },
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const contratosQ = useQuery<{ contratos: any[]; paginacao: any }>({
@@ -69,7 +69,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Falha ao carregar contratos');
       return res.json();
     },
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const topOppQ = useQuery<{ contratos: any[]; paginacao: any }>({
@@ -80,7 +80,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Falha ao carregar top oportunidades');
       return res.json();
     },
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const inteligenciaQ = useQuery<Inteligencia>({
@@ -90,7 +90,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Falha ao carregar inteligência');
       return res.json();
     },
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const conformQ = useQuery<ConformidadesDash>({
@@ -100,7 +100,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Falha ao carregar conformidades');
       return res.json();
     },
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   const loading = overviewQ.isLoading || contratosQ.isLoading || inteligenciaQ.isLoading || conformQ.isLoading;
@@ -205,15 +205,15 @@ export default function DashboardPage() {
             <div className="text-sm font-medium mb-2">Distribuição de Conformidade</div>
             {loading ? (
               <div className="h-60 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
-            ) : overviewQ.data?.distribuicaoConformidade ? (
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="h-52 sm:h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={[
-                      { name: 'Subutilizado', value: overviewQ.data.distribuicaoConformidade.Subutilizado ?? 0 },
-                      { name: 'Conforme', value: overviewQ.data.distribuicaoConformidade.Conforme ?? 0 },
-                      { name: 'Excedente', value: overviewQ.data.distribuicaoConformidade.Excedente ?? 0 },
-                      { name: 'Indefinido', value: overviewQ.data.distribuicaoConformidade.Indefinido ?? 0 },
+                      { name: 'Subutilizado', value: overviewQ.data!.distribuicaoConformidade.Subutilizado },
+                      { name: 'Conforme', value: overviewQ.data!.distribuicaoConformidade.Conforme },
+                      { name: 'Excedente', value: overviewQ.data!.distribuicaoConformidade.Excedente },
+                      { name: 'Indefinido', value: overviewQ.data!.distribuicaoConformidade.Indefinido },
                     ]} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
@@ -226,10 +226,10 @@ export default function DashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                       <Pie dataKey="value" labelLine={false} label={false} data={[
-                        { name: 'Subutilizado', value: overviewQ.data.distribuicaoConformidade.Subutilizado ?? 0 },
-                        { name: 'Conforme', value: overviewQ.data.distribuicaoConformidade.Conforme ?? 0 },
-                        { name: 'Excedente', value: overviewQ.data.distribuicaoConformidade.Excedente ?? 0 },
-                        { name: 'Indefinido', value: overviewQ.data.distribuicaoConformidade.Indefinido ?? 0 },
+                        { name: 'Subutilizado', value: overviewQ.data!.distribuicaoConformidade.Subutilizado },
+                        { name: 'Conforme', value: overviewQ.data!.distribuicaoConformidade.Conforme },
+                        { name: 'Excedente', value: overviewQ.data!.distribuicaoConformidade.Excedente },
+                        { name: 'Indefinido', value: overviewQ.data!.distribuicaoConformidade.Indefinido },
                       ]} outerRadius={70} innerRadius={32}>
                         {['#60a5fa','#22c55e','#f97316','#9ca3af'].map((c, i) => (
                           <Cell key={i} fill={c} />
@@ -240,8 +240,6 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                 </div>
               </div>
-            ) : (
-              <div className="text-gray-500 text-sm">Sem dados de conformidade disponíveis.</div>
             )}
           </div>
         </div>
@@ -311,7 +309,7 @@ export default function DashboardPage() {
               <div className="h-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded" />
             ) : inteligenciaQ.isError ? (
               <div className="text-red-600" aria-live="assertive">Falha ao carregar inteligência.</div>
-            ) : inteligenciaQ.data ? (
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {([
                   { key: 'demanda', label: 'Demanda' },
@@ -319,33 +317,22 @@ export default function DashboardPage() {
                   { key: 'energia_reativa', label: 'Energia Reativa' },
                   { key: 'contrato', label: 'Contrato' },
                 ] as const).map(({ key, label }) => {
-                  const data = inteligenciaQ.data?.[key];
-                  if (!data || typeof data !== 'object') {
-                    return (
-                      <div key={key} className="border rounded p-3 bg-white dark:bg-[#0f1317]">
-                        <div className="text-sm font-medium mb-2">{label}</div>
-                        <div className="text-xs text-gray-500">Sem dados disponíveis</div>
-                      </div>
-                    );
-                  }
-                  const verde = typeof data.verde === 'number' ? data.verde : 0;
-                  const amarelo = typeof data.amarelo === 'number' ? data.amarelo : 0;
-                  const vermelho = typeof data.vermelho === 'number' ? data.vermelho : 0;
-                  const total = verde + amarelo + vermelho || 1;
+                  const data = inteligenciaQ.data![key];
+                  const total = data.verde + data.amarelo + data.vermelho || 1;
                   const pct = (n: number) => Math.round((n / total) * 100);
                   return (
-                    <div key={key} className="border rounded p-3 bg-white dark:bg-[#0f1317]" role="status" aria-label={`${label}: verde ${verde}, amarelo ${amarelo}, vermelho ${vermelho}`}>
+                    <div key={key} className="border rounded p-3 bg-white dark:bg-[#0f1317]" role="status" aria-label={`${label}: verde ${data.verde}, amarelo ${data.amarelo}, vermelho ${data.vermelho}`}>
                       <div className="text-sm font-medium mb-2">{label}</div>
                       <div className="mb-2 text-xs text-gray-600 dark:text-gray-300 flex items-center gap-3">
-                        <span title="Conforme" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /> {verde}</span>
-                        <span title="Atenção" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-yellow-400" /> {amarelo}</span>
-                        <span title="Crítico" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" /> {vermelho}</span>
+                        <span title="Conforme" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /> {data.verde}</span>
+                        <span title="Atenção" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-yellow-400" /> {data.amarelo}</span>
+                        <span title="Crítico" className="inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" /> {data.vermelho}</span>
                       </div>
                       {/* mini barra empilhada */}
                       <div className="h-2 w-full rounded bg-gray-100 dark:bg-gray-800 overflow-hidden" aria-hidden="true">
-                        <div className="h-full bg-green-500" style={{ width: pct(verde) + '%' }} />
-                        <div className="h-full bg-yellow-400" style={{ width: pct(amarelo) + '%', display: 'inline-block' }} />
-                        <div className="h-full bg-red-500" style={{ width: pct(vermelho) + '%', display: 'inline-block' }} />
+                        <div className="h-full bg-green-500" style={{ width: pct(data.verde) + '%' }} />
+                        <div className="h-full bg-yellow-400" style={{ width: pct(data.amarelo) + '%', display: 'inline-block' }} />
+                        <div className="h-full bg-red-500" style={{ width: pct(data.vermelho) + '%', display: 'inline-block' }} />
                       </div>
                       <div className="mt-3">
                         <a className="text-yn-orange text-sm hover:underline" href={`/inteligencia?mes=${mes}&tipo=${key}`}>ver detalhes</a>
@@ -354,8 +341,6 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
-            ) : (
-              <div className="text-gray-500 text-sm">Sem dados de inteligência disponíveis.</div>
             )}
           </div>
         </div>
