@@ -1,6 +1,6 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check, X, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { getById, energyBalanceRequest } from '../../services/energyBalanceApi';
 import {
@@ -15,6 +15,9 @@ import {
   type DisplayEnergyBalanceRow,
 } from '../../utils/energyBalancePayload';
 import EmailDispatchApprovalCard from '../../components/balancos/EmailDispatchApprovalCard';
+import VolumeContratadoModal from '../../components/balancos/VolumeContratadoModal';
+import { useContracts } from '../contratos/ContractsContext';
+import { parseContractPricePeriods } from '../../utils/contractPricing';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -97,7 +100,7 @@ type EditableMonthColumn = {
 const booleanSelectOptions: SelectOption[] = [
   { label: 'Selecione', value: '' },
   { label: 'Sim', value: 'Sim' },
-  { label: 'N�o', value: 'N�o' },
+  { label: 'Não', value: 'Não' },
 ];
 
 const supplierSelectOptions: SelectOption[] = [
@@ -260,6 +263,11 @@ const prepareEditableValue = (field: keyof EmailRow, value: string | undefined):
   const sanitized = sanitizeDisplayValue(value);
   if (!sanitized) return '';
 
+  // Email deve ser preservado exatamente como está, sem processamento
+  if (field === 'email') {
+    return sanitized;
+  }
+
   if (['preco', 'net', 'faturar', 'proinfa', 'reajustado'].includes(field)) {
     return sanitized.replace(/R\$\s*/gi, '').trim();
   }
@@ -286,7 +294,21 @@ const getRawValueDirect = (
       if (typeof value === 'string' && value === '') {
         continue;
       }
-      // Retornar valor exatamente como está no banco (apenas converter para string)
+      
+      // Se for array (pode acontecer com emails), juntar os elementos
+      if (Array.isArray(value)) {
+        return value.filter(v => v != null).map(v => String(v)).join('; ');
+      }
+      
+      // Preservar valor exato - se for número, usar toString() para preservar todas as casas decimais
+      if (typeof value === 'number') {
+        // Converter para string preservando todas as casas decimais, depois converter ponto para vírgula
+        const str = value.toString();
+        return str.replace('.', ',');
+      }
+      
+      // Se for string, preservar como está SEM alterações
+      // IMPORTANTE: NÃO converter ponto para vírgula em emails ou outras strings que precisam do ponto
       return String(value);
     }
   }
@@ -319,7 +341,15 @@ const createEditableRow = (
   const maximo = getRawValueDirect(rawMonth, ['maxDemand', 'max_demand', 'maximo', 'max']);
   const faturar = getRawValueDirect(rawMonth, ['billable', 'faturar', 'bill']);
   const cp = getRawValueDirect(rawMonth, ['cpCode', 'cp_code', 'contaParticipacao']);
-  const email = getRawValueDirect(rawMonth, ['email', 'emails', 'destinatario']);
+  // Email: processar especialmente para garantir que nunca seja separado incorretamente
+  const emailRaw = rawMonth 
+    ? (rawMonth['email'] ?? rawMonth['emails'] ?? rawMonth['destinatario'] ?? '')
+    : '';
+  const email = emailRaw 
+    ? (Array.isArray(emailRaw) 
+        ? emailRaw.filter(v => v != null).map(v => String(v).trim()).join('; ') 
+        : String(emailRaw).trim())
+    : '';
   const sentOk = rawMonth ? (rawMonth['sentOk'] ?? rawMonth['sent_ok'] ?? '') : '';
   const envioOk = sentOk !== '' ? String(sentOk) : '';
   const disparo = getRawValueDirect(rawMonth, ['sendDate', 'send_date', 'disparo', 'sentAt']);
@@ -392,23 +422,37 @@ const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
     return <div className="mt-3 text-xl font-bold text-gray-900">-</div>;
   }
 
-  // Separa os emails por ponto e vírgula ou vírgula, remove espaços e filtra vazios
-  const emailList = emails
-    .split(/[;,]/)
-    .map((email) => email.trim())
-    .filter((email) => email.length > 0);
+  // Função para validar se uma string é um email válido (deve ter @ e pelo menos um ponto após @)
+  const isValidEmail = (email: string): boolean => {
+    const trimmed = email.trim();
+    if (!trimmed || trimmed.length < 5) return false; // Mínimo: a@b.c
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(trimmed);
+  };
 
-  // Se não houver emails válidos após a separação
-  if (emailList.length === 0) {
-    return <div className="mt-3 text-xl font-bold text-gray-900">-</div>;
+  // Se o email já é válido como está, não separa - exibe diretamente
+  if (isValidEmail(emails)) {
+    return <div className="mt-3 text-xl font-bold text-gray-900">{emails}</div>;
   }
 
-  // Se houver apenas um email, exibe normalmente
+  // Apenas se NÃO for um email válido, tenta separar por ; ou , para múltiplos emails
+  // IMPORTANTE: NUNCA separar por ponto (.) pois isso quebraria emails válidos
+  const emailList = emails
+    .split(/[;]/) // Separa APENAS por ponto e vírgula
+    .map((email) => email.trim())
+    .filter((email) => email.length > 0 && isValidEmail(email)); // Filtra apenas emails válidos
+
+  // Se após separar não encontrou emails válidos, exibe o valor original
+  if (emailList.length === 0) {
+    return <div className="mt-3 text-xl font-bold text-gray-900">{emails}</div>;
+  }
+
+  // Se houver apenas um email válido após separação, exibe normalmente
   if (emailList.length === 1) {
     return <div className="mt-3 text-xl font-bold text-gray-900">{emailList[0]}</div>;
   }
 
-  // Se houver múltiplos emails, exibe em chips
+  // Se houver múltiplos emails válidos, exibe em chips
   return (
     <div className="mt-3 space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -417,7 +461,7 @@ const EmailDisplay: React.FC<EmailDisplayProps> = ({ emails }) => {
             key={`email-${index}`}
             className="inline-flex items-center rounded-lg border border-yn-orange/30 bg-yn-orange/5 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-yn-orange/50 hover:bg-yn-orange/10"
           >
-            <span className="mr-2 text-yn-orange">✉</span>
+            <Mail className="mr-2 h-4 w-4 text-yn-orange" />
             {email}
           </div>
         ))}
@@ -454,7 +498,9 @@ const mergeMonthWithEmailRow = (
 
 export default function EnergyBalanceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { getContractById, contracts, isLoading: contractsLoading, updateContract } = useContracts();
   const [detail, setDetail] = React.useState<EnergyBalanceDetail | null>(null);
+  
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const detailControllerRef = React.useRef<AbortController | null>(null);
@@ -478,8 +524,16 @@ export default function EnergyBalanceDetailPage() {
   const [fieldInputValue, setFieldInputValue] = React.useState('');
   const fieldInputRef = React.useRef<any>(null); // Ref genérico para múltiplos tipos de input
   
+  // Estados para edição de vencimento (igual ao contrato)
+  const [isEditingVencimento, setIsEditingVencimento] = React.useState(false);
+  const [nfVencimentoTipoValue, setNfVencimentoTipoValue] = React.useState<'dias_uteis' | 'dias_corridos' | ''>('');
+  const [nfVencimentoDiasValue, setNfVencimentoDiasValue] = React.useState('');
+  
   // Estado para controlar qual mês está selecionado
   const [selectedMonthId, setSelectedMonthId] = React.useState<string | null>(null);
+  
+  // Estado para controlar o modal de Volume Contratado
+  const [isVolumeModalOpen, setIsVolumeModalOpen] = React.useState(false);
 
   React.useEffect(() => () => {
     proinfaInputRefs.current = {};
@@ -522,22 +576,6 @@ export default function EnergyBalanceDetailPage() {
       const sendDate = raw['sendDate'] ?? raw['send_date'] ?? raw['disparo'];
       const billsDate = raw['billsDate'] ?? raw['bills_date'] ?? raw['dataVencimento'];
       
-      console.log('[EnergyBalanceDetailPage] 🎯 DADOS DOS CARDS (do rawMonthMap):', {
-        consumo: consumptionKwh,
-        perdas3: loss,
-        requisito: requirement,
-        net: net,
-        medicao: statusMeasurement,
-        minimo: minDemand,
-        maximo: maxDemand,
-        faturar: billable,
-        email: email,
-        envioOk: sentOk,
-        disparo: sendDate,
-        dataVencimentoBoleto: billsDate,
-        // Dados completos do rawMonthMap para referência
-        rawMonthMap: monthMapData,
-      });
     }
   }, [detail, rawMonthMap, rawDetail]);
 
@@ -604,26 +642,17 @@ export default function EnergyBalanceDetailPage() {
       setRawDetail(rawRecord);
 
       const normalized = normalizeEnergyBalanceDetail(payload);
-      console.log('[EnergyBalanceDetailPage] 📦 Dados normalizados:', normalized);
       
       const monthMap = extractRawMonthMapping(normalized, rawRecord);
-      console.log('[EnergyBalanceDetailPage] 🗺️ Mapeamento de meses:', monthMap);
-      
       setRawMonthMap(monthMap);
       setDetail(normalized);
 
       const initialRows = normalized.months.reduce<Record<string, EmailRow>>((acc, month) => {
         const rawMonth = monthMap[month.id] ?? rawRecord ?? null;
         const editableRow = createEditableRow(normalized, month, rawMonth);
-        console.log('[EnergyBalanceDetailPage] 📝 Row editável criada:', {
-          monthId: month.id,
-          rawMonth,
-          editableRow,
-        });
         acc[month.id] = editableRow;
         return acc;
       }, {});
-      console.log('[EnergyBalanceDetailPage] ✅ Todas as rows editáveis:', initialRows);
       setEditableRows(initialRows);
     } catch (fetchError) {
       if (controller.signal.aborted) {
@@ -920,7 +949,7 @@ export default function EnergyBalanceDetailPage() {
             if (Number.isNaN(parsed.getTime())) return null;
             return parsed.toISOString().split('T')[0];
           } catch (error) {
-            console.warn('[EnergyBalanceDetail] ⚠️ Não foi possível converter data de vencimento', {
+            console.warn('[EnergyBalanceDetail] âš ï¸ NÃ£o foi possÃ­vel converter data de vencimento', {
               fieldInputValue,
               error,
             });
@@ -928,11 +957,6 @@ export default function EnergyBalanceDetailPage() {
           }
         })();
 
-        console.log('[EnergyBalanceDetail] 📝 Preparando payload para data de vencimento', {
-          rowId: normalizedId,
-          input: fieldInputValue,
-          isoDate,
-        });
 
         requestPayload = {
           billsDate: isoDate,
@@ -945,12 +969,6 @@ export default function EnergyBalanceDetailPage() {
         };
       }
 
-      if (field === 'dataVencimentoBoleto') {
-        console.log('[EnergyBalanceDetail] 📤 Payload enviado para atualização do vencimento', {
-          endpoint: `/energy-balance/${encodeURIComponent(String(normalizedId))}`,
-          body: requestPayload,
-        });
-      }
 
       const response = await energyBalanceRequest(`/energy-balance/${encodeURIComponent(String(normalizedId))}`, {
         method: 'PUT',
@@ -1028,7 +1046,7 @@ export default function EnergyBalanceDetailPage() {
       // Normalizar o valor: remover espaços e símbolos, substituir vírgula por ponto
       const normalized = fieldInputValue.trim().replace(/[R$\s]/g, '').replace(',', '.');
       
-      console.log('[handleSaveProinfaTotal] 🔍 Processando PROINFA:', {
+      console.log('[handleSaveProinfaTotal] ðŸ” Processando PROINFA:', {
         originalInput: fieldInputValue,
         normalized,
       });
@@ -1046,7 +1064,7 @@ export default function EnergyBalanceDetailPage() {
             proinfaValue = numValue.toString();
           }
           
-          console.log('[handleSaveProinfaTotal] ✅ PROINFA convertido:', {
+          console.log('[handleSaveProinfaTotal] âœ… PROINFA convertido:', {
             numValue,
             decimalPlaces,
             finalValue: proinfaValue,
@@ -1070,7 +1088,7 @@ export default function EnergyBalanceDetailPage() {
         proinfaContribution: proinfaValue,
       };
 
-      console.log('[handleSaveProinfaTotal] 🔍 Salvando PROINFA:', {
+      console.log('[handleSaveProinfaTotal] ðŸ” Salvando PROINFA:', {
         inputValue: fieldInputValue,
         normalized,
         finalValue: proinfaValue,
@@ -1119,6 +1137,430 @@ export default function EnergyBalanceDetailPage() {
     },
     [handleSaveField, handleSaveProinfaTotal, handleCancelEditingField],
   );
+
+  // Buscar o contrato para obter informações de vencimento da NF e volumes
+  // IMPORTANTE: Estes hooks devem estar ANTES dos returns condicionais
+  // Inclui 'contracts' como dependência para recalcular quando os contratos forem carregados
+  const contract = React.useMemo(() => {
+    if (!detail?.header.contractId) {
+      return null;
+    }
+    if (!contracts || contracts.length === 0) {
+      return null;
+    }
+    
+    const found = getContractById(detail.header.contractId);
+    
+    if (found) {
+      console.log('[VOLUME DEBUG] âœ… Contrato encontrado:', found.codigo || found.id);
+    } else {
+      console.log('[VOLUME DEBUG] âŒ Contrato NÃƒO encontrado (ID:', detail.header.contractId, ')');
+    }
+    
+    return found;
+  }, [detail?.header.contractId, getContractById, contracts]);
+  
+  // Formatar o vencimento da NF do contrato
+  const nfVencimentoDisplay = React.useMemo(() => {
+    if (!contract?.nfVencimentoTipo || !contract?.nfVencimentoDias) return null;
+    return contract.nfVencimentoTipo === 'dias_uteis'
+      ? `${contract.nfVencimentoDias}º dia útil`
+      : `${contract.nfVencimentoDias}º dia`;
+  }, [contract]);
+  
+  // Handlers para edição de vencimento (igual ao contrato) - DEPOIS da definição de contract
+  const handleStartEditingVencimento = React.useCallback(() => {
+    if (!detail || !selectedMonthId) return;
+    
+    const primaryMonth = detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0];
+    if (!primaryMonth) return;
+    
+    // Puxa direto do contrato vinculado
+    const tipoFinal = contract?.nfVencimentoTipo || '';
+    const diasFinal = contract?.nfVencimentoDias?.toString() || '';
+    
+    setNfVencimentoTipoValue(tipoFinal as 'dias_uteis' | 'dias_corridos' | '');
+    setNfVencimentoDiasValue(diasFinal);
+    setIsEditingVencimento(true);
+  }, [detail, selectedMonthId, contract]);
+
+  const handleCancelEditingVencimento = React.useCallback(() => {
+    setIsEditingVencimento(false);
+    setNfVencimentoTipoValue('');
+    setNfVencimentoDiasValue('');
+  }, []);
+
+  const handleSaveVencimento = React.useCallback(async () => {
+    if (!detail || !selectedMonthId || savingRowId) return;
+
+    const primaryMonth = detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0];
+    if (!primaryMonth) return;
+    
+    // Verificar se há contrato vinculado
+    if (!contract || !contract.id) {
+      toast.error('Não há contrato vinculado para atualizar o vencimento.');
+      return;
+    }
+
+    // Validação: se informou dias, deve informar tipo
+    if (nfVencimentoDiasValue && !nfVencimentoTipoValue) {
+      toast.error('Selecione o tipo de vencimento quando informar o número de dias');
+      return;
+    }
+
+    // Validação: dias entre 1 e 31
+    if (nfVencimentoDiasValue) {
+      const diasNum = Number(nfVencimentoDiasValue);
+      if (isNaN(diasNum) || diasNum < 1 || diasNum > 31) {
+        toast.error('O número de dias deve estar entre 1 e 31');
+        return;
+      }
+    }
+
+    setSavingRowId(primaryMonth.id);
+
+    try {
+      // Salvar no contrato vinculado
+      await updateContract(contract.id, (current) => ({
+        ...current,
+        nfVencimentoTipo: nfVencimentoTipoValue || undefined,
+        nfVencimentoDias: nfVencimentoDiasValue ? Number(nfVencimentoDiasValue) : undefined,
+      }));
+
+      setIsEditingVencimento(false);
+      toast.success('Vencimento atualizado no contrato com sucesso!');
+    } catch (error) {
+      console.error('[EnergyBalanceDetail] Erro ao salvar vencimento no contrato:', error);
+      toast.error('Não foi possível salvar o vencimento no contrato. Tente novamente.');
+    } finally {
+      setSavingRowId(null);
+    }
+  }, [detail, selectedMonthId, contract, nfVencimentoTipoValue, nfVencimentoDiasValue, updateContract, savingRowId]);
+  
+  // Obter o mês selecionado (ou o primeiro se nenhum estiver selecionado)
+  // Movido para antes dos returns condicionais para poder ser usado nos hooks
+  const selectedMonth = detail?.months
+    ? (selectedMonthId
+        ? detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0] ?? null
+        : detail.months[0] ?? null)
+    : null;
+  const primaryMonth = selectedMonth;
+  const primaryMonthRaw = primaryMonth && detail
+    ? rawMonthMap[primaryMonth.id] ?? rawDetail ?? null
+    : rawDetail ?? null;
+  const primaryMonthRow = primaryMonth && detail
+    ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)
+    : null;
+  
+  // Obter vencimento atual do contrato vinculado
+  const currentVencimento = React.useMemo(() => {
+    // Puxa direto do contrato
+    if (contract?.nfVencimentoTipo && contract?.nfVencimentoDias) {
+      return {
+        tipo: contract.nfVencimentoTipo,
+        dias: contract.nfVencimentoDias,
+        display: contract.nfVencimentoTipo === 'dias_uteis'
+          ? `${contract.nfVencimentoDias}º dia útil`
+          : `${contract.nfVencimentoDias}º dia`,
+      };
+    }
+    
+    return null;
+  }, [contract]);
+  
+  // Extrair o mês do balanço no formato YYYY-MM para buscar no contrato
+  // Usa detail.header.titleSuffix que contém o mês do balanço (ex: "dez. 2025")
+  const balanceMonthYM = React.useMemo(() => {
+    // Tenta múltiplas fontes para o mês
+    const titleSuffix = detail?.header?.titleSuffix;
+    const primaryMonthMes = primaryMonth?.mes;
+    const primaryMonthRawMes = primaryMonthRaw && typeof primaryMonthRaw === 'object' 
+      ? (primaryMonthRaw['mes'] || primaryMonthRaw['month'] || primaryMonthRaw['competencia'] || primaryMonthRaw['referenceBase'] || primaryMonthRaw['reference_base'])
+      : null;
+    
+    // Prioridade: titleSuffix > primaryMonth.mes > primaryMonthRaw > firstMonth.mes
+    let mesSource = titleSuffix || primaryMonthMes || (typeof primaryMonthRawMes === 'string' ? primaryMonthRawMes : null);
+    
+    // Fallback: tenta pegar do primeiro mês do array
+    if (!mesSource && detail?.months && detail.months.length > 0) {
+      mesSource = detail.months[0].mes || null;
+    }
+    
+    if (!mesSource) {
+      console.log('[VOLUME DEBUG] âŒ MÃªs nÃ£o identificado');
+      return null;
+    }
+    
+    const mes = String(mesSource).trim();
+    
+    // Tenta extrair YYYY-MM se já estiver nesse formato
+    const isoMatch = mes.match(/(\d{4})-(\d{2})/);
+    if (isoMatch) {
+      const result = `${isoMatch[1]}-${isoMatch[2]}`;
+      console.log('[VOLUME DEBUG] ✅ Mês parseado:', result);
+      return result;
+    }
+    
+    // Mapeamento completo de nomes de meses em português
+    const monthNames: Record<string, string> = {
+      'jan': '01', 'janeiro': '01',
+      'fev': '02', 'fevereiro': '02',
+      'mar': '03', 'março': '03', 'marco': '03',
+      'abr': '04', 'abril': '04',
+      'mai': '05', 'maio': '05',
+      'jun': '06', 'junho': '06',
+      'jul': '07', 'julho': '07',
+      'ago': '08', 'agosto': '08',
+      'set': '09', 'setembro': '09',
+      'out': '10', 'outubro': '10',
+      'nov': '11', 'novembro': '11',
+      'dez': '12', 'dezembro': '12',
+    };
+    
+    // Tenta parsear formato "jan. 2025", "janeiro 2025", "dez. 2025", "12/2025", etc.
+    const mesLower = mes.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Formato: "dez. 2025", "dez 2025", "dezembro 2025", "jun de 2025"
+    const ptBrMatch = mesLower.match(/^([a-z]+)\.?\s*(?:de\s*)?(\d{4})/);
+    if (ptBrMatch) {
+      const monthKey = ptBrMatch[1].substring(0, 3);
+      const monthNum = monthNames[monthKey] || monthNames[ptBrMatch[1]];
+      if (monthNum) {
+        const result = `${ptBrMatch[2]}-${monthNum}`;
+        console.log('[VOLUME DEBUG] ✅ Mês parseado:', result, '(de:', mesSource, ')');
+        return result;
+      }
+    }
+    
+    // Formato: "12/2025" ou "12-2025"
+    const numericMatch = mes.match(/(\d{1,2})[\/\-](\d{4})/);
+    if (numericMatch) {
+      const monthNum = numericMatch[1].padStart(2, '0');
+      const result = `${numericMatch[2]}-${monthNum}`;
+      console.log('[VOLUME DEBUG] ✅ Mês parseado:', result);
+      return result;
+    }
+    
+    // Formato: "2025/12" ou similar
+    const reverseMatch = mes.match(/(\d{4})[\/\-](\d{1,2})/);
+    if (reverseMatch) {
+      const monthNum = reverseMatch[2].padStart(2, '0');
+      const result = `${reverseMatch[1]}-${monthNum}`;
+      console.log('[VOLUME DEBUG] ✅ Mês parseado:', result);
+      return result;
+    }
+    
+    console.log('[VOLUME DEBUG] âŒ Formato de mÃªs nÃ£o reconhecido:', mes);
+    return null;
+  }, [detail?.header?.titleSuffix, primaryMonth?.mes, primaryMonthRaw, detail?.months]);
+  
+  // Tipo para o resultado da busca de volume
+  type VolumeSearchResult = {
+    value: number | null;
+    status: 'found' | 'contract_not_found' | 'month_not_configured' | 'no_price_periods' | 'loading';
+    message: string;
+    contractCode?: string; // Número do contrato quando encontrado
+  };
+
+  // Extrair volume sazonal do contrato para o mês do balanço
+  const volumeSeasonalResult = React.useMemo((): VolumeSearchResult => {
+    // Ainda carregando contratos
+    if (contractsLoading) {
+      return { value: null, status: 'loading', message: 'Carregando...' };
+    }
+    
+    // Contrato não encontrado no sistema
+    if (!contract) {
+      return { value: null, status: 'contract_not_found', message: 'Contrato não encontrado' };
+    }
+    
+    const contractCode = contract.codigo || contract.id || 'N/A';
+    
+    // Mês do balanço não identificado
+    if (!balanceMonthYM) {
+      console.log('[VOLUME DEBUG] ??? Mês não identificado. Fontes:', {
+        titleSuffix: detail?.header?.titleSuffix,
+        primaryMonthMes: primaryMonth?.mes,
+        primaryMonthExists: !!primaryMonth,
+        detailMonthsLength: detail?.months?.length ?? 0
+      });
+      return { 
+        value: null, 
+        status: 'month_not_configured', 
+        message: 'Mês não identificado',
+        contractCode 
+      };
+    }
+    
+    console.log('[VOLUME DEBUG] OK. Mes identificado:', balanceMonthYM);
+    
+    const normalizeMonth = (ym: string | null | undefined): string | null => {
+      if (!ym) return null;
+      const trimmed = String(ym).trim();
+      const isoMatch = trimmed.match(/(\d{4})-(\d{1,2})/);
+      if (isoMatch) {
+        const year = isoMatch[1];
+        const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
+        return `${year}-${month}`;
+      }
+      if (/^\d{4}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+      }
+      return trimmed;
+    };
+    
+    // Parse seguro para valores que podem estar duplamente serializados
+    const deepParseJson = (value: unknown): unknown => {
+      let current = value;
+      let attempts = 0;
+      while (typeof current === 'string' && attempts < 3) {
+        try {
+          current = JSON.parse(current);
+        } catch {
+          break;
+        }
+        attempts += 1;
+      }
+      return current;
+    };
+    
+    const pricePeriodsSources: Array<{ source: string; value: unknown }> = [
+      { source: 'contract.pricePeriods', value: (contract as { pricePeriods?: unknown }).pricePeriods },
+      { source: 'contract.periodPrice.price_periods', value: contract.periodPrice?.price_periods },
+      { source: 'contract.price_periods', value: (contract as { price_periods?: unknown }).price_periods },
+      { source: 'contract.period_price.price_periods', value: (contract as { period_price?: { price_periods?: unknown } }).period_price?.price_periods },
+    ];
+    
+    let parsedPricePeriods: ReturnType<typeof parseContractPricePeriods> | null = null;
+    for (const candidate of pricePeriodsSources) {
+      if (candidate.value === null || candidate.value === undefined) continue;
+      
+      const parsedCandidate = deepParseJson(candidate.value);
+      const nestedParsed = parsedCandidate && typeof parsedCandidate === 'object' && !Array.isArray(parsedCandidate)
+        ? deepParseJson((parsedCandidate as { price_periods?: unknown }).price_periods)
+        : null;
+      
+      const parsedFromCandidate = parseContractPricePeriods(parsedCandidate);
+      const parsedFromNested = parseContractPricePeriods(nestedParsed ?? undefined);
+      parsedPricePeriods = parsedFromCandidate || parsedFromNested;
+      
+      console.log('[VOLUME DEBUG] OK Fonte de price_periods analisada:', {
+        source: candidate.source,
+        rawType: typeof candidate.value,
+        parsedType: parsedCandidate && typeof parsedCandidate,
+        hasNestedPricePeriods: Boolean(nestedParsed),
+        hasPeriods: Boolean(parsedPricePeriods?.periods?.length),
+        sampleMonth: parsedPricePeriods?.periods?.[0]?.months?.[0],
+      });
+      
+      if (parsedPricePeriods?.periods?.length) {
+        break;
+      }
+    }
+    
+    if (!parsedPricePeriods || !parsedPricePeriods.periods?.length) {
+      console.log('[VOLUME DEBUG] ??? Contrato sem price_periods utilizáveis', {
+        contractCode,
+        sourcesChecked: pricePeriodsSources.map((s) => s.source),
+      });
+      return { 
+        value: null, 
+        status: 'no_price_periods', 
+        message: 'Volumes não configurados no contrato',
+        contractCode 
+      };
+    }
+    
+    const allMonthsInJson: string[] = [];
+    parsedPricePeriods.periods.forEach((period) => {
+      period.months?.forEach((month) => {
+        const normalized = normalizeMonth((month as { ym?: string; month?: string }).ym ?? (month as { month?: string }).month);
+        if (normalized && !allMonthsInJson.includes(normalized)) {
+          allMonthsInJson.push(normalized);
+        }
+      });
+    });
+    
+    const normalizedBalanceMonth = normalizeMonth(balanceMonthYM);
+    
+    if (!normalizedBalanceMonth) {
+      return { 
+        value: null, 
+        status: 'month_not_configured', 
+        message: 'Formato de mês inválido',
+        contractCode 
+      };
+    }
+    
+    console.log('[VOLUME DEBUG] OK Buscando mes:', normalizedBalanceMonth, '| Meses disponiveis:', allMonthsInJson.sort().join(', '));
+    
+    let foundMonth: { ym?: string; month?: string; volumeSeasonalizedMWh?: number | string; volumeMWh?: number | string; volume?: number | string } | null = null;
+    for (const period of parsedPricePeriods.periods) {
+      foundMonth = period.months?.find((m) => {
+        const normalized = normalizeMonth((m as { ym?: string; month?: string }).ym ?? (m as { month?: string }).month);
+        return normalized === normalizedBalanceMonth;
+      }) ?? null;
+      
+      if (foundMonth) break;
+    }
+    
+    if (foundMonth) {
+      const volumeCandidates = [
+        foundMonth.volumeSeasonalizedMWh,
+        (foundMonth as { volumeMWh?: number | string }).volumeMWh,
+        (foundMonth as { volume?: number | string }).volume,
+      ];
+      
+      const parsedVolume = volumeCandidates.reduce<number | null>((acc, candidate) => {
+        if (acc !== null) return acc;
+        if (candidate === null || candidate === undefined) return acc;
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+        if (typeof candidate === 'string') {
+          const numeric = Number.parseFloat(candidate.replace(/\./g, '').replace(',', '.'));
+          return Number.isFinite(numeric) ? numeric : acc;
+        }
+        return acc;
+      }, null);
+      
+      console.log('[VOLUME DEBUG] OK Mes encontrado no contrato:', {
+        month: foundMonth,
+        parsedVolume,
+      });
+      
+      if (parsedVolume !== null) {
+        return { 
+          value: parsedVolume, 
+          status: 'found', 
+          message: 'Vol. Sazonal do contrato',
+          contractCode 
+        };
+      }
+      
+      console.log('[VOLUME DEBUG] ??? Mes encontrado mas sem volume sazonal configurado');
+      return { 
+        value: null, 
+        status: 'month_not_configured', 
+        message: `Mês ${normalizedBalanceMonth} não possui volume sazonal`, 
+        contractCode 
+      };
+    }
+    
+    const sortedMonthsForRange = [...allMonthsInJson].sort();
+    const firstMonth = sortedMonthsForRange[0] || 'N/A';
+    const lastMonth = sortedMonthsForRange[sortedMonthsForRange.length - 1] || 'N/A';
+    
+    console.log('[VOLUME DEBUG] ??? Mês', normalizedBalanceMonth, 'não encontrado no contrato', contractCode, '(cobre:', firstMonth, 'até', lastMonth, ')');
+    
+    return { 
+      value: null, 
+      status: 'month_not_configured', 
+      message: `Mês ${normalizedBalanceMonth} não configurado (contrato: ${firstMonth} a ${lastMonth})`,
+      contractCode 
+    };
+  }, [contract, balanceMonthYM, contractsLoading, detail?.header?.contractId]);
+  
+  // Mantém compatibilidade com o código existente
+  const volumeSeasonalFromContract = volumeSeasonalResult.value;
 
   if (loading) {
     return (
@@ -1174,25 +1616,13 @@ export default function EnergyBalanceDetailPage() {
   }
 
   const contractLink = detail.header.contractId ? `/contratos/${detail.header.contractId}` : null;
-  
-  // Obter o mês selecionado (ou o primeiro se nenhum estiver selecionado)
-  const selectedMonth = selectedMonthId
-    ? detail.months.find(m => m.id === selectedMonthId) ?? detail.months[0] ?? null
-    : detail.months[0] ?? null;
-  const primaryMonth = selectedMonth;
-  const primaryMonthRaw = primaryMonth
-    ? rawMonthMap[primaryMonth.id] ?? rawDetail ?? null
-    : rawDetail ?? null;
-  const primaryMonthRow = primaryMonth
-    ? editableRows[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)
-    : null;
 
   const measurementStatusRaw = (detail.statusMeasurement ?? '').trim();
   const measurementStatusNormalized = measurementStatusRaw
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  const measurementStatus = measurementStatusRaw || 'Nao informado';
+  const measurementStatus = measurementStatusRaw || 'Não informado';
   const isMeasurementComplete = measurementStatusNormalized === 'completo';
   const measurementCardClasses = isMeasurementComplete
     ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-900/10'
@@ -1213,7 +1643,6 @@ export default function EnergyBalanceDetailPage() {
     ? deriveReajustedDisplayValue(primaryMonth, primaryMonthRaw)
     : 'Não informado';
 
-  console.log('[EnergyBalanceDetailPage] 💰 Preço reajustado exibido:', reajustedPriceDisplayValue);
 
   // Extrair consumo total diretamente do rawMonthMap (consumptionKwh do banco - SEM conversões)
   const getConsumptionKwhFromRaw = (raw: Record<string, unknown> | null | undefined): string => {
@@ -1223,13 +1652,6 @@ export default function EnergyBalanceDetailPage() {
   const consumoTotalBruto = primaryMonthRaw && typeof primaryMonthRaw === 'object'
     ? getConsumptionKwhFromRaw(primaryMonthRaw) || getConsumptionKwhFromRaw(rawDetail)
     : getConsumptionKwhFromRaw(rawDetail);
-  
-  console.log('[EnergyBalanceDetailPage] 🔍 Consumo total (bruto do banco):', {
-    consumoTotalBruto,
-    primaryMonthRaw: primaryMonthRaw ? Object.keys(primaryMonthRaw) : null,
-    rawDetail: rawDetail ? Object.keys(rawDetail) : null,
-  });
-
   // Extrair sentOk e formatar para exibição
   const getSentOkFromRaw = (raw: Record<string, unknown> | null | undefined): boolean | null => {
     if (!raw || typeof raw !== 'object') return null;
@@ -1278,7 +1700,7 @@ export default function EnergyBalanceDetailPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-600">CNPJ:</span>
                   <span className="text-base font-bold text-yn-orange">
-                    {detail.header.cnpj || 'Não informado'}
+                    {contract?.cnpj || detail.header.cnpj || 'Não informado'}
                   </span>
                 </div>
               </div>
@@ -1301,7 +1723,8 @@ export default function EnergyBalanceDetailPage() {
               to="/balancos"
               className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:border-gray-400 hover:shadow-md"
             >
-              ← Voltar
+              <ArrowLeft size={16} />
+            Voltar
             </Link>
           </div>
         </div>
@@ -1360,6 +1783,15 @@ export default function EnergyBalanceDetailPage() {
             </h2>
             <span className="rounded-full bg-yn-orange/10 px-3 py-1 text-xs font-semibold text-yn-orange">Editável</span>
           </div>
+          {/* Legenda para campos do contrato */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 rounded border-2 border-blue-300 bg-blue-100"></div>
+              <span className="text-sm font-semibold text-blue-800">
+                Campos destacados em azul são herdados do contrato vinculado e podem ser editados, sendo salvos diretamente no contrato.
+              </span>
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {/* Preço reajustado (R$) */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md">
@@ -1404,7 +1836,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1412,7 +1844,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1457,7 +1889,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1465,7 +1897,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1505,7 +1937,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1513,7 +1945,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1553,7 +1985,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1561,7 +1993,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1601,7 +2033,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1609,7 +2041,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1649,7 +2081,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1657,7 +2089,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1697,7 +2129,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1705,7 +2137,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1745,7 +2177,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1753,7 +2185,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1794,7 +2226,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1802,7 +2234,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1813,13 +2245,13 @@ export default function EnergyBalanceDetailPage() {
             </div>
 
             {/* Volume contratado */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md transition hover:shadow-lg">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-600">
+            <div className="rounded-xl border-2 border-blue-300 bg-blue-50 p-4 shadow-md transition hover:shadow-lg">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-blue-700">
                 <span>Volume contratado (MWh)</span>
-                {editingField !== 'contrato' && (
+                {detail.header.contractId && (
                   <button
                     type="button"
-                    onClick={() => handleStartEditingField('contrato', primaryMonthRow.contrato || '')}
+                    onClick={() => setIsVolumeModalOpen(true)}
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50"
                   >
@@ -1827,37 +2259,47 @@ export default function EnergyBalanceDetailPage() {
                   </button>
                 )}
               </div>
-              {editingField === 'contrato' ? (
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    ref={fieldInputRef}
-                    type="text"
-                    value={fieldInputValue}
-                    onChange={(e) => setFieldInputValue(e.target.value)}
-                    onKeyDown={(e) => handleKeyDownField(e, 'contrato')}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="flex-1 rounded-lg border-2 border-yn-orange bg-white px-3 py-2 text-base font-bold text-gray-900 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleSaveField('contrato')}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
-                  >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelEditingField}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
+              {/* Número do contrato quando encontrado */}
+              {volumeSeasonalResult.contractCode && (
+                <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  Contrato: {volumeSeasonalResult.contractCode}
                 </div>
-              ) : (
-                <div className="mt-3 text-xl font-bold text-gray-900">{primaryMonthRow.contrato || '-'}</div>
               )}
+              {/* Indicador do mês vigente */}
+              {(detail.header.titleSuffix || balanceMonthYM || primaryMonth?.mes) && (
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                  {detail.header.titleSuffix || (balanceMonthYM ? (() => {
+                    const [year, month] = balanceMonthYM.split('-').map(Number);
+                    const date = new Date(year, month - 1, 1);
+                    return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                  })() : primaryMonth?.mes)}
+                </div>
+              )}
+              <div className={`mt-2 text-xl font-bold ${
+                volumeSeasonalResult.status === 'found' 
+                  ? 'text-blue-900' 
+                  : volumeSeasonalResult.status === 'loading'
+                  ? 'text-blue-400'
+                  : 'text-amber-600'
+              }`}>
+                {volumeSeasonalResult.status === 'found'
+                  ? volumeSeasonalResult.value!.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : volumeSeasonalResult.status === 'loading'
+                  ? 'Carregando...'
+                  : volumeSeasonalResult.status === 'contract_not_found'
+                  ? 'Contrato não encontrado'
+                  : volumeSeasonalResult.status === 'month_not_configured'
+                  ? 'Mês não configurado'
+                  : 'Volumes não configurados'}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                {volumeSeasonalResult.message}
+              </div>
             </div>
 
             {/* Mínimo */}
@@ -1892,7 +2334,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1900,7 +2342,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1940,7 +2382,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1948,7 +2390,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -1988,7 +2430,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -1996,7 +2438,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -2036,7 +2478,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -2044,7 +2486,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -2084,7 +2526,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -2092,7 +2534,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -2137,7 +2579,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
                   >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
+                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                   <button
                     type="button"
@@ -2145,7 +2587,7 @@ export default function EnergyBalanceDetailPage() {
                     disabled={savingRowId === primaryMonth?.id}
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ✕
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
@@ -2153,51 +2595,87 @@ export default function EnergyBalanceDetailPage() {
               )}
             </div>
 
-            {/* Data Vencimento */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-md transition hover:shadow-lg">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-600">
-                <span>Data Vencimento</span>
-                {editingField !== 'dataVencimentoBoleto' && (
+            {/* Data Vencimento NF */}
+            <div className="rounded-xl border-2 border-blue-300 bg-blue-50 p-4 shadow-md transition hover:shadow-lg">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-blue-700">
+                <span>Data Vencimento NF</span>
+                {!isEditingVencimento && (
                   <button
                     type="button"
-                    onClick={() => handleStartEditingField('dataVencimentoBoleto', primaryMonthRow.dataVencimentoBoleto || '')}
-                    disabled={savingRowId === primaryMonth?.id}
+                    onClick={handleStartEditingVencimento}
+                    disabled={savingRowId === primaryMonth?.id || !primaryMonth}
                     className="rounded-lg border border-gray-300 bg-gray-50 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 hover:border-gray-400 disabled:opacity-50"
                   >
                     Editar
                   </button>
                 )}
               </div>
-              {editingField === 'dataVencimentoBoleto' ? (
-                <div className="mt-2 flex items-center gap-1">
-                  <input
-                    ref={fieldInputRef}
-                    type="datetime-local"
-                    value={fieldInputValue}
-                    onChange={(e) => setFieldInputValue(e.target.value)}
-                    onKeyDown={(e) => handleKeyDownField(e, 'dataVencimentoBoleto')}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="flex-1 rounded-lg border-2 border-yn-orange bg-white px-3 py-2 text-base font-bold text-gray-900 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleSaveField('dataVencimentoBoleto')}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
-                  >
-                    {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : '✓'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelEditingField}
-                    disabled={savingRowId === primaryMonth?.id}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    ✕
-                  </button>
+              {isEditingVencimento ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex gap-2">
+                    <select
+                      value={nfVencimentoTipoValue}
+                      onChange={(e) => setNfVencimentoTipoValue(e.target.value as 'dias_uteis' | 'dias_corridos' | '')}
+                      disabled={savingRowId === primaryMonth?.id}
+                      className="min-w-[140px] rounded-lg border-2 border-yn-orange bg-white px-3 py-2 text-base font-bold text-gray-900 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 disabled:opacity-50"
+                    >
+                      <option value="">Selecione o tipo</option>
+                      <option value="dias_uteis">Dias úteis</option>
+                      <option value="dias_corridos">Dias corridos</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      step="1"
+                      value={nfVencimentoDiasValue}
+                      onChange={(e) => setNfVencimentoDiasValue(e.target.value)}
+                      disabled={!nfVencimentoTipoValue || savingRowId === primaryMonth?.id}
+                      className={`flex-1 rounded-lg border-2 px-3 py-2 text-base font-bold shadow-sm focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                        !nfVencimentoTipoValue
+                          ? 'cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400'
+                          : 'border-yn-orange bg-white text-gray-900 focus:border-yn-orange focus:ring-yn-orange/40'
+                      }`}
+                      placeholder={nfVencimentoTipoValue === 'dias_uteis' ? 'Ex: 6' : 'Ex: 20'}
+                    />
+                    {nfVencimentoTipoValue && nfVencimentoDiasValue && (
+                      <span className="flex items-center text-base font-semibold text-gray-700">
+                        {nfVencimentoTipoValue === 'dias_uteis'
+                          ? `${nfVencimentoDiasValue}º dia útil`
+                          : `${nfVencimentoDiasValue}º dia`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveVencimento}
+                      disabled={savingRowId === primaryMonth?.id}
+                      className="rounded-lg bg-yn-orange px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-yn-orange/90 disabled:opacity-50"
+                    >
+                      {savingRowId === primaryMonth?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEditingVencimento}
+                      disabled={savingRowId === primaryMonth?.id}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="mt-3 text-xl font-bold text-gray-900">{formatDate(primaryMonthRow.dataVencimentoBoleto || '') || '-'}</div>
+                <>
+                  <div className="mt-3 text-xl font-bold text-blue-900">
+                    {currentVencimento ? currentVencimento.display : 'Não informado'}
+                  </div>
+                  {contract && currentVencimento && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      <span className="font-medium">Vencimento configurado no contrato vinculado</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -2405,6 +2883,53 @@ export default function EnergyBalanceDetailPage() {
         */}
       </section>
       </div>
+      
+      {/* Modal de Volume Contratado */}
+      {detail.header.contractId && (
+        <VolumeContratadoModal
+          open={isVolumeModalOpen}
+          contractId={detail.header.contractId}
+          balanceMonth={balanceMonthYM || undefined}
+          onClose={() => setIsVolumeModalOpen(false)}
+          onSave={async (updatedVolumes) => {
+            // Atualiza o campo contrato no balanço para o mês atual
+            if (balanceMonthYM && updatedVolumes[balanceMonthYM] !== undefined && primaryMonth) {
+              const newVolumeValue = updatedVolumes[balanceMonthYM].toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+              
+              // Atualiza o estado local do balanço
+              setEditableRows((prev) => ({
+                ...prev,
+                [primaryMonth.id]: {
+                  ...(prev[primaryMonth.id] ?? createEditableRow(detail, primaryMonth, primaryMonthRaw)),
+                  contrato: newVolumeValue,
+                },
+              }));
+              
+              // Salva no backend do balanço
+              try {
+                const normalizedId = Number.isNaN(Number(primaryMonth.id)) ? primaryMonth.id : Number(primaryMonth.id);
+                await energyBalanceRequest(`/energy-balance/${encodeURIComponent(String(normalizedId))}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true',
+                  },
+                  body: JSON.stringify({
+                    contract: newVolumeValue,
+                    contrato: newVolumeValue,
+                  }),
+                });
+              } catch (error) {
+                console.warn('[EnergyBalanceDetail] âš ï¸ Erro ao atualizar volume no balanÃ§o:', error);
+              }
+            }
+          }}
+        />
+      )}
+      
     </div>
   );
 }

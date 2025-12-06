@@ -110,6 +110,9 @@ export type ContractMock = {
   pricePeriods?: ContractPricePeriods;
   precoReajustado?: number | null;
   situacaoVigencia?: 'Vigente' | 'Encerrado';
+  // Vencimento da NF
+  nfVencimentoTipo?: 'dias_uteis' | 'dias_corridos';
+  nfVencimentoDias?: number;
 };
 
 const meses = ['2023-12', '2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'];

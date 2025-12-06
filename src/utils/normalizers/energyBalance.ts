@@ -16,10 +16,33 @@ const kwhFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 0,
 });
 
-const mwhFormatter = new Intl.NumberFormat('pt-BR', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+// Função para preservar valor exato sem arredondar (apenas converter para formato brasileiro)
+const preserveExactValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  
+  // Se já é string, preservar como está (apenas converter ponto para vírgula se necessário)
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return '-';
+    // Se já tem vírgula, retornar como está
+    if (trimmed.includes(',')) return trimmed;
+    // Converter ponto para vírgula (formato brasileiro) - preservar todas as casas
+    if (trimmed.includes('.')) return trimmed.replace('.', ',');
+    return trimmed;
+  }
+  
+  // Se é número, converter para string preservando todas as casas decimais exatas
+  if (typeof value === 'number') {
+    // Usar toString() que preserva todas as casas decimais que o número realmente tem
+    // Não usar toFixed() ou formatadores que arredondam ou adicionam zeros
+    const str = value.toString();
+    // Converter ponto para vírgula (formato brasileiro)
+    return str.replace('.', ',');
+  }
+  
+  // Outros tipos, converter para string
+  return String(value);
+};
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -174,14 +197,10 @@ const normalizeKwh = (value: unknown): { display: string; numeric: number | null
 };
 
 const normalizeMwh = (value: unknown): string => {
-  const numeric = toNumber(value);
-  if (numeric === null) return '-';
-  try {
-    return `${mwhFormatter.format(numeric)} MWh`;
-  } catch (error) {
-    console.warn('[energyBalance] falha ao formatar MWh', error);
-    return `${numeric.toFixed(2)} MWh`;
-  }
+  // Preservar valor exato do backend sem arredondar
+  const exactValue = preserveExactValue(value);
+  if (exactValue === '-') return '-';
+  return `${exactValue} MWh`;
 };
 
 const normalizeCurrency = (value: unknown): string => {
@@ -207,26 +226,17 @@ const normalizeCurrencyAllowZero = (value: unknown): string => {
 };
 
 const normalizeNumber = (value: unknown): string => {
-  const numeric = toNumber(value);
-  if (numeric === null) return 'Não informado';
-  try {
-    return numeric.toFixed(2);
-  } catch (error) {
-    console.warn('[energyBalance] falha ao formatar número', error);
-    return numeric.toFixed(2);
-  }
+  // Preservar valor exato do backend sem arredondar
+  const exactValue = preserveExactValue(value);
+  if (exactValue === '-') return 'Não informado';
+  return exactValue;
 };
 
 const normalizeProinfa = (value: unknown): string => {
-  const numeric = toNumber(value);
-  if (numeric === null) return 'Não informado';
-  try {
-    // Format with 3 decimal places to preserve precision like "0.219"
-    return numeric.toFixed(3);
-  } catch (error) {
-    console.warn('[energyBalance] falha ao formatar PROINFA', error);
-    return numeric.toFixed(3);
-  }
+  // Preservar valor exato do backend sem arredondar
+  const exactValue = preserveExactValue(value);
+  if (exactValue === '-') return 'Não informado';
+  return exactValue;
 };
 
 const normalizeBoolean = (value: unknown): string => {
@@ -503,7 +513,7 @@ export function normalizeEnergyBalanceListItem(row: unknown): EnergyBalanceListI
   );
   const referenceLabelSanitized = referenceLabelRaw.replace('Nǜo', 'Nao');
   const referenceBaseLabel =
-    referenceLabelSanitized && referenceLabelSanitized !== 'Nao informado'
+    referenceLabelSanitized && referenceLabelSanitized !== 'Não informado'
       ? referenceLabelSanitized
       : 'Sem referencia';
 
@@ -561,19 +571,15 @@ const describeRange = (minValue: unknown, maxValue: unknown): string => {
   if (min === null && max === null) return 'Não informado';
   const values: string[] = [];
   if (min !== null) {
-    try {
-      values.push(`${mwhFormatter.format(min)} MWh`);
-    } catch (error) {
-      console.warn('[energyBalance] falha ao formatar faixa mínima', error);
-      values.push(`${min.toFixed(2)} MWh`);
+    const minExact = preserveExactValue(min);
+    if (minExact !== '-') {
+      values.push(`${minExact} MWh`);
     }
   }
   if (max !== null) {
-    try {
-      values.push(`${mwhFormatter.format(max)} MWh`);
-    } catch (error) {
-      console.warn('[energyBalance] falha ao formatar faixa máxima', error);
-      values.push(`${max.toFixed(2)} MWh`);
+    const maxExact = preserveExactValue(max);
+    if (maxExact !== '-') {
+      values.push(`${maxExact} MWh`);
     }
   }
   if (!values.length) return 'Não informado';
@@ -750,8 +756,9 @@ export function normalizeEnergyBalanceDetail(row: unknown): EnergyBalanceDetail 
   const requisito = requirementValue !== null ? normalizeMwh(requirementValue / 1000) : 'Não informado';
 
   const netValue = toNumber(getSafe(record, 'net', 'net_value', 'valorLiquido'));
-  console.log('[normalizeEnergyBalanceDetail] 🔍 Net:', { raw: netValue, normalized: netValue !== null ? netValue.toFixed(2) : 'Não informado' });
-  const net = netValue !== null ? netValue.toFixed(2) : 'Não informado';
+  const netExact = preserveExactValue(netValue);
+  console.log('[normalizeEnergyBalanceDetail] 🔍 Net:', { raw: netValue, normalized: netExact !== '-' ? netExact : 'Não informado' });
+  const net = netExact !== '-' ? netExact : 'Não informado';
 
   const medicao = toStringSafe(
     getSafe(record, 'statusMeasurement', 'status_measurement', 'medicao', 'measurement'),
@@ -981,7 +988,8 @@ export function normalizeEmailRow(row: unknown, index = 0): EmailRow {
 
   // NET - buscar de net (número completo, sem R$)
   const netValue = toNumber(getSafe(record, 'net', 'net_value', 'valorLiquido'));
-  const net = netValue !== null ? netValue.toFixed(2) : 'Não informado';
+  const netExact = preserveExactValue(netValue);
+  const net = netExact !== '-' ? netExact : 'Não informado';
   console.log('[normalizeEmailRow] NET:', { raw: netValue, normalized: net });
 
   // Medição - buscar de statusMeasurement

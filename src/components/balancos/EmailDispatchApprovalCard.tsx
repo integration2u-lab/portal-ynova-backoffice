@@ -157,7 +157,7 @@ export default function EmailDispatchApprovalCard({
 
   const handleDispatch = async (action: 'release' | 'revert') => {
     if (!row || !balanceId) {
-      toast.error('Nao foi possivel identificar o registro para envio.');
+      toast.error('Não foi possível identificar o registro para envio.');
       return;
     }
 
@@ -201,8 +201,8 @@ export default function EmailDispatchApprovalCard({
       console.error('[EmailDispatchApprovalCard] Falha ao liberar disparo de email', error);
       toast.error(
         action === 'release'
-          ? 'Nao foi possivel liberar o disparo do email. Tente novamente.'
-          : 'Nao foi possivel reverter o envio do email. Tente novamente.',
+          ? 'Não foi possível liberar o disparo do email. Tente novamente.'
+          : 'Não foi possível reverter o envio do email. Tente novamente.',
       );
     } finally {
       setPendingAction(null);
@@ -214,7 +214,7 @@ export default function EmailDispatchApprovalCard({
 
   const handleSendNowClick = () => {
     if (!balanceId) {
-      toast.error('Nao foi possivel identificar o balanço para envio imediato.');
+      toast.error('Não foi possível identificar o balanço para envio imediato.');
       return;
     }
 
@@ -235,13 +235,13 @@ export default function EmailDispatchApprovalCard({
 
   const handleConfirmSendNow = async () => {
     if (!balanceId) {
-      toast.error('Nao foi possivel identificar o balanço para envio imediato.');
+      toast.error('Não foi possível identificar o balanço para envio imediato.');
       setShowSendNowConfirmation(false);
       return;
     }
 
     if (!row) {
-      toast.error('Nao foi possivel identificar o registro para envio.');
+      toast.error('Não foi possível identificar o registro para envio.');
       setShowSendNowConfirmation(false);
       return;
     }
@@ -298,7 +298,7 @@ export default function EmailDispatchApprovalCard({
       const message =
         error instanceof Error && error.message
           ? error.message
-          : 'Nao foi possivel enviar o email agora. Tente novamente.';
+          : 'Não foi possível enviar o email agora. Tente novamente.';
       toast.error(message);
     } finally {
       setPendingAction(null);

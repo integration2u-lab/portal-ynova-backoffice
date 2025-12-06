@@ -17,6 +17,7 @@ export type IPCAMultiplier = {
 /**
  * Busca as variações do IPCA para um período específico da API do BCB
  * Série 433 = IPCA (variação mensal)
+ * IMPORTANTE: A API só retorna dados históricos, não dados futuros
  * @param startDate Data de início no formato YYYY-MM-DD (opcional)
  * @param endDate Data de fim no formato YYYY-MM-DD (opcional)
  * @param months Número de meses para buscar se não fornecer as datas (padrão: 60)
@@ -29,7 +30,7 @@ export async function fetchIPCAVariations(
 ): Promise<IPCAVariation[]> {
   // API do Banco Central do Brasil - Série 433 (IPCA)
   // Documentação: https://dadosabertos.bcb.gov.br/dataset/433-ipca---variacao-mensal
-  // Usa intervalo de datas ao invés de "ultimos" para evitar erro 400
+  // IMPORTANTE: A API só retorna dados históricos, não dados futuros
   
   try {
     // Formata datas no padrão DD/MM/YYYY
@@ -41,13 +42,59 @@ export async function fetchIPCAVariations(
       return `${day}/${month}/${year}`;
     };
     
+    // Obtém a data atual (hoje) para limitar busca ao histórico
+    const hoje = new Date();
+    const hojeStr = hoje.toISOString().split('T')[0]; // YYYY-MM-DD
+    
     let dataInicialStr: string;
     let dataFinalStr: string;
     
     if (startDate && endDate) {
-      // Usa as datas fornecidas (vigência do contrato)
-      dataInicialStr = formatDate(startDate);
-      dataFinalStr = formatDate(endDate);
+      // Limita a data final à data atual (IPCA só tem dados históricos)
+      const endDateObj = new Date(endDate + 'T00:00:00'); // Adiciona hora para evitar problemas de timezone
+      const hojeObj = new Date();
+      hojeObj.setHours(0, 0, 0, 0); // Zera horas para comparação
+      
+      // Compara apenas datas (sem horas)
+      const endTimestamp = endDateObj.getTime();
+      const hojeTimestamp = hojeObj.getTime();
+      
+      // Se a data final for futura, usa a data de hoje
+      let dataFinalLimite = endTimestamp > hojeTimestamp ? hojeObj : endDateObj;
+      
+      // Se a data inicial também for futura, ajusta para buscar dados históricos
+      const startDateObj = new Date(startDate + 'T00:00:00');
+      let dataInicialLimite = startDateObj;
+      
+      if (startDateObj.getTime() > hojeTimestamp) {
+        // Se a data inicial for futura, busca desde 2 anos atrás
+        const doisAnosAtras = new Date();
+        doisAnosAtras.setFullYear(doisAnosAtras.getFullYear() - 2);
+        doisAnosAtras.setHours(0, 0, 0, 0);
+        dataInicialLimite = doisAnosAtras;
+        console.warn('[ipcaApi] ⚠️ Data inicial é futura, ajustando para buscar dados históricos desde', formatDate(doisAnosAtras.toISOString().split('T')[0]));
+      }
+      
+      // Ajusta para primeiro dia do mês inicial e último dia do mês final
+      const inicioYear = dataInicialLimite.getFullYear();
+      const inicioMonth = dataInicialLimite.getMonth();
+      const fimYear = dataFinalLimite.getFullYear();
+      const fimMonth = dataFinalLimite.getMonth();
+      
+      // Primeiro dia do mês inicial
+      dataInicialStr = `01/${String(inicioMonth + 1).padStart(2, '0')}/${inicioYear}`;
+      
+      // Último dia do mês final
+      const ultimoDiaDoMes = new Date(fimYear, fimMonth + 1, 0).getDate();
+      dataFinalStr = `${String(ultimoDiaDoMes).padStart(2, '0')}/${String(fimMonth + 1).padStart(2, '0')}/${fimYear}`;
+      
+      console.log('[ipcaApi] 🔄 Datas ajustadas (limitando ao histórico):', {
+        original: { startDate, endDate },
+        ajustada: { inicio: dataInicialStr, fim: dataFinalStr },
+        hoje: hojeStr,
+        dataFinalEraFutura: endTimestamp > hojeTimestamp,
+        dataInicialEraFutura: startDateObj.getTime() > hojeTimestamp
+      });
     } else {
       // Calcula data inicial (X meses atrás) e data final (hoje)
       const dataFinal = new Date();
@@ -73,6 +120,7 @@ export async function fetchIPCAVariations(
     
     console.log('[ipcaApi] 📅 Buscando IPCA do período:', dataInicialStr, 'até', dataFinalStr);
     console.log('[ipcaApi] 🌐 Modo:', isDev ? 'Desenvolvimento (via proxy)' : 'Produção (direto)');
+    console.log('[ipcaApi] 🔗 URL completa:', url);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -87,7 +135,13 @@ export async function fetchIPCAVariations(
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       console.error('[ipcaApi] Erro na resposta da API:', errorText);
-      console.warn('[ipcaApi] A API do BCB pode estar temporariamente indisponível');
+      
+      // Se for 404, pode ser porque não há dados para o período (datas futuras)
+      if (response.status === 404) {
+        console.warn('[ipcaApi] ⚠️ Nenhum dado encontrado para o período. Verifique se as datas são históricas (o IPCA não tem dados futuros).');
+      } else {
+        console.warn('[ipcaApi] A API do BCB pode estar temporariamente indisponível');
+      }
       return [];
     }
     
@@ -162,17 +216,73 @@ export function calculateIPCAMultipliers(variations: IPCAVariation[]): IPCAMulti
 }
 
 /**
+ * Calcula quantos meses existem entre dois meses (formato YYYY-MM)
+ */
+function monthsBetween(startMonth: string, endMonth: string): number {
+  const [startYear, startM] = startMonth.split('-').map(Number);
+  const [endYear, endM] = endMonth.split('-').map(Number);
+  return (endYear - startYear) * 12 + (endM - startM);
+}
+
+/**
  * Obtém o multiplicador IPCA para um mês específico
+ * Para meses futuros, continua acumulando progressivamente usando a última variação conhecida
  * @param multipliers Array de multiplicadores calculados
  * @param yearMonth Mês no formato YYYY-MM
- * @returns Multiplicador para o mês especificado ou 1.0 se não encontrado
+ * @returns Multiplicador para o mês especificado, calculado progressivamente para meses futuros, ou 1.0 se não encontrado
  */
 export function getIPCAMultiplierForMonth(
   multipliers: IPCAMultiplier[],
   yearMonth: string
 ): number {
   const found = multipliers.find((m) => m.month === yearMonth);
-  return found ? found.multiplier : 1.0;
+  
+  if (found) {
+    return found.multiplier;
+  }
+  
+  // Se não encontrou, verifica se é um mês futuro
+  const [year, month] = yearMonth.split('-').map(Number);
+  if (!year || !month || isNaN(year) || isNaN(month)) {
+    return 1.0;
+  }
+  
+  const mesSolicitado = new Date(year, month - 1, 1);
+  const hoje = new Date();
+  hoje.setDate(1); // Primeiro dia do mês atual
+  
+  if (mesSolicitado > hoje && multipliers.length > 0) {
+    // É um mês futuro - continua acumulando progressivamente
+    const ultimoMultiplier = multipliers[multipliers.length - 1];
+    
+    // Calcula a média das últimas variações (últimos 12 meses ou todas disponíveis)
+    const ultimasVariacoes = multipliers.slice(-12).map(m => m.variation);
+    const mediaVariacao = ultimasVariacoes.length > 0
+      ? ultimasVariacoes.reduce((sum, v) => sum + v, 0) / ultimasVariacoes.length
+      : ultimoMultiplier.variation;
+    
+    // Calcula quantos meses à frente está o mês solicitado
+    const mesesAdiante = monthsBetween(ultimoMultiplier.month, yearMonth);
+    
+    if (mesesAdiante > 0) {
+      // Continua acumulando usando a média das últimas variações para cada mês futuro
+      let acumulado = ultimoMultiplier.multiplier;
+      
+      // Acumula mês a mês para manter progressão
+      for (let i = 0; i < mesesAdiante; i++) {
+        acumulado *= (1 + mediaVariacao / 100);
+      }
+      
+      console.log(`[ipcaApi] 📊 Mês futuro ${yearMonth}: acumulando progressivamente (${ultimoMultiplier.month} → ${yearMonth}, ${mesesAdiante} meses, média variação: ${mediaVariacao.toFixed(2)}%, multiplicador final: ${acumulado.toFixed(6)})`);
+      return acumulado;
+    }
+    
+    // Fallback: se não conseguiu calcular, usa o último multiplicador
+    return ultimoMultiplier.multiplier;
+  }
+  
+  // Retorna 1.0 (sem reajuste) se não encontrou e não é futuro
+  return 1.0;
 }
 
 /**

@@ -15,6 +15,7 @@ VITE_PORTAL_MODE=gestao
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
 | `VITE_API_BASE_URL` | Base URL for API requests | `/api` | `http://localhost:3001/api` |
+| `VITE_ALLOW_ANY_LOGIN` | Permite login automático (pula tela de login). Ativo automaticamente em desenvolvimento. | `false` (em produção) | `true` |
 | `VITE_N8N_BALANCO_WEBHOOK` | Webhook do n8n utilizado para processar o balanço energético | — | `https://n8n.ynovamarketplace.com/webhook/8d7b84b3-f20d-4374-a812-76db38ebc77d` |
 | `VITE_N8N_SHARED_SECRET` | (Opcional) Segredo compartilhado para assinar requisições ao n8n com HMAC-SHA256 | — | `super-secret-token` |
 | `VITE_SKIP_LOGIN` | Pula completamente a autenticação (útil para Vercel quando a API não está disponível) | `false` | `true` |
@@ -31,6 +32,31 @@ The API utility functions in `src/utils/api.ts` automatically use the environmen
 
 - **Development**: Use `http://localhost:3001/api` (or your local backend URL)
 - **Production**: Use your production API URL (e.g., `https://api.ynovamarketplace.com.br`)
+
+## Vercel Deployment
+
+### Configurar variáveis de ambiente na Vercel
+
+1. Acesse o projeto na Vercel
+2. Vá em **Settings** → **Environment Variables**
+3. Adicione as seguintes variáveis:
+
+```env
+VITE_API_BASE_URL=https://api.ynovamarketplace.com.br
+VITE_ALLOW_ANY_LOGIN=true  # Para pular a tela de login na Vercel
+```
+
+### Pular tela de login na Vercel
+
+Para pular a tela de login automaticamente quando o app estiver rodando na Vercel, configure:
+
+```env
+VITE_ALLOW_ANY_LOGIN=true
+```
+
+Quando esta variável estiver configurada como `true`, o sistema criará automaticamente um usuário e pulará a tela de login, redirecionando direto para o dashboard.
+
+**Nota**: Em desenvolvimento local, o login já é pulado automaticamente.
 
 ## Docker Setup
 
