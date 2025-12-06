@@ -69,6 +69,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    
+    // Quando ALLOW_ANY_LOGIN está ativo (dev ou via variável de ambiente), cria usuário automático imediatamente para pular login
+    if (ALLOW_ANY_LOGIN) {
+      const stored = loadStoredUser();
+      if (stored) {
+        setUser(stored);
+        setLoading(false);
+        return;
+      }
+      
+      // Cria usuário automático sem tentar API
+      const email = import.meta.env.DEV 
+        ? 'dev@ynovamarketplace.com.br'
+        : 'vercel@ynovamarketplace.com.br';
+      const defaultUser = buildFallbackUser(email);
+      console.log('[AuthContext] 🔓 Modo automático ativo: criando usuário automático', defaultUser);
+      setUser(defaultUser);
+      persistUser(defaultUser);
+      setLoading(false);
+      return;
+    }
+    
     (async () => {
       try {
         await AuthAPI.csrf();

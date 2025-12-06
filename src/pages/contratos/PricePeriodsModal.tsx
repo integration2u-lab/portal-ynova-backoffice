@@ -240,13 +240,28 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
     if (open) {
       setIsLoadingIPCA(true);
       
+      // Log das datas recebidas para diagnóstico
+      console.log('[PricePeriodsModal] 📅 Datas de vigência recebidas:', {
+        contractStartDate,
+        contractEndDate,
+        startDateType: typeof contractStartDate,
+        endDateType: typeof contractEndDate,
+        startDateValido: contractStartDate ? !isNaN(new Date(contractStartDate).getTime()) : false,
+        endDateValido: contractEndDate ? !isNaN(new Date(contractEndDate).getTime()) : false,
+      });
+      
       // Usa as datas de vigência do contrato para buscar o IPCA
       fetchIPCAVariationsWithCache(contractStartDate, contractEndDate, 60)
         .then((variations) => {
           if (variations && variations.length > 0) {
             const multipliers = calculateIPCAMultipliers(variations);
             setIpcaMultipliers(multipliers);
-            console.log('[PricePeriodsModal] ✅ IPCA carregado com sucesso para vigência do contrato');
+            console.log('[PricePeriodsModal] ✅ IPCA carregado com sucesso para vigência do contrato:', {
+              totalVariations: variations.length,
+              totalMultipliers: multipliers.length,
+              primeiroMultiplier: multipliers[0]?.month,
+              ultimoMultiplier: multipliers[multipliers.length - 1]?.month,
+            });
           } else {
             console.warn('[PricePeriodsModal] ⚠️ Nenhum dado do IPCA disponível - preços reajustados não serão calculados');
             setIpcaMultipliers([]);

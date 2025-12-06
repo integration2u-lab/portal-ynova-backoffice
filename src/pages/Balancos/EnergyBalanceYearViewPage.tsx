@@ -1,9 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, ArrowLeft, Loader, Zap, Check, AlertTriangle, Circle, ChevronRight, Search } from 'lucide-react';
+import UploadCsvModal from '../../components/balancos/UploadCsvModal';
 import { getList } from '../../services/energyBalanceApi';
 import { normalizeEnergyBalanceListItem } from '../../utils/normalizers/energyBalance';
 import type { EnergyBalanceListItem } from '../../types/energyBalance';
+
+type UploadResult = { balanceId?: string; shouldRefresh?: boolean };
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -122,6 +125,7 @@ export default function EnergyBalanceYearViewPage() {
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const controllerRef = React.useRef<AbortController | null>(null);
+  const [isUploadOpen, setIsUploadOpen] = React.useState(false);
 
   const fetchBalances = React.useCallback(async () => {
     controllerRef.current?.abort();
@@ -223,6 +227,48 @@ export default function EnergyBalanceYearViewPage() {
     return years;
   }, [items]);
 
+  // Filtrar anos baseado na busca (para a tela principal)
+  const filteredYearData = React.useMemo(() => {
+    const normalizedQuery = debouncedSearch.trim();
+    
+    // Se não há busca, retorna todos os anos
+    if (!normalizedQuery) {
+      return yearData;
+    }
+
+    const normalizedQueryText = removeDiacritics(normalizedQuery);
+    const numericQuery = normalizedQuery.replace(/\D/g, '');
+
+    // Se a busca é apenas números (provavelmente um ano)
+    if (numericQuery && numericQuery.length === 4 && /^\d{4}$/.test(normalizedQuery.trim())) {
+      const yearNum = parseInt(normalizedQuery.trim(), 10);
+      return yearData.filter((yd) => yd.year === yearNum);
+    }
+
+    // Caso contrário, busca nos balanços e retorna apenas anos que contêm balanços correspondentes
+    const matchingYearSet = new Set<number>();
+
+    items.forEach((item) => {
+      const clientName = removeDiacritics(item.normalized.cliente);
+      const meterCode = removeDiacritics(item.normalized.meterCode);
+      const cnpjDigits = item.normalized.cnpj.replace(/\D/g, '');
+
+      const matches =
+        clientName.includes(normalizedQueryText) ||
+        meterCode.includes(normalizedQueryText) ||
+        (!!numericQuery && cnpjDigits.includes(numericQuery));
+
+      if (matches) {
+        const monthYear = extractMonthYear(item.normalized, item.raw);
+        if (monthYear) {
+          matchingYearSet.add(monthYear.year);
+        }
+      }
+    });
+
+    return yearData.filter((yd) => matchingYearSet.has(yd.year));
+  }, [yearData, debouncedSearch, items]);
+
   // Calcular dados do mês selecionado e filtro (ANTES dos early returns)
   const selectedMonthData = React.useMemo(() => {
     if (!selectedMonth) return null;
@@ -289,6 +335,17 @@ export default function EnergyBalanceYearViewPage() {
   const handleBalanceClick = (balanceId: string) => {
     navigate(`/balancos/${balanceId}`);
   };
+
+  const handleUploadComplete = React.useCallback(
+    (result: UploadResult) => {
+      if (result.balanceId) {
+        navigate(`/balancos/${result.balanceId}`);
+        return;
+      }
+      void fetchBalances();
+    },
+    [fetchBalances, navigate],
+  );
 
   // Função para gerar todos os meses do ano
   const getAllMonthsForYear = (year: number): MonthData[] => {
@@ -398,17 +455,26 @@ export default function EnergyBalanceYearViewPage() {
 
     return (
       <div className="space-y-6 p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleBackToMonths}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <ArrowLeft size={16} />
+              Voltar
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Balanços - {monthLabel}
+            </h1>
+          </div>
           <button
-            onClick={handleBackToMonths}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            type="button"
+            onClick={() => setIsUploadOpen(true)}
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
           >
-            <ArrowLeft size={16} />
-            Voltar
+            Enviar planilha
           </button>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Balanços - {monthLabel}
-          </h1>
         </div>
 
         {/* Campo de busca */}
@@ -497,6 +563,12 @@ export default function EnergyBalanceYearViewPage() {
             </ul>
           </div>
         )}
+
+        <UploadCsvModal
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+          onUploadComplete={handleUploadComplete}
+        />
       </div>
     );
   }
@@ -507,17 +579,26 @@ export default function EnergyBalanceYearViewPage() {
 
     return (
       <div className="space-y-6 p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleBackToYears}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <ArrowLeft size={16} />
+              Voltar
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Balanços {selectedYear}
+            </h1>
+          </div>
           <button
-            onClick={handleBackToYears}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            type="button"
+            onClick={() => setIsUploadOpen(true)}
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
           >
-            <ArrowLeft size={16} />
-            Voltar
+            Enviar planilha
           </button>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Balanços {selectedYear}
-          </h1>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -551,6 +632,12 @@ export default function EnergyBalanceYearViewPage() {
             );
           })}
         </div>
+
+        <UploadCsvModal
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+          onUploadComplete={handleUploadComplete}
+        />
       </div>
     );
   }
@@ -558,20 +645,70 @@ export default function EnergyBalanceYearViewPage() {
   // Mostrar grid de anos
   return (
     <div className="space-y-6 p-4">
-      <header>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Balanço Energético</h1>
-        <p className="mt-2 max-w-2xl text-sm font-bold text-gray-600 dark:text-white">
-          Selecione um ano para visualizar os balanços mensais
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Balanço Energético</h1>
+          <p className="mt-2 max-w-2xl text-sm font-bold text-gray-600 dark:text-white">
+            Selecione um ano para visualizar os balanços mensais
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsUploadOpen(true)}
+          className="inline-flex h-11 items-center justify-center rounded-lg bg-yn-orange px-5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+        >
+          Enviar planilha
+        </button>
       </header>
+
+      {/* Campo de busca */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-slate-900">
+        <div className="w-full">
+          <div className="space-y-1">
+            <span className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-white">Busca</span>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar por ano, cliente, CNPJ ou medidor"
+                aria-label="Buscar balanços"
+                className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm font-bold text-gray-900 placeholder-gray-500 shadow-sm transition focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/30 dark:border-gray-700 dark:bg-slate-950 dark:text-white"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Limpar busca"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {yearData.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">
           Nenhum balanço encontrado
         </div>
+      ) : filteredYearData.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">
+          Nenhum balanço encontrado para "{debouncedSearch}"
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {yearData.map((yearInfo) => {
+          {filteredYearData.map((yearInfo) => {
             const totalBalances = yearInfo.months.reduce((sum, month) => sum + month.balances.length, 0);
             
             return (
@@ -599,6 +736,12 @@ export default function EnergyBalanceYearViewPage() {
           })}
         </div>
       )}
+
+      <UploadCsvModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onUploadComplete={handleUploadComplete}
+      />
     </div>
   );
 }

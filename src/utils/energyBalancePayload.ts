@@ -133,7 +133,8 @@ export function convertDisplayRowToEnergyBalancePayload(
 
   payload.price = parseNumber(row.preco ?? '');
   payload.supplier = !isEmptyValue(row.fornecedor) ? row.fornecedor : null;
-  payload.email = !isEmptyValue(row.email) ? row.email : null;
+  // Email deve ser preservado exatamente como está, sem separação ou processamento
+  payload.email = !isEmptyValue(row.email) ? String(row.email).trim() : null;
 
   // consumptionKwh não deve ser editado no backend - removido do payload
   // const consumptionMwh = parseMwh(row.consumo ?? '');
