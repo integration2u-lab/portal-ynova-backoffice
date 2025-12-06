@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_ENERGY_BALANCE_API_URL': JSON.stringify(env.VITE_ENERGY_BALANCE_API_URL),
       'import.meta.env.VITE_API_MOCK': JSON.stringify(env.VITE_API_MOCK),
       'import.meta.env.VITE_ALLOW_ANY_LOGIN': JSON.stringify(env.VITE_ALLOW_ANY_LOGIN),
+      'import.meta.env.VITE_SKIP_LOGIN': JSON.stringify(env.VITE_SKIP_LOGIN),
     },
   }
 })
