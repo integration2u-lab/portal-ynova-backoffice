@@ -17,12 +17,16 @@ import {
   Handshake,
   Zap,
   Mail,
+  Building2,
+  Truck,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
+  { to: '/clientes', label: 'Clientes', icon: Building2 },
+  { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/balancos', label: 'Balanço Energético', icon: Zap },
   /* { to: '/email', label: 'Email', icon: Mail }, */
