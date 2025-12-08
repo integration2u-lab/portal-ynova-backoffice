@@ -15,6 +15,11 @@ export default function SuppliersPage() {
   const suppliersFiltrados = React.useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
+    // Garantir que suppliers é um array
+    if (!Array.isArray(suppliers)) {
+      return [];
+    }
+
     return suppliers.filter((supplier) => {
       if (!normalizedSearch) return true;
 

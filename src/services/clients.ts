@@ -36,7 +36,8 @@ export async function consultarCNPJReceita(cnpj: string): Promise<Client['dadosR
 export async function getClients(): Promise<Client[]> {
   try {
     const data = await getJson<Client[]>(API_BASE);
-    return data;
+    // Garantir que sempre retornamos um array
+    return Array.isArray(data) ? data : [];
   } catch (error) {
     console.warn('API não disponível, usando dados mock:', error);
     return mockClients;

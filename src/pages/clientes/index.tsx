@@ -17,6 +17,11 @@ export default function ClientsPage() {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const numericSearch = normalizedSearch.replace(/\D/g, '');
 
+    // Garantir que clients é um array
+    if (!Array.isArray(clients)) {
+      return [];
+    }
+
     return clients.filter((client) => {
       if (!normalizedSearch) return true;
 

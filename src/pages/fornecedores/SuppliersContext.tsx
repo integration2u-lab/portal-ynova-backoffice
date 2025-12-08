@@ -25,10 +25,12 @@ export function SuppliersProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const data = await getSuppliers();
-      setSuppliers(data);
+      // Garantir que sempre temos um array
+      setSuppliers(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar fornecedores');
       console.error('Erro ao carregar fornecedores:', err);
+      setSuppliers([]); // Garantir array vazio em caso de erro
     } finally {
       setIsLoading(false);
     }

@@ -1122,16 +1122,16 @@ const fetchContractsFromEndpoints = async (
       const is404Error = errorMessage.includes('404') || (error instanceof Error && errorMessage.includes('status 404'));
       
       if (!is404Error) {
-        console.error(
-          `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
-          error instanceof Error ? error : new Error(String(error))
-        );
+      console.error(
+        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
+        error instanceof Error ? error : new Error(String(error))
+      );
         if (error instanceof TypeError && errorMessage === 'Failed to fetch') {
-          console.error(
-            '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
-          );
-        }
-        console.info('[ContractsContext] Tentando próximo endpoint disponível...');
+        console.error(
+          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
+        );
+      }
+      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
       }
     }
   }

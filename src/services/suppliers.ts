@@ -7,7 +7,8 @@ const API_BASE = '/api/suppliers';
 export async function getSuppliers(): Promise<Supplier[]> {
   try {
     const data = await getJson<Supplier[]>(API_BASE);
-    return data;
+    // Garantir que sempre retornamos um array
+    return Array.isArray(data) ? data : [];
   } catch (error) {
     console.warn('API não disponível, usando dados mock:', error);
     return mockSuppliers;

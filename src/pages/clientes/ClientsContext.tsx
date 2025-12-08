@@ -25,10 +25,12 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const data = await getClients();
-      setClients(data);
+      // Garantir que sempre temos um array
+      setClients(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar clientes');
       console.error('Erro ao carregar clientes:', err);
+      setClients([]); // Garantir array vazio em caso de erro
     } finally {
       setIsLoading(false);
     }
