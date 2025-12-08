@@ -470,9 +470,9 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     const id = ensureId();
     // Volume contratado e preço flat removidos de contratos manuais
     // Usar apenas períodos de preço quando disponíveis
-    const periodsAverage = priceSummary.averagePrice ?? 0;
+  const periodsAverage = priceSummary.averagePrice ?? 0;
     const priceAverage = priceSummary.filledMonths ? periodsAverage : 0;
-    const referenceMonths = deriveReferenceMonths(formState);
+  const referenceMonths = deriveReferenceMonths(formState);
 
     const supplierValue = formState.supplier.trim();
     const normalizeEmails = (value: string) => value
@@ -1003,7 +1003,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 <label className="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
                   Ciclo de vigência
                   <div className="flex gap-2">
-                    <input
+                          <input
                       type="date"
                       value={formState.startDate}
                       onChange={handleInputChange('startDate')}
@@ -1021,25 +1021,25 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                         errors.endDate ? 'border-red-400 dark:border-red-500/60' : 'border-slate-300'
                       }`}
                       placeholder="Data fim"
-                    />
-                  </div>
+                          />
+                        </div>
                   {(errors.startDate || errors.endDate) && (
                     <span className="text-xs font-medium text-red-500">
                       {errors.startDate || errors.endDate}
                     </span>
                   )}
-                </label>
+                    </label>
 
                 <div className="flex flex-col gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsPriceModalOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
-                    >
-                      <PencilLine size={16} /> Editar preços e volumes por período
-                    </button>
-                    <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsPriceModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-yn-orange px-3 py-2 text-sm font-semibold text-yn-orange shadow-sm transition hover:bg-yn-orange hover:text-white"
+                      >
+                        <PencilLine size={16} /> Editar preços e volumes por período
+                      </button>
+                      <div className="text-sm text-slate-500 dark:text-slate-400">{priceSummary.filledMonths ? `${priceSummary.filledMonths} meses · ${formatCurrencyBRL(priceSummary.averagePrice ?? 0)}` : 'Nenhum preço por período'}</div>
                   </div>
                 </div>
               </div>

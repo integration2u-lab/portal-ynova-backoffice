@@ -17,14 +17,19 @@ import {
   Handshake,
   Zap,
   Mail,
+  Building2,
+  Truck,
+  Battery,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
+  /* { to: '/clientes', label: 'Clientes', icon: Building2 }, */
+  /* { to: '/fornecedores', label: 'Fornecedores', icon: Zap }, */
   { to: '/contratos', label: 'Contratos', icon: PieChart },
-  { to: '/balancos', label: 'Balanço Energético', icon: Zap },
+  { to: '/balancos', label: 'Balanço Energético', icon: Battery },
   /* { to: '/email', label: 'Email', icon: Mail }, */
   { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
