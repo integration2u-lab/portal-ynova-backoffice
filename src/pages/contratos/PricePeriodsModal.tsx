@@ -11,8 +11,7 @@ import {
   calculateFlexibilityMin 
 } from '../../utils/contractPricing';
 import { 
-  fetchIPCAVariationsWithCache, 
-  calculateIPCAMultipliers, 
+  fetchIPCAMultipliersWithCache,
   getIPCAMultiplierForMonth,
   type IPCAMultiplier 
 } from '../../services/ipcaApi';
@@ -234,6 +233,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
   const [editingVolumeMWh, setEditingVolumeMWh] = React.useState<Record<string, string>>({});
   const [editingVolumeSeasonal, setEditingVolumeSeasonal] = React.useState<Record<string, string>>({});
   const [editingPrice, setEditingPrice] = React.useState<Record<string, string>>({});
+  const [editingAdjustedPrice, setEditingAdjustedPrice] = React.useState<Record<string, string>>({});
 
   // Carrega dados do IPCA ao abrir o modal usando a vigência do contrato
   React.useEffect(() => {
@@ -250,14 +250,12 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         endDateValido: contractEndDate ? !isNaN(new Date(contractEndDate).getTime()) : false,
       });
       
-      // Usa as datas de vigência do contrato para buscar o IPCA
-      fetchIPCAVariationsWithCache(contractStartDate, contractEndDate, 60)
-        .then((variations) => {
-          if (variations && variations.length > 0) {
-            const multipliers = calculateIPCAMultipliers(variations);
+      // Usa as datas de vigência do contrato para buscar os multiplicadores do IPCA do backend
+      fetchIPCAMultipliersWithCache(contractStartDate, contractEndDate, 60)
+        .then((multipliers) => {
+          if (multipliers && multipliers.length > 0) {
             setIpcaMultipliers(multipliers);
-            console.log('[PricePeriodsModal] ✅ IPCA carregado com sucesso para vigência do contrato:', {
-              totalVariations: variations.length,
+            console.log('[PricePeriodsModal] ✅ Multiplicadores IPCA carregados com sucesso para vigência do contrato:', {
               totalMultipliers: multipliers.length,
               primeiroMultiplier: multipliers[0]?.month,
               ultimoMultiplier: multipliers[multipliers.length - 1]?.month,
@@ -268,7 +266,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
           }
         })
         .catch((error) => {
-          console.error('[PricePeriodsModal] ❌ Erro ao carregar IPCA:', error);
+          console.error('[PricePeriodsModal] ❌ Erro ao carregar multiplicadores IPCA:', error);
           setIpcaMultipliers([]);
         })
         .finally(() => {
@@ -580,9 +578,14 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         // Atualiza Preço Base
         month.basePrice = parsed;
         
-        // Recalcula Preço Reajustado automaticamente com IPCA
-        const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, monthYm);
-        month.adjustedPrice = parsed * multiplier;
+        // Recalcula Preço Reajustado automaticamente com IPCA (apenas se tiver multiplicadores disponíveis)
+        if (ipcaMultipliers.length > 0) {
+          const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, monthYm);
+          month.adjustedPrice = parsed * multiplier;
+        } else {
+          // Se não tiver IPCA, mantém o valor atual ou null
+          month.adjustedPrice = month.adjustedPrice ?? null;
+        }
         
         return updated;
       });
@@ -592,6 +595,48 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
   const handleBasePriceBlur = React.useCallback((yearIndex: number, monthIndex: number) => {
     const key = `${yearIndex}-${monthIndex}`;
     setEditingPrice((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+  }, []);
+
+  const handleAdjustedPriceChange = React.useCallback((yearIndex: number, monthIndex: number, value: string) => {
+    const key = `${yearIndex}-${monthIndex}`;
+    
+    // Remove espaços e caracteres inválidos, mas mantém números, vírgula e ponto
+    const cleaned = value.replace(/\s/g, '').replace(/[^0-9,.]/g, '');
+    
+    // Mantém o texto enquanto o usuário digita
+    setEditingAdjustedPrice((prev) => ({ ...prev, [key]: cleaned }));
+    
+    if (!cleaned) {
+      setYearTabs((prev) => {
+        const updated = [...prev];
+        const month = updated[yearIndex].months[monthIndex];
+        month.adjustedPrice = null;
+        return updated;
+      });
+      return;
+    }
+    
+    // Converte para número (aceita tanto , quanto . como separador decimal)
+    const normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    const parsed = parseFloat(normalized);
+    
+    if (!isNaN(parsed) && isFinite(parsed) && parsed >= 0) {
+      setYearTabs((prev) => {
+        const updated = [...prev];
+        const month = updated[yearIndex].months[monthIndex];
+        month.adjustedPrice = parsed;
+        return updated;
+      });
+    }
+  }, []);
+  
+  const handleAdjustedPriceBlur = React.useCallback((yearIndex: number, monthIndex: number) => {
+    const key = `${yearIndex}-${monthIndex}`;
+    setEditingAdjustedPrice((prev) => {
       const updated = { ...prev };
       delete updated[key];
       return updated;
@@ -653,9 +698,12 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
         // Preenche o preço base
         const basePrice = priceToFill;
         
-        // Recalcula o preço reajustado com IPCA
-        const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, month.ym);
-        const adjustedPrice = basePrice * multiplier;
+        // Recalcula o preço reajustado com IPCA (apenas se tiver multiplicadores disponíveis)
+        let adjustedPrice = month.adjustedPrice ?? null;
+        if (ipcaMultipliers.length > 0) {
+          const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, month.ym);
+          adjustedPrice = basePrice * multiplier;
+        }
         
         return {
           ...month,
@@ -667,7 +715,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
     });
   }, [yearTabs, ipcaMultipliers]);
 
-  const handleFillAllYears = React.useCallback(() => {
+  const handleFillAllYears = React.useCallback((ipcaMultipliers: IPCAMultiplier[]) => {
     setYearTabs((prev) => {
       // Pega o primeiro mês da primeira aba para obter os valores a replicar
       if (prev.length === 0) return prev;
@@ -709,9 +757,12 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
           // Preenche o preço base apenas se houver valor para replicar
           const basePrice = priceToFill !== null ? priceToFill : month.basePrice;
           
-          // Recalcula o preço reajustado com IPCA
-          const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, month.ym);
-          const adjustedPrice = basePrice !== null ? basePrice * multiplier : null;
+          // Recalcula o preço reajustado com IPCA (apenas se tiver multiplicadores disponíveis)
+          let adjustedPrice = month.adjustedPrice ?? null;
+          if (ipcaMultipliers.length > 0 && basePrice !== null) {
+            const multiplier = getIPCAMultiplierForMonth(ipcaMultipliers, month.ym);
+            adjustedPrice = basePrice * multiplier;
+          }
           
           return {
             ...month,
@@ -850,7 +901,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
             <div className="mx-6 mt-4 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-700 dark:border-yellow-500/40 dark:bg-yellow-500/10 dark:text-yellow-200">
               <p className="font-semibold">⚠️ Dados do IPCA não disponíveis</p>
               <p className="mt-1 text-xs">
-                Os preços reajustados não serão calculados. Você ainda pode inserir os preços base manualmente.
+                Os preços reajustados não serão calculados automaticamente. Você pode inserir os preços reajustados manualmente na coluna "Preço Reaj. R$/MWh".
               </p>
             </div>
           )}
@@ -880,7 +931,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={handleFillAllYears}
+                      onClick={() => handleFillAllYears(ipcaMultipliers)}
                       className="rounded-lg border border-yn-orange bg-white px-4 py-2 text-sm font-semibold text-yn-orange transition hover:bg-yn-orange hover:text-white dark:bg-slate-900 dark:hover:bg-yn-orange"
                     >
                       Preencher Volume e Preço Flat (Todos os Anos)
@@ -964,6 +1015,7 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                         const isEditingVolumeMWh = key in editingVolumeMWh;
                         const isEditingVolumeSeasonal = key in editingVolumeSeasonal;
                         const isEditingPrice = key in editingPrice;
+                        const isEditingAdjustedPrice = key in editingAdjustedPrice;
                         
                         return (
                           <tr key={month.ym} className="transition hover:bg-slate-50 dark:hover:bg-slate-900/50">
@@ -1051,7 +1103,26 @@ const PricePeriodsModal: React.FC<PricePeriodsModalProps> = ({
                               </div>
                             </td>
                             <td className="px-3 py-2 text-right font-medium text-slate-900 dark:text-slate-100 tabular-nums">
-                              {month.adjustedPrice !== null ? formatCurrencyBRL(month.adjustedPrice) : '-'}
+                              <div className="relative">
+                                {isEditingAdjustedPrice ? (
+                                  <input
+                                    type="text"
+                                    value={editingAdjustedPrice[key]}
+                                    onChange={(e) => handleAdjustedPriceChange(activeTab, monthIndex, e.target.value)}
+                                    onBlur={() => handleAdjustedPriceBlur(activeTab, monthIndex)}
+                                    placeholder="0,00"
+                                    className="w-full rounded border border-blue-300 bg-blue-50 pl-2 pr-2 py-1.5 text-right text-sm tabular-nums focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 dark:border-blue-700 dark:bg-blue-900/20"
+                                  />
+                                ) : (
+                                  <div
+                                    onClick={() => setEditingAdjustedPrice((prev) => ({ ...prev, [key]: month.adjustedPrice !== null ? month.adjustedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '' }))}
+                                    className="cursor-pointer rounded border border-transparent px-2 py-1.5 hover:border-blue-300 hover:bg-blue-50 dark:hover:border-blue-700 dark:hover:bg-blue-900/20"
+                                    title="Clique para editar manualmente"
+                                  >
+                                    {month.adjustedPrice !== null ? formatCurrencyBRL(month.adjustedPrice) : '-'}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );

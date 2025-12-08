@@ -27,6 +27,12 @@ import EnergyBalanceListPage from './pages/Balancos/EnergyBalanceListPage';
 import EnergyBalanceYearViewPage from './pages/Balancos/EnergyBalanceYearViewPage';
 import EnergyBalanceDetailPage from './pages/Balancos/EnergyBalanceDetailPage';
 import BalancosLayout from './pages/Balancos/BalancosLayout';
+import ClientsPage from './pages/clientes';
+import ClientsLayout from './pages/clientes/ClientsLayout';
+import ClientDetailPage from './pages/clientes/ClientDetailPage';
+import SuppliersPage from './pages/fornecedores';
+import SuppliersLayout from './pages/fornecedores/SuppliersLayout';
+import SupplierDetailPage from './pages/fornecedores/SupplierDetailPage';
 // import EmailPage from './pages/EmailPage'; // Temporariamente desabilitada
 const Negociacoes = lazy(() => import('./pages/Negociacoes'));
 
@@ -97,6 +103,18 @@ function AppRoutes() {
               <Route index element={<ContratosPage />} />
               <Route path=":id" element={<DetalheContratoPage />} />
               <Route path=":id/editar" element={<EditarContratoPage />} />
+            </Route>
+
+            {/* Gestão: Clientes */}
+            <Route path="clientes" element={<ClientsLayout />}>
+              <Route index element={<ClientsPage />} />
+              <Route path=":id" element={<ClientDetailPage />} />
+            </Route>
+
+            {/* Gestão: Fornecedores */}
+            <Route path="fornecedores" element={<SuppliersLayout />}>
+              <Route index element={<SuppliersPage />} />
+              <Route path=":id" element={<SupplierDetailPage />} />
             </Route>
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}

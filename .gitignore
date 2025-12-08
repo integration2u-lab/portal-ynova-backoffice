@@ -3,8 +3,9 @@ dist
 .vite
 
 # Environment files
+.env
 .env.local
 .env.*.local
 
-# Manter .env no git para facilitar desenvolvimento
-# Mas NÃO commitar credenciais sensíveis!
+# Relatórios
+RELATORIO_MUDANCAS.md

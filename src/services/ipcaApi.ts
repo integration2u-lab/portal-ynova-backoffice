@@ -1,7 +1,9 @@
 /**
  * Serviço para buscar e calcular dados do IPCA (Índice de Preços ao Consumidor Amplo)
- * API do Banco Central do Brasil
+ * Agora usa a API do backend que integra com o Banco Central do Brasil
  */
+
+import { API_BASE_URL } from '../config/api';
 
 export type IPCAVariation = {
   data: string; // Formato: "DD/MM/YYYY"
@@ -14,113 +16,60 @@ export type IPCAMultiplier = {
   multiplier: number; // Multiplicador acumulado
 };
 
+type BackendIPCAResponse = {
+  success: boolean;
+  data: {
+    variations: IPCAVariation[];
+    multipliers: IPCAMultiplier[];
+  } | null;
+  error?: string;
+};
+
 /**
- * Busca as variações do IPCA para um período específico da API do BCB
- * Série 433 = IPCA (variação mensal)
- * IMPORTANTE: A API só retorna dados históricos, não dados futuros
+ * Busca os multiplicadores do IPCA para um período específico via API do backend
+ * O backend integra com a API do Banco Central do Brasil e calcula os multiplicadores
  * @param startDate Data de início no formato YYYY-MM-DD (opcional)
  * @param endDate Data de fim no formato YYYY-MM-DD (opcional)
  * @param months Número de meses para buscar se não fornecer as datas (padrão: 60)
- * @returns Promise com array de variações do IPCA
+ * @returns Promise com array de multiplicadores do IPCA
  */
-export async function fetchIPCAVariations(
+export async function fetchIPCAMultipliers(
   startDate?: string,
   endDate?: string,
   months: number = 60
-): Promise<IPCAVariation[]> {
-  // API do Banco Central do Brasil - Série 433 (IPCA)
-  // Documentação: https://dadosabertos.bcb.gov.br/dataset/433-ipca---variacao-mensal
-  // IMPORTANTE: A API só retorna dados históricos, não dados futuros
-  
+): Promise<IPCAMultiplier[]> {
   try {
-    // Formata datas no padrão DD/MM/YYYY
-    const formatDate = (dateStr: string): string => {
-      const date = new Date(dateStr);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
-    };
+    // Usa a URL base da API ou fallback para localhost:4000
+    let baseUrl = API_BASE_URL || 'http://localhost:4000';
     
-    // Obtém a data atual (hoje) para limitar busca ao histórico
-    const hoje = new Date();
-    const hojeStr = hoje.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Remove barras finais
+    baseUrl = baseUrl.replace(/\/+$/, '');
     
-    let dataInicialStr: string;
-    let dataFinalStr: string;
-    
-    if (startDate && endDate) {
-      // Limita a data final à data atual (IPCA só tem dados históricos)
-      const endDateObj = new Date(endDate + 'T00:00:00'); // Adiciona hora para evitar problemas de timezone
-      const hojeObj = new Date();
-      hojeObj.setHours(0, 0, 0, 0); // Zera horas para comparação
-      
-      // Compara apenas datas (sem horas)
-      const endTimestamp = endDateObj.getTime();
-      const hojeTimestamp = hojeObj.getTime();
-      
-      // Se a data final for futura, usa a data de hoje
-      let dataFinalLimite = endTimestamp > hojeTimestamp ? hojeObj : endDateObj;
-      
-      // Se a data inicial também for futura, ajusta para buscar dados históricos
-      const startDateObj = new Date(startDate + 'T00:00:00');
-      let dataInicialLimite = startDateObj;
-      
-      if (startDateObj.getTime() > hojeTimestamp) {
-        // Se a data inicial for futura, busca desde 2 anos atrás
-        const doisAnosAtras = new Date();
-        doisAnosAtras.setFullYear(doisAnosAtras.getFullYear() - 2);
-        doisAnosAtras.setHours(0, 0, 0, 0);
-        dataInicialLimite = doisAnosAtras;
-        console.warn('[ipcaApi] ⚠️ Data inicial é futura, ajustando para buscar dados históricos desde', formatDate(doisAnosAtras.toISOString().split('T')[0]));
+    // Se a URL base não termina com /api, adiciona
+    if (!baseUrl.endsWith('/api')) {
+      // Verifica se tem /api em algum lugar da URL
+      if (!baseUrl.includes('/api')) {
+        baseUrl = `${baseUrl}/api`;
       }
-      
-      // Ajusta para primeiro dia do mês inicial e último dia do mês final
-      const inicioYear = dataInicialLimite.getFullYear();
-      const inicioMonth = dataInicialLimite.getMonth();
-      const fimYear = dataFinalLimite.getFullYear();
-      const fimMonth = dataFinalLimite.getMonth();
-      
-      // Primeiro dia do mês inicial
-      dataInicialStr = `01/${String(inicioMonth + 1).padStart(2, '0')}/${inicioYear}`;
-      
-      // Último dia do mês final
-      const ultimoDiaDoMes = new Date(fimYear, fimMonth + 1, 0).getDate();
-      dataFinalStr = `${String(ultimoDiaDoMes).padStart(2, '0')}/${String(fimMonth + 1).padStart(2, '0')}/${fimYear}`;
-      
-      console.log('[ipcaApi] 🔄 Datas ajustadas (limitando ao histórico):', {
-        original: { startDate, endDate },
-        ajustada: { inicio: dataInicialStr, fim: dataFinalStr },
-        hoje: hojeStr,
-        dataFinalEraFutura: endTimestamp > hojeTimestamp,
-        dataInicialEraFutura: startDateObj.getTime() > hojeTimestamp
-      });
-    } else {
-      // Calcula data inicial (X meses atrás) e data final (hoje)
-      const dataFinal = new Date();
-      const dataInicial = new Date();
-      dataInicial.setMonth(dataInicial.getMonth() - months);
-      
-      const formatDateFromDate = (date: Date): string => {
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-      };
-      
-      dataInicialStr = formatDateFromDate(dataInicial);
-      dataFinalStr = formatDateFromDate(dataFinal);
     }
     
-    // Em desenvolvimento, usa o proxy do Vite para evitar CORS
-    // Em produção, você precisará configurar um proxy no seu servidor ou usar CORS no backend
-    const isDev = import.meta.env.DEV;
-    const baseUrl = isDev ? '/api-bcb' : 'https://api.bcb.gov.br';
-    const url = `${baseUrl}/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial=${dataInicialStr}&dataFinal=${dataFinalStr}`;
+    const params = new URLSearchParams();
     
-    console.log('[ipcaApi] 📅 Buscando IPCA do período:', dataInicialStr, 'até', dataFinalStr);
-    console.log('[ipcaApi] 🌐 Modo:', isDev ? 'Desenvolvimento (via proxy)' : 'Produção (direto)');
-    console.log('[ipcaApi] 🔗 URL completa:', url);
+    if (startDate) {
+      params.append('startDate', startDate);
+    }
+    if (endDate) {
+      params.append('endDate', endDate);
+    }
+    if (!startDate || !endDate) {
+      params.append('months', months.toString());
+    }
+    
+    const url = `${baseUrl}/ipca/multipliers?${params.toString()}`;
+    
+    console.log('[ipcaApi] 📅 Buscando multiplicadores IPCA do backend:', { startDate, endDate, months });
+    console.log('[ipcaApi] 🔗 API_BASE_URL configurada:', API_BASE_URL);
+    console.log('[ipcaApi] 🔗 URL final:', url);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -132,33 +81,157 @@ export async function fetchIPCAVariations(
     
     console.log('[ipcaApi] Status da resposta:', response.status, response.statusText);
     
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('[ipcaApi] Erro na resposta da API:', errorText);
+    // Verifica o Content-Type antes de processar a resposta
+    const contentType = response.headers.get('content-type');
+    console.log('[ipcaApi] Content-Type:', contentType);
+    
+    // Lê o corpo da resposta como texto primeiro (para poder usar em múltiplos lugares)
+    const textResponse = await response.text();
+    
+    // Verifica se a resposta é JSON
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error('[ipcaApi] ❌ Resposta não é JSON. URL:', url);
+      console.error('[ipcaApi] ❌ Content-Type recebido:', contentType);
+      console.error('[ipcaApi] ❌ Primeiros caracteres da resposta:', textResponse.substring(0, 500));
       
-      // Se for 404, pode ser porque não há dados para o período (datas futuras)
       if (response.status === 404) {
-        console.warn('[ipcaApi] ⚠️ Nenhum dado encontrado para o período. Verifique se as datas são históricas (o IPCA não tem dados futuros).');
+        console.warn('[ipcaApi] ⚠️ Endpoint não encontrado (404). Verifique se:');
+        console.warn('[ipcaApi]   1. O backend está rodando em:', baseUrl.replace('/ipca/multipliers', ''));
+        console.warn('[ipcaApi]   2. O endpoint existe: /ipca/multipliers');
+        console.warn('[ipcaApi]   3. A URL está correta:', url);
+      } else if (response.status >= 500) {
+        console.warn('[ipcaApi] ⚠️ Erro no servidor (5xx) ao buscar IPCA');
       } else {
-        console.warn('[ipcaApi] A API do BCB pode estar temporariamente indisponível');
+        console.warn('[ipcaApi] ⚠️ Resposta inesperada do servidor. Status:', response.status);
       }
       return [];
     }
     
-    const data: IPCAVariation[] = await response.json();
-    console.log('[ipcaApi] ✅ IPCA carregado com sucesso:', data.length, 'meses');
-    
-    // Valida se os dados retornados são válidos
-    if (!Array.isArray(data) || data.length === 0) {
-      console.warn('[ipcaApi] API retornou dados vazios ou inválidos');
+    if (!response.ok) {
+      console.error('[ipcaApi] ❌ Erro na resposta da API. Status:', response.status);
+      console.error('[ipcaApi] ❌ Resposta:', textResponse.substring(0, 500));
+      
+      if (response.status === 404) {
+        console.warn('[ipcaApi] ⚠️ Nenhum dado encontrado para o período ou endpoint não existe');
+      } else if (response.status >= 500) {
+        console.warn('[ipcaApi] ⚠️ Erro no servidor ao buscar IPCA');
+      }
       return [];
     }
     
-    return data;
+    // Tenta parsear como JSON
+    let result: BackendIPCAResponse;
+    try {
+      result = JSON.parse(textResponse);
+    } catch (jsonError) {
+      console.error('[ipcaApi] ❌ Erro ao parsear JSON da resposta:', jsonError);
+      console.error('[ipcaApi] ❌ Resposta recebida (primeiros 500 chars):', textResponse.substring(0, 500));
+      return [];
+    }
+    
+    if (!result.success || !result.data) {
+      console.warn('[ipcaApi] ⚠️ Resposta do backend indicou erro:', result.error);
+      return [];
+    }
+    
+    const multipliers = result.data.multipliers || [];
+    console.log('[ipcaApi] ✅ Multiplicadores IPCA carregados com sucesso:', multipliers.length, 'meses');
+    
+    return multipliers;
+  } catch (error) {
+    console.error('[ipcaApi] ❌ Erro ao buscar multiplicadores do IPCA:', error);
+    
+    if (error instanceof SyntaxError) {
+      console.error('[ipcaApi] ❌ Erro de sintaxe JSON. Isso geralmente significa que o servidor retornou HTML ao invés de JSON.');
+      console.error('[ipcaApi] ❌ Verifique se:');
+      console.error('[ipcaApi]   1. O backend está rodando');
+      console.error('[ipcaApi]   2. O endpoint /api/ipca/multipliers existe');
+      console.error('[ipcaApi]   3. A URL base está correta:', API_BASE_URL || 'http://localhost:4000');
+    } else if (error instanceof TypeError && error.message.includes('fetch')) {
+      console.error('[ipcaApi] ❌ Erro de rede. Verifique se o backend está acessível.');
+    }
+    
+    console.warn('[ipcaApi] ⚠️ O modal continuará funcionando sem cálculo automático de reajuste');
+    return [];
+  }
+}
+
+/**
+ * Busca as variações do IPCA para um período específico via API do backend
+ * Mantida para compatibilidade com código existente
+ * @param startDate Data de início no formato YYYY-MM-DD (opcional)
+ * @param endDate Data de fim no formato YYYY-MM-DD (opcional)
+ * @param months Número de meses para buscar se não fornecer as datas (padrão: 60)
+ * @returns Promise com array de variações do IPCA
+ */
+export async function fetchIPCAVariations(
+  startDate?: string,
+  endDate?: string,
+  months: number = 60
+): Promise<IPCAVariation[]> {
+  try {
+    // Usa a URL base da API ou fallback para localhost
+    let baseUrl = API_BASE_URL || 'http://localhost:4000';
+    
+    // Garante que a URL base termina sem barra
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
+    // Se a URL base não contém /api, adiciona
+    if (!baseUrl.includes('/api')) {
+      baseUrl = `${baseUrl}/api`;
+    }
+    
+    const params = new URLSearchParams();
+    
+    if (startDate) {
+      params.append('startDate', startDate);
+    }
+    if (endDate) {
+      params.append('endDate', endDate);
+    }
+    if (!startDate || !endDate) {
+      params.append('months', months.toString());
+    }
+    
+    const url = `${baseUrl}/ipca/multipliers?${params.toString()}`;
+    
+    console.log('[ipcaApi] 📅 Buscando variações IPCA do backend:', { startDate, endDate, months });
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    // Verifica se a resposta é JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.warn('[ipcaApi] ⚠️ Resposta não é JSON ao buscar variações');
+      return [];
+    }
+    
+    if (!response.ok) {
+      console.warn('[ipcaApi] ⚠️ Erro ao buscar variações do IPCA');
+      return [];
+    }
+    
+    let result: BackendIPCAResponse;
+    try {
+      result = await response.json();
+    } catch (jsonError) {
+      console.error('[ipcaApi] ❌ Erro ao parsear JSON:', jsonError);
+      return [];
+    }
+    
+    if (!result.success || !result.data) {
+      return [];
+    }
+    
+    return result.data.variations || [];
   } catch (error) {
     console.error('[ipcaApi] Erro ao buscar variações do IPCA:', error);
-    console.warn('[ipcaApi] O modal continuará funcionando sem cálculo automático de reajuste');
-    // Retorna array vazio ao invés de lançar erro, permitindo que o modal funcione sem IPCA
     return [];
   }
 }
@@ -335,7 +408,74 @@ class IPCACache {
 const ipcaCache = new IPCACache();
 
 /**
- * Busca as variações do IPCA com cache
+ * Cache para multiplicadores do IPCA
+ */
+class IPCAMultiplierCache {
+  private data: IPCAMultiplier[] | null = null;
+  private timestamp: number | null = null;
+  private readonly CACHE_DURATION = 1000 * 60 * 60; // 1 hora
+  
+  isValid(): boolean {
+    if (!this.data || !this.timestamp) {
+      return false;
+    }
+    return Date.now() - this.timestamp < this.CACHE_DURATION;
+  }
+  
+  set(data: IPCAMultiplier[]): void {
+    this.data = data;
+    this.timestamp = Date.now();
+  }
+  
+  get(): IPCAMultiplier[] | null {
+    return this.isValid() ? this.data : null;
+  }
+  
+  clear(): void {
+    this.data = null;
+    this.timestamp = null;
+  }
+}
+
+const ipcaMultiplierCache = new IPCAMultiplierCache();
+
+/**
+ * Busca os multiplicadores do IPCA com cache
+ * @param startDate Data de início no formato YYYY-MM-DD (opcional)
+ * @param endDate Data de fim no formato YYYY-MM-DD (opcional)
+ * @param months Número de meses para buscar se não fornecer as datas
+ * @param forceRefresh Força a atualização do cache
+ * @returns Promise com array de multiplicadores do IPCA
+ */
+export async function fetchIPCAMultipliersWithCache(
+  startDate?: string,
+  endDate?: string,
+  months: number = 60,
+  forceRefresh: boolean = false
+): Promise<IPCAMultiplier[]> {
+  if (!forceRefresh) {
+    const cached = ipcaMultiplierCache.get();
+    if (cached) {
+      console.log('[ipcaApi] 💾 Usando multiplicadores do IPCA em cache');
+      return cached;
+    }
+  }
+  
+  try {
+    const multipliers = await fetchIPCAMultipliers(startDate, endDate, months);
+    if (multipliers.length > 0) {
+      ipcaMultiplierCache.set(multipliers);
+      console.log(`[ipcaApi] ✅ Multiplicadores IPCA carregados e armazenados em cache: ${multipliers.length} meses`);
+    }
+    return multipliers;
+  } catch (error) {
+    console.warn('[ipcaApi] Não foi possível carregar multiplicadores do IPCA, continuando sem reajuste automático');
+    return [];
+  }
+}
+
+/**
+ * Busca as variações do IPCA com cache (mantida para compatibilidade)
  * @param startDate Data de início no formato YYYY-MM-DD (opcional)
  * @param endDate Data de fim no formato YYYY-MM-DD (opcional)
  * @param months Número de meses para buscar se não fornecer as datas
@@ -348,22 +488,12 @@ export async function fetchIPCAVariationsWithCache(
   months: number = 60,
   forceRefresh: boolean = false
 ): Promise<IPCAVariation[]> {
-  // Cria uma chave única baseada no período
-  const cacheKey = startDate && endDate ? `${startDate}_${endDate}` : `last_${months}`;
-  
-  if (!forceRefresh) {
-    const cached = ipcaCache.get();
-    if (cached) {
-      console.log('[ipcaApi] 💾 Usando dados do IPCA em cache');
-      return cached;
-    }
-  }
-  
+  // Para manter compatibilidade, busca as variações
+  // Mas internamente usa os multiplicadores do backend
   try {
     const variations = await fetchIPCAVariations(startDate, endDate, months);
-    if (variations.length > 0) {
+    if (variations.length > 0 && !forceRefresh) {
       ipcaCache.set(variations);
-      console.log(`[ipcaApi] ✅ IPCA carregado e armazenado em cache: ${variations.length} meses`);
     }
     return variations;
   } catch (error) {
