@@ -32,7 +32,7 @@ const navigation = [
   { to: '/balancos', label: 'Balanço Energético', icon: Battery },
   /* { to: '/email', label: 'Email', icon: Mail }, */
   { to: '/processamento-fatura', label: 'Processamento Fatura', icon: FileText },
-  { to: '/analise-faturas', label: 'Análise Faturas', icon: BarChart3 },
+  // { to: '/analise-faturas', label: 'Análise Faturas', icon: BarChart3 },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
   /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
