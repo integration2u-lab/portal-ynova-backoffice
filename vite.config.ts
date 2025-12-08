@@ -19,6 +19,12 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api-bcb/, ''),
           secure: true,
         },
+        // Proxy for IDP API to bypass CORS during development
+        '/api/idp': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false,
+        },
       },
       allowedHosts: [
         'https://api.ynovamarketplace.com.br',

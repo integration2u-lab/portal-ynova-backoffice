@@ -16,6 +16,7 @@ import SimulationClientsPage from './pages/SimulationClientsPage';
 import SimulationClientPage from './pages/SimulationClientPage';
 import SimulationPage from './pages/SimulationPage';
 import InvoiceProcessingPage from './pages/InvoiceProcessingPage';
+import InvoiceAnalysisPage from './pages/InvoiceAnalysisPage';
 import OportunidadesPage from './pages/OportunidadesPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ContratosPage from './pages/contratos';
@@ -80,7 +81,8 @@ function AppRoutes() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="oportunidades" element={<OportunidadesPage />} />
             <Route path="inteligencia" element={<InteligenciaPage />} />
-            <Route path="analise-fatura" element={<InvoiceProcessingPage />} />
+            <Route path="processamento-fatura" element={<InvoiceProcessingPage />} />
+            <Route path="analise-faturas" element={<InvoiceAnalysisPage />} />
             <Route path="simulacao" element={<SimulationPage />} />
             <Route path="balancos" element={<BalancosLayout />}>
               <Route index element={<EnergyBalanceYearViewPage />} />

@@ -437,7 +437,7 @@ export default function InvoiceProcessingPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Análise de Fatura</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Processamento de Fatura</h1>
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Envie uma fatura de energia em PDF para extração automática de dados.
           </p>

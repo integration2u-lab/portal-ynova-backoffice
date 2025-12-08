@@ -26,7 +26,8 @@ const navigation = [
   { to: '/contratos', label: 'Contratos', icon: PieChart },
   { to: '/balancos', label: 'Balanço Energético', icon: Zap },
   /* { to: '/email', label: 'Email', icon: Mail }, */
-  { to: '/analise-fatura', label: 'Análise Fatura', icon: FileText },
+  { to: '/processamento-fatura', label: 'Processamento Fatura', icon: FileText },
+  { to: '/analise-faturas', label: 'Análise Faturas', icon: BarChart3 },
   { to: '/simulacao', label: 'Simulação', icon: Calculator },
   /* { to: '/leads', label: 'Balanço Energético', icon: FileText }, */
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
