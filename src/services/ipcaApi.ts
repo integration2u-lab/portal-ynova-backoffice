@@ -45,14 +45,7 @@ export async function fetchIPCAMultipliers(
     // Remove barras finais
     baseUrl = baseUrl.replace(/\/+$/, '');
     
-    // Se a URL base não termina com /api, adiciona
-    if (!baseUrl.endsWith('/api')) {
-      // Verifica se tem /api em algum lugar da URL
-      if (!baseUrl.includes('/api')) {
-        baseUrl = `${baseUrl}/api`;
-      }
-    }
-    
+    // Adiciona o endpoint /ipca/multipliers diretamente
     const params = new URLSearchParams();
     
     if (startDate) {
@@ -173,14 +166,10 @@ export async function fetchIPCAVariations(
     // Usa a URL base da API ou fallback para localhost
     let baseUrl = API_BASE_URL || 'http://localhost:4000';
     
-    // Garante que a URL base termina sem barra
-    baseUrl = baseUrl.replace(/\/$/, '');
+    // Remove barras finais
+    baseUrl = baseUrl.replace(/\/+$/, '');
     
-    // Se a URL base não contém /api, adiciona
-    if (!baseUrl.includes('/api')) {
-      baseUrl = `${baseUrl}/api`;
-    }
-    
+    // Adiciona o endpoint /ipca/multipliers diretamente
     const params = new URLSearchParams();
     
     if (startDate) {
